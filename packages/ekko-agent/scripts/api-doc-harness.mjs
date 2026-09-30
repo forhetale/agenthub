@@ -10,7 +10,11 @@ const endMarker = '<!-- END GENERATED EKKO PUBLIC API -->'
 const write = process.argv.includes('--write')
 
 const inventory = buildInventory()
-const document = readFileSync(documentPath, 'utf8')
+// Git for Windows may check the document out with CRLF (core.autocrlf), so
+// compare and rebuild it as LF, then write it back with its dominant EOL.
+const source = readFileSync(documentPath, 'utf8')
+const eol = dominantLineEnding(source)
+const document = source.replaceAll('\r\n', '\n')
 const start = document.indexOf(beginMarker)
 const end = document.indexOf(endMarker)
 
@@ -31,7 +35,7 @@ if (!write) {
 }
 
 const next = `${document.slice(0, start)}${generated}${document.slice(end + endMarker.length)}`
-writeFileSync(documentPath, next, 'utf8')
+writeFileSync(documentPath, eol === '\n' ? next : next.replaceAll('\n', eol), 'utf8')
 process.stdout.write('Updated the generated public API inventory in docs/API.md.\n')
 
 function buildInventory() {
@@ -159,6 +163,12 @@ function sourceFiles(directory) {
     else if (entry.isFile() && entry.name.endsWith('.ts')) files.push(path)
   }
   return files.sort()
+}
+
+function dominantLineEnding(text) {
+  const crlf = text.match(/\r\n/g)?.length ?? 0
+  const lf = (text.match(/\n/g)?.length ?? 0) - crlf
+  return crlf > lf ? '\r\n' : '\n'
 }
 
 function compact(value) {
