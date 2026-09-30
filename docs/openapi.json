@@ -133,6 +133,10 @@
       "description": "Cross-agent log file access"
     },
     {
+      "name": "Notifications",
+      "description": "Per-user outbound Bark push settings for session notifications"
+    },
+    {
       "name": "Group Chat",
       "description": "Cross-agent group chat management"
     },
@@ -14388,6 +14392,788 @@
         }
       }
     },
+    "/api/studio/notifications/bark": {
+      "get": {
+        "tags": [
+          "Notifications"
+        ],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "operationId": "getBark",
+        "summary": "Read current user Bark settings",
+        "responses": {
+          "200": {
+            "description": "Redacted configuration; the Device Key is never returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "serverUrl": {
+                      "type": "string",
+                      "format": "uri",
+                      "default": "https://api.day.app"
+                    },
+                    "group": {
+                      "type": "string",
+                      "maxLength": 120,
+                      "default": "TATin Studio"
+                    },
+                    "sound": {
+                      "type": "string",
+                      "maxLength": 80
+                    },
+                    "studioUrl": {
+                      "type": "string",
+                      "description": "Optional phone-reachable Studio HTTP(S) address; empty string omits the link."
+                    },
+                    "allowPrivateNetwork": {
+                      "type": "boolean",
+                      "default": false,
+                      "description": "Enabling private targets or HTTP requires super_admin."
+                    },
+                    "hasKey": {
+                      "type": "boolean"
+                    },
+                    "configured": {
+                      "type": "boolean"
+                    },
+                    "pushReady": {
+                      "type": "boolean"
+                    },
+                    "lastResult": {
+                      "type": "object",
+                      "nullable": true,
+                      "properties": {
+                        "ok": {
+                          "type": "boolean"
+                        },
+                        "code": {
+                          "type": "string"
+                        },
+                        "at": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A safe error code without secrets.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "A safe error code without secrets.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "A safe error code without secrets.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A safe error code without secrets.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "A safe error code without secrets.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "A safe error code without secrets.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "A safe error code without secrets.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "A safe error code without secrets.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Notifications"
+        ],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "operationId": "saveBark",
+        "summary": "Save current user Bark settings and prefer Bark for session notifications",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "serverUrl": {
+                    "type": "string",
+                    "format": "uri",
+                    "default": "https://api.day.app"
+                  },
+                  "group": {
+                    "type": "string",
+                    "maxLength": 120,
+                    "default": "TATin Studio"
+                  },
+                  "sound": {
+                    "type": "string",
+                    "maxLength": 80
+                  },
+                  "studioUrl": {
+                    "type": "string",
+                    "description": "Optional phone-reachable Studio HTTP(S) address; empty string omits the link."
+                  },
+                  "allowPrivateNetwork": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Enabling private targets or HTTP requires super_admin."
+                  },
+                  "deviceKey": {
+                    "type": "string",
+                    "writeOnly": true,
+                    "maxLength": 512,
+                    "description": "Required for first save; blank or omitted retains the saved key."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Redacted configuration; the Device Key is never returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "serverUrl": {
+                      "type": "string",
+                      "format": "uri",
+                      "default": "https://api.day.app"
+                    },
+                    "group": {
+                      "type": "string",
+                      "maxLength": 120,
+                      "default": "TATin Studio"
+                    },
+                    "sound": {
+                      "type": "string",
+                      "maxLength": 80
+                    },
+                    "studioUrl": {
+                      "type": "string",
+                      "description": "Optional phone-reachable Studio HTTP(S) address; empty string omits the link."
+                    },
+                    "allowPrivateNetwork": {
+                      "type": "boolean",
+                      "default": false,
+                      "description": "Enabling private targets or HTTP requires super_admin."
+                    },
+                    "hasKey": {
+                      "type": "boolean"
+                    },
+                    "configured": {
+                      "type": "boolean"
+                    },
+                    "pushReady": {
+                      "type": "boolean"
+                    },
+                    "lastResult": {
+                      "type": "object",
+                      "nullable": true,
+                      "properties": {
+                        "ok": {
+                          "type": "boolean"
+                        },
+                        "code": {
+                          "type": "string"
+                        },
+                        "at": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A safe error code without secrets.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "A safe error code without secrets.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "A safe error code without secrets.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A safe error code without secrets.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "A safe error code without secrets.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "A safe error code without secrets.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "A safe error code without secrets.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "A safe error code without secrets.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Notifications"
+        ],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "operationId": "clearBark",
+        "summary": "Clear current user Bark configuration; existing social destination may resume",
+        "responses": {
+          "200": {
+            "description": "Redacted configuration; the Device Key is never returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "serverUrl": {
+                      "type": "string",
+                      "format": "uri",
+                      "default": "https://api.day.app"
+                    },
+                    "group": {
+                      "type": "string",
+                      "maxLength": 120,
+                      "default": "TATin Studio"
+                    },
+                    "sound": {
+                      "type": "string",
+                      "maxLength": 80
+                    },
+                    "studioUrl": {
+                      "type": "string",
+                      "description": "Optional phone-reachable Studio HTTP(S) address; empty string omits the link."
+                    },
+                    "allowPrivateNetwork": {
+                      "type": "boolean",
+                      "default": false,
+                      "description": "Enabling private targets or HTTP requires super_admin."
+                    },
+                    "hasKey": {
+                      "type": "boolean"
+                    },
+                    "configured": {
+                      "type": "boolean"
+                    },
+                    "pushReady": {
+                      "type": "boolean"
+                    },
+                    "lastResult": {
+                      "type": "object",
+                      "nullable": true,
+                      "properties": {
+                        "ok": {
+                          "type": "boolean"
+                        },
+                        "code": {
+                          "type": "string"
+                        },
+                        "at": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A safe error code without secrets.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "A safe error code without secrets.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "A safe error code without secrets.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A safe error code without secrets.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "A safe error code without secrets.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "A safe error code without secrets.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "A safe error code without secrets.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "A safe error code without secrets.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/studio/notifications/bark/test": {
+      "post": {
+        "tags": [
+          "Notifications"
+        ],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "operationId": "testBark",
+        "summary": "Send a status-only test using saved settings; bypasses session push flag",
+        "responses": {
+          "200": {
+            "description": "Bark accepted the request, not a phone delivery receipt.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "accepted"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A safe error code without secrets.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "A safe error code without secrets.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "A safe error code without secrets.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A safe error code without secrets.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "A safe error code without secrets.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "A safe error code without secrets.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "A safe error code without secrets.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "A safe error code without secrets.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/studio/performance/runtime": {
       "get": {
         "tags": [
@@ -19450,788 +20236,6 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
-          }
-        }
-      }
-    },
-    "/api/studio/notifications/bark": {
-      "get": {
-        "tags": [
-          "Social Messages"
-        ],
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
-        "operationId": "getBark",
-        "summary": "Read current user Bark settings",
-        "responses": {
-          "200": {
-            "description": "Redacted configuration; the Device Key is never returned.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "serverUrl": {
-                      "type": "string",
-                      "format": "uri",
-                      "default": "https://api.day.app"
-                    },
-                    "group": {
-                      "type": "string",
-                      "maxLength": 120,
-                      "default": "TATin Studio"
-                    },
-                    "sound": {
-                      "type": "string",
-                      "maxLength": 80
-                    },
-                    "studioUrl": {
-                      "type": "string",
-                      "description": "Optional phone-reachable Studio HTTP(S) address; empty string omits the link."
-                    },
-                    "allowPrivateNetwork": {
-                      "type": "boolean",
-                      "default": false,
-                      "description": "Enabling private targets or HTTP requires super_admin."
-                    },
-                    "hasKey": {
-                      "type": "boolean"
-                    },
-                    "configured": {
-                      "type": "boolean"
-                    },
-                    "pushReady": {
-                      "type": "boolean"
-                    },
-                    "lastResult": {
-                      "type": "object",
-                      "nullable": true,
-                      "properties": {
-                        "ok": {
-                          "type": "boolean"
-                        },
-                        "code": {
-                          "type": "string"
-                        },
-                        "at": {
-                          "type": "string",
-                          "format": "date-time"
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "A safe error code without secrets.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "A safe error code without secrets.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "A safe error code without secrets.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "A safe error code without secrets.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "A safe error code without secrets.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "A safe error code without secrets.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "502": {
-            "description": "A safe error code without secrets.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "504": {
-            "description": "A safe error code without secrets.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      },
-      "put": {
-        "tags": [
-          "Social Messages"
-        ],
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
-        "operationId": "saveBark",
-        "summary": "Save current user Bark settings and prefer Bark for session notifications",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "serverUrl": {
-                    "type": "string",
-                    "format": "uri",
-                    "default": "https://api.day.app"
-                  },
-                  "group": {
-                    "type": "string",
-                    "maxLength": 120,
-                    "default": "TATin Studio"
-                  },
-                  "sound": {
-                    "type": "string",
-                    "maxLength": 80
-                  },
-                  "studioUrl": {
-                    "type": "string",
-                    "description": "Optional phone-reachable Studio HTTP(S) address; empty string omits the link."
-                  },
-                  "allowPrivateNetwork": {
-                    "type": "boolean",
-                    "default": false,
-                    "description": "Enabling private targets or HTTP requires super_admin."
-                  },
-                  "deviceKey": {
-                    "type": "string",
-                    "writeOnly": true,
-                    "maxLength": 512,
-                    "description": "Required for first save; blank or omitted retains the saved key."
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Redacted configuration; the Device Key is never returned.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "serverUrl": {
-                      "type": "string",
-                      "format": "uri",
-                      "default": "https://api.day.app"
-                    },
-                    "group": {
-                      "type": "string",
-                      "maxLength": 120,
-                      "default": "TATin Studio"
-                    },
-                    "sound": {
-                      "type": "string",
-                      "maxLength": 80
-                    },
-                    "studioUrl": {
-                      "type": "string",
-                      "description": "Optional phone-reachable Studio HTTP(S) address; empty string omits the link."
-                    },
-                    "allowPrivateNetwork": {
-                      "type": "boolean",
-                      "default": false,
-                      "description": "Enabling private targets or HTTP requires super_admin."
-                    },
-                    "hasKey": {
-                      "type": "boolean"
-                    },
-                    "configured": {
-                      "type": "boolean"
-                    },
-                    "pushReady": {
-                      "type": "boolean"
-                    },
-                    "lastResult": {
-                      "type": "object",
-                      "nullable": true,
-                      "properties": {
-                        "ok": {
-                          "type": "boolean"
-                        },
-                        "code": {
-                          "type": "string"
-                        },
-                        "at": {
-                          "type": "string",
-                          "format": "date-time"
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "A safe error code without secrets.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "A safe error code without secrets.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "A safe error code without secrets.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "A safe error code without secrets.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "A safe error code without secrets.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "A safe error code without secrets.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "502": {
-            "description": "A safe error code without secrets.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "504": {
-            "description": "A safe error code without secrets.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "tags": [
-          "Social Messages"
-        ],
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
-        "operationId": "clearBark",
-        "summary": "Clear current user Bark configuration; existing social destination may resume",
-        "responses": {
-          "200": {
-            "description": "Redacted configuration; the Device Key is never returned.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "serverUrl": {
-                      "type": "string",
-                      "format": "uri",
-                      "default": "https://api.day.app"
-                    },
-                    "group": {
-                      "type": "string",
-                      "maxLength": 120,
-                      "default": "TATin Studio"
-                    },
-                    "sound": {
-                      "type": "string",
-                      "maxLength": 80
-                    },
-                    "studioUrl": {
-                      "type": "string",
-                      "description": "Optional phone-reachable Studio HTTP(S) address; empty string omits the link."
-                    },
-                    "allowPrivateNetwork": {
-                      "type": "boolean",
-                      "default": false,
-                      "description": "Enabling private targets or HTTP requires super_admin."
-                    },
-                    "hasKey": {
-                      "type": "boolean"
-                    },
-                    "configured": {
-                      "type": "boolean"
-                    },
-                    "pushReady": {
-                      "type": "boolean"
-                    },
-                    "lastResult": {
-                      "type": "object",
-                      "nullable": true,
-                      "properties": {
-                        "ok": {
-                          "type": "boolean"
-                        },
-                        "code": {
-                          "type": "string"
-                        },
-                        "at": {
-                          "type": "string",
-                          "format": "date-time"
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "A safe error code without secrets.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "A safe error code without secrets.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "A safe error code without secrets.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "A safe error code without secrets.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "A safe error code without secrets.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "A safe error code without secrets.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "502": {
-            "description": "A safe error code without secrets.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "504": {
-            "description": "A safe error code without secrets.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/studio/notifications/bark/test": {
-      "post": {
-        "tags": [
-          "Social Messages"
-        ],
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
-        "operationId": "testBark",
-        "summary": "Send a status-only test using saved settings; bypasses session push flag",
-        "responses": {
-          "200": {
-            "description": "Bark accepted the request, not a phone delivery receipt.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "ok": {
-                      "type": "boolean"
-                    },
-                    "code": {
-                      "type": "string",
-                      "enum": [
-                        "accepted"
-                      ]
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "A safe error code without secrets.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "A safe error code without secrets.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "A safe error code without secrets.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "A safe error code without secrets.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "A safe error code without secrets.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "A safe error code without secrets.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "502": {
-            "description": "A safe error code without secrets.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "504": {
-            "description": "A safe error code without secrets.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
           }
         }
       }

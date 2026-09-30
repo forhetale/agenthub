@@ -10,6 +10,7 @@ import { healthRoutes } from './health'
 import { updateRoutes } from './update'
 import { themeRoutes } from '../modules/studio/routes/theme'
 import { announcementRoutes } from '../modules/studio/routes/announcements'
+import { notificationRoutes } from '../modules/studio/routes/notifications'
 import './system-info'
 import {
   claudeCodeProxyRoutes,
@@ -95,6 +96,7 @@ export function registerRoutes(app: any, authMiddleware: Array<(ctx: Context, ne
   app.use(agentStatusRoutes.routes())
   app.use(themeRoutes.routes())
   app.use(announcementRoutes.routes())
+  app.use(notificationRoutes.routes())       // Per-user Bark push settings
   app.use(sessionRoutes.routes())
   app.use(profileRoutes.routes())
   app.use(ekkoMemoryRoutes.routes())

@@ -76,7 +76,7 @@ const tagMappings = {
   'modules/studio/routes/workflows.ts': { name: 'Workflows', description: 'Cross-agent workflow orchestration' },
   'modules/studio/routes/sessions.ts': { name: 'Sessions', description: 'Cross-agent chat session management' },
   'modules/studio/routes/logs.ts': { name: 'Logs', description: 'Cross-agent log file access' },
-  'modules/studio/routes/social-messages.ts': { name: 'Social Messages', description: 'Unified outbound messaging for configured social platforms' },
+  'modules/studio/routes/notifications.ts': { name: 'Notifications', description: 'Per-user outbound Bark push settings for session notifications' },
   'modules/studio/routes/group-chat.ts': { name: 'Group Chat', description: 'Cross-agent group chat management' },
   'modules/studio/routes/chat-run.ts': { name: 'Chat Run', description: 'Cross-agent chat run HTTP and Socket.IO bridge operations' },
   'modules/studio/routes/chat-webhooks.ts': { name: 'Chat Webhooks', description: 'Cross-agent Chat Run webhook endpoint management' },
@@ -1198,7 +1198,7 @@ const barkPublicSchema = { type: 'object', properties: {
   ...barkConfigProperties, hasKey: { type: 'boolean' }, configured: { type: 'boolean' }, pushReady: { type: 'boolean' },
   lastResult: { type: 'object', nullable: true, properties: { ok: { type: 'boolean' }, code: { type: 'string' }, at: { type: 'string', format: 'date-time' } } },
 } }
-const barkAuth = { tags: ['Social Messages'], security: [{ BearerAuth: [] }] }
+const barkAuth = { tags: ['Notifications'], security: [{ BearerAuth: [] }] }
 const barkResponse = { description: 'Redacted configuration; the Device Key is never returned.', content: { 'application/json': { schema: barkPublicSchema } } }
 const barkErrors = Object.fromEntries(['400','401','403','409','429','500','502','504'].map(status => [status, { description: 'A safe error code without secrets.', content: { 'application/json': { schema: { type: 'object', properties: { error: { type: 'string' } } } } } }]))
 openapi.paths['/api/studio/notifications/bark'] = {
