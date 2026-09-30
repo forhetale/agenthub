@@ -155,7 +155,9 @@ describe('health controller version metadata', () => {
     })
     vi.stubGlobal('fetch', fetchMock)
 
-    const { checkLatestVersion, healthCheck } = await loadHealthControllerWithoutInjectedVersion()
+    // Without an injected version this fork falls back to its -tatin. package
+    // version, which disables the check, so inject an upstream build version.
+    const { checkLatestVersion, healthCheck } = await loadHealthControllerWithInjectedVersion('0.7.21')
 
     await checkLatestVersion()
 
@@ -211,6 +213,34 @@ describe('health controller version metadata', () => {
     expect(fetchMock).not.toHaveBeenCalled()
     expect(ctx.body.webui_latest).toBe('')
     expect(ctx.body.webui_update_available).toBe(false)
+  })
+
+  it('disables upstream npm update checks on TATin custom builds', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({ version: '99.99.99' }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { checkLatestVersion, healthCheck, startVersionCheck } = await loadHealthControllerWithInjectedVersion('0.7.21-tatin.5')
+
+    vi.useFakeTimers()
+    try {
+      startVersionCheck()
+      expect(vi.getTimerCount()).toBe(0)
+    } finally {
+      vi.useRealTimers()
+    }
+    await checkLatestVersion()
+    const ctx = createMockCtx()
+    await healthCheck(ctx)
+
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(ctx.body).toEqual(expect.objectContaining({
+      webui_version: '0.7.21-tatin.5',
+      webui_latest: '',
+      webui_update_available: false,
+    }))
   })
 
   it('reports Docker while retaining version checks for upgrade guidance', async () => {

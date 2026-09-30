@@ -238,6 +238,44 @@ describe('update controller', () => {
     expect(mocks.spawn).not.toHaveBeenCalled()
   })
 
+  it('refuses upstream npm updates on TATin custom builds', async () => {
+    vi.stubGlobal('__APP_VERSION__', '0.7.21-tatin.5')
+    const { handleUpdate, mocks } = await loadUpdateController()
+    const ctx = createMockCtx()
+
+    await handleUpdate(ctx)
+    await vi.runAllTimersAsync()
+
+    expect(ctx.status).toBe(409)
+    expect(ctx.body).toEqual({
+      success: false,
+      code: 'custom_build_protected',
+      message: expect.stringContaining('overwrite this custom build'),
+    })
+    expect(mocks.execFileSync).not.toHaveBeenCalled()
+    expect(mocks.spawn).not.toHaveBeenCalled()
+  })
+
+  it('keeps isolated version previews available on TATin custom builds', async () => {
+    vi.stubGlobal('__APP_VERSION__', '0.7.21-tatin.5')
+    const execFile = vi.fn((_command: string, _args: string[], _options: any, callback: any) => {
+      callback(null, 'installed', '')
+    })
+    const { installPreview, mocks } = await loadUpdateController({ execFile, execFileSync: vi.fn(() => '') })
+    const ctx = createMockCtx()
+
+    await installPreview(ctx)
+
+    expect(ctx.status).toBe(202)
+    expect((ctx.body as any).code).toBeUndefined()
+    expect(mocks.execFile).toHaveBeenCalledWith(
+      process.execPath,
+      [getNpmCliPath(), 'install', '--include=dev', '--ignore-scripts'],
+      expect.any(Object),
+      expect.any(Function),
+    )
+  })
+
   it('loads preview tags through async git with a short timeout', async () => {
     process.env.HERMES_WEB_UI_PREVIEW_REPO = 'https://github.com/EKKOLearnAI/hermes-studio'
     const execFile = vi.fn((_command: string, _args: string[], _options: any, callback: any) => {

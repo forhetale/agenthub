@@ -46,13 +46,29 @@ the upstream BSL-1.1 license remain unchanged except for the deltas described be
    self-hosted **Bark** channel with a per-session push switch; the upstream social-channel
    senders were removed, so this build never delivers messages to third-party social accounts.
 
-4. **Custom-build update protection.** The CLI `update` command refuses to run on `-tatin.`
-   builds, the Web UI update endpoint returns `custom_build_protected`, and the update check is
-   disabled — so an upstream reinstall cannot silently overwrite the customization.
+4. **Custom-build update protection.** On `-tatin.` builds every path that could replace this
+   build with an upstream package is blocked, so an upstream install cannot silently overwrite
+   the customization:
+   - the CLI `update` / `upgrade` command refuses to run;
+   - `POST /api/studio/update` returns `409 custom_build_protected`;
+   - `POST /api/hermes/runtime-versions/webui/download` and
+     `POST /api/hermes/runtime-versions/active-webui` return `409 custom_build_protected`
+     (Hermes Agent runtime downloads and deleting already-downloaded Web UI versions still work);
+   - the npm update check is disabled, so the UI never offers an upstream update;
+   - the desktop app never contacts the upstream electron-updater feed: the startup check is
+     skipped and tray → "Check for Updates" explains that the custom build is updated by
+     rebuilding from source. The desktop package keeps the upstream version `0.7.21`; the
+     bundled Web UI's `-tatin.` version is what marks a desktop build as custom.
 
-4. **Tests & OpenAPI.** Focused Vitest coverage for Bark (encryption at rest, per-user isolation,
+   Version preview (`/api/studio/update/preview/*`, super administrators only) stays available:
+   it checks out an upstream tag into a separate directory with its own Web UI state and ports
+   and never replaces the running install.
+
+5. **Tests & OpenAPI.** Focused Vitest coverage for Bark (encryption at rest, per-user isolation,
    redaction semantics, transport error mapping, session-push priority) and a Playwright flow for
-   the settings panel; `docs/openapi.json` is regenerated with the Bark endpoints.
+   the settings panel; `docs/openapi.json` is regenerated with the Bark endpoints. Every
+   custom-build update guard has a Vitest case. The test setup defines `__APP_VERSION__` as
+   `test`, so guard tests inject a `-tatin.` version with `vi.stubGlobal`.
 
 ### Bark security design
 
@@ -94,6 +110,10 @@ Self-hosting, Docker, and desktop packaging follow the upstream documentation (R
   `npm install -g hermes-web-ui@latest` over a deployed TATin build — it overwrites the
   customization. The built-in update guards prevent accidental overwrite; they do not block a
   deliberate reinstall.
+- Keep the `-tatin.` marker in the root `package.json` version: the server, CLI, and desktop
+  guards all derive from it, and a Vitest check fails if it disappears.
+- Desktop auto-update stays disabled until this fork publishes its own electron-updater feed;
+  ship desktop updates by building and distributing new installers.
 - New Bark strings ship in Simplified Chinese and English; other locales fall back to English,
   and Traditional Chinese falls back to Simplified Chinese.
 
@@ -117,11 +137,18 @@ This fork keeps the license and all upstream copyright notices intact.
    - 已配置 Bark 时优先于原社交渠道（同一事件不双发）；清除 Bark 后，已配置的原渠道可恢复推送。会话级开关仍使用原有"是否推送"；测试按钮不受会话开关限制。
    - 推送在服务端发送，后端需保持运行；没有跨重启的持久发送队列，最近结果与去重缓存随重启清空。"服务已接受"只代表 Bark 服务端受理，不代表手机必达。
 
-3. **定制版升级保护**：`hermes-web-ui update` 对 `-tatin.` 版本拒绝执行；Web UI 升级接口返回 `custom_build_protected`；升级检查停用——避免上游重装静默覆盖定制内容。
+3. **定制版升级保护**：`-tatin.` 版本上所有可能用上游包替换本定制版的路径都被拦截，避免上游安装静默覆盖定制内容：
+   - `hermes-web-ui update` / `upgrade` 拒绝执行；
+   - `POST /api/studio/update` 返回 `409 custom_build_protected`；
+   - `POST /api/hermes/runtime-versions/webui/download` 与 `POST /api/hermes/runtime-versions/active-webui` 返回 `409 custom_build_protected`（Hermes Agent 运行时下载、删除已下载的 Web UI 版本仍可使用）；
+   - npm 升级检查停用，界面不会提示上游更新；
+   - 桌面端不再访问上游 electron-updater 更新源：启动时不检查更新，托盘「检查更新」会提示定制版需从源码重新构建。桌面包版本仍为上游的 `0.7.21`，以打包内 Web UI 的 `-tatin.` 版本号判定是否为定制版。
+
+   版本预览（`/api/studio/update/preview/*`，仅超级管理员）保持可用：它把上游标签检出到独立目录，使用独立的 Web UI 状态与端口，不会替换正在运行的安装。
 
 4. **移除付费项**：售卖/推广上游商业产品的入口全部删除——手机 App 下载页及其"定价与购买"按钮、App 访问失败时的购买提示与付费权益文案、小方盒硬件购买入口，以及支撑它们的 App 互联/中继链路。会话通知改用自建 **Bark** 推送通道（保留原有会话级"是否推送"开关）；上游社交渠道发送模块已删除，本版本不会向第三方社交账号投递消息。
 
-5. **测试与 OpenAPI**：Bark 相关 Vitest 覆盖（加密存储、用户隔离、脱敏语义、传输错误映射、会话推送）与设置面板的 Playwright 流程；`docs/openapi.json` 已重新生成并包含 Bark 接口。
+5. **测试与 OpenAPI**：Bark 相关 Vitest 覆盖（加密存储、用户隔离、脱敏语义、传输错误映射、会话推送）与设置面板的 Playwright 流程；`docs/openapi.json` 已重新生成并包含 Bark 接口。每条定制版升级保护都有对应 Vitest 用例；测试环境把 `__APP_VERSION__` 设为 `test`，因此保护相关用例通过 `vi.stubGlobal` 注入 `-tatin.` 版本。
 
 ### Bark 安全设计
 
@@ -147,6 +174,8 @@ npm run test:e2e          # Playwright 浏览器测试（模拟后端）
 ### 维护说明
 
 - 上游更新请先合入本源码并重新构建；不要在已部署的定制版上直接执行 `npm install -g hermes-web-ui@latest`（会覆盖定制内容）。内置升级保护用于防止误覆盖，不阻止有意重装。
+- 根目录 `package.json` 的版本号必须保留 `-tatin.` 标记：服务端、CLI 与桌面端的保护都依赖它，缺失时会有 Vitest 用例失败。
+- 在本分支发布自己的 electron-updater 更新源之前，桌面端自动更新保持停用；桌面端更新通过重新构建并分发安装包完成。
 - 新增 Bark 文案提供简体中文与英文；其他语言回退英文，繁体中文回退简体中文。
 
 ### 许可证与署名

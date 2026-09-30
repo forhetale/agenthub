@@ -5,7 +5,8 @@ import { rm } from 'node:fs/promises'
 import { basename } from 'node:path'
 import { promisify } from 'node:util'
 import { t } from './desktop-i18n'
-import { isWindowsUpdaterLockError, pendingUpdateDirectories } from './updater-helpers'
+import { defaultWebuiDir } from './paths'
+import { isCustomBuildWebUi, isWindowsUpdaterLockError, pendingUpdateDirectories } from './updater-helpers'
 
 let initialized = false
 let checking = false
@@ -22,6 +23,11 @@ interface AutoUpdaterOptions {
 }
 
 let options: AutoUpdaterOptions = {}
+
+// The update feeds publish upstream builds, which would replace a custom build's bundled Web UI.
+function isCustomBuild(): boolean {
+  return isCustomBuildWebUi(defaultWebuiDir())
+}
 
 function configureUpdateFeed(url: string): void {
   autoUpdater.setFeedURL({
@@ -188,6 +194,10 @@ export function initAutoUpdater(nextOptions: AutoUpdaterOptions = {}) {
   initialized = true
 
   if (!app.isPackaged) return // dev mode: skip
+  if (isCustomBuild()) {
+    console.log('[updater] custom build: upstream auto-update disabled')
+    return
+  }
 
   autoUpdater.autoDownload = false
   autoUpdater.autoInstallOnAppQuit = true
@@ -226,6 +236,18 @@ export function initAutoUpdater(nextOptions: AutoUpdaterOptions = {}) {
 }
 
 export async function checkForDesktopUpdates(manual: boolean): Promise<void> {
+  if (isCustomBuild()) {
+    if (manual) {
+      await dialog.showMessageBox({
+        type: 'info',
+        title: t('update.checkingTitle'),
+        message: t('update.customBuildMessage'),
+        buttons: [t('common.ok')],
+      })
+    }
+    return
+  }
+
   if (!app.isPackaged) {
     if (manual) {
       await dialog.showMessageBox({

@@ -28,6 +28,7 @@ type TranslationKey =
   | 'update.failedMessage'
   | 'update.noUpdateInfoMessage'
   | 'update.packagedOnlyMessage'
+  | 'update.customBuildMessage'
   | 'desktop.startingLocalServices'
   | 'desktop.selectRuntimeSource'
   | 'desktop.downloadFailed'
@@ -87,6 +88,7 @@ const translations: Record<DesktopLocale, Record<TranslationKey, string>> = {
     'update.failedMessage': 'Could not check for Ekko Studio updates.',
     'update.noUpdateInfoMessage': 'Update information is not available for this platform yet.',
     'update.packagedOnlyMessage': 'Automatic updates are only available in the packaged desktop app.',
+    'update.customBuildMessage': 'This TATin Studio custom build does not install upstream updates. Rebuild the desktop app from the maintained custom source to update.',
     'desktop.startingLocalServices': 'Starting local services...',
     'desktop.selectRuntimeSource': 'Select a runtime download source to start local services.',
     'desktop.downloadFailed': 'Download failed',
@@ -143,6 +145,7 @@ const translations: Record<DesktopLocale, Record<TranslationKey, string>> = {
     'update.failedMessage': '无法检查 Ekko Studio 更新。',
     'update.noUpdateInfoMessage': '当前平台的更新信息暂不可用。',
     'update.packagedOnlyMessage': '自动更新仅在打包后的桌面应用中可用。',
+    'update.customBuildMessage': '此 TATin Studio 定制版不会安装上游更新。如需更新，请从维护中的定制源码重新构建桌面应用。',
     'desktop.startingLocalServices': '正在启动本地服务...',
     'desktop.selectRuntimeSource': '请选择运行时下载源以启动本地服务。',
     'desktop.downloadFailed': '下载失败',
@@ -199,6 +202,7 @@ const translations: Record<DesktopLocale, Record<TranslationKey, string>> = {
     'update.failedMessage': '無法檢查 Ekko Studio 更新。',
     'update.noUpdateInfoMessage': '目前平台的更新資訊暫不可用。',
     'update.packagedOnlyMessage': '自動更新僅可在打包後的桌面應用中使用。',
+    'update.customBuildMessage': '此 TATin Studio 客製版不會安裝上游更新。如需更新，請從維護中的客製原始碼重新建置桌面應用。',
     'desktop.startingLocalServices': '正在啟動本地服務...',
     'desktop.selectRuntimeSource': '請選擇運行時下載來源以啟動本地服務。',
     'desktop.downloadFailed': '下載失敗',
@@ -255,6 +259,7 @@ const translations: Record<DesktopLocale, Record<TranslationKey, string>> = {
     'update.failedMessage': 'Ekko Studio のアップデートを確認できませんでした。',
     'update.noUpdateInfoMessage': 'このプラットフォームのアップデート情報はまだ利用できません。',
     'update.packagedOnlyMessage': '自動アップデートはパッケージ版デスクトップアプリでのみ利用できます。',
+    'update.customBuildMessage': 'この TATin Studio カスタムビルドはアップストリームの更新をインストールしません。更新するには、管理しているカスタムソースからデスクトップアプリを再ビルドしてください。',
     'desktop.startingLocalServices': 'ローカルサービスを起動しています...',
     'desktop.selectRuntimeSource': 'ローカルサービスを開始するためのランタイムダウンロード元を選択してください。',
     'desktop.downloadFailed': 'ダウンロードに失敗しました',
@@ -311,6 +316,7 @@ const translations: Record<DesktopLocale, Record<TranslationKey, string>> = {
     'update.failedMessage': 'Ekko Studio 업데이트를 확인할 수 없습니다.',
     'update.noUpdateInfoMessage': '이 플랫폼의 업데이트 정보를 아직 사용할 수 없습니다.',
     'update.packagedOnlyMessage': '자동 업데이트는 패키징된 데스크톱 앱에서만 사용할 수 있습니다.',
+    'update.customBuildMessage': '이 TATin Studio 커스텀 빌드는 업스트림 업데이트를 설치하지 않습니다. 업데이트하려면 관리 중인 커스텀 소스에서 데스크톱 앱을 다시 빌드하세요.',
     'desktop.startingLocalServices': '로컬 서비스를 시작하는 중...',
     'desktop.selectRuntimeSource': '로컬 서비스를 시작할 런타임 다운로드 소스를 선택하세요.',
     'desktop.downloadFailed': '다운로드 실패',
@@ -367,6 +373,7 @@ const translations: Record<DesktopLocale, Record<TranslationKey, string>> = {
     'update.failedMessage': 'Impossible de rechercher les mises a jour de Ekko Studio.',
     'update.noUpdateInfoMessage': 'Les informations de mise a jour ne sont pas encore disponibles pour cette plateforme.',
     'update.packagedOnlyMessage': 'Les mises a jour automatiques ne sont disponibles que dans l application de bureau packagee.',
+    'update.customBuildMessage': 'Cette version personnalisee de TATin Studio n installe pas les mises a jour en amont. Pour la mettre a jour, reconstruisez l application de bureau depuis la source personnalisee maintenue.',
     'desktop.startingLocalServices': 'Demarrage des services locaux...',
     'desktop.selectRuntimeSource': 'Selectionnez une source de telechargement du runtime pour demarrer les services locaux.',
     'desktop.downloadFailed': 'Echec du telechargement',
@@ -423,6 +430,7 @@ const translations: Record<DesktopLocale, Record<TranslationKey, string>> = {
     'update.failedMessage': 'No se pudieron buscar actualizaciones de Ekko Studio.',
     'update.noUpdateInfoMessage': 'La informacion de actualizacion aun no esta disponible para esta plataforma.',
     'update.packagedOnlyMessage': 'Las actualizaciones automaticas solo estan disponibles en la app de escritorio empaquetada.',
+    'update.customBuildMessage': 'Esta compilacion personalizada de TATin Studio no instala actualizaciones upstream. Para actualizar, vuelve a compilar la app de escritorio desde la fuente personalizada mantenida.',
     'desktop.startingLocalServices': 'Iniciando servicios locales...',
     'desktop.selectRuntimeSource': 'Selecciona una fuente de descarga del runtime para iniciar los servicios locales.',
     'desktop.downloadFailed': 'Error de descarga',
@@ -479,6 +487,7 @@ const translations: Record<DesktopLocale, Record<TranslationKey, string>> = {
     'update.failedMessage': 'Updates fur Ekko Studio konnten nicht gepruft werden.',
     'update.noUpdateInfoMessage': 'Update-Informationen sind fur diese Plattform noch nicht verfugbar.',
     'update.packagedOnlyMessage': 'Automatische Updates sind nur in der paketierten Desktop-App verfugbar.',
+    'update.customBuildMessage': 'Dieser angepasste TATin Studio-Build installiert keine Upstream-Updates. Zum Aktualisieren die Desktop-App aus der gepflegten angepassten Quelle neu bauen.',
     'desktop.startingLocalServices': 'Lokale Dienste werden gestartet...',
     'desktop.selectRuntimeSource': 'Wahlen Sie eine Runtime-Downloadquelle aus, um lokale Dienste zu starten.',
     'desktop.downloadFailed': 'Download fehlgeschlagen',
@@ -535,6 +544,7 @@ const translations: Record<DesktopLocale, Record<TranslationKey, string>> = {
     'update.failedMessage': 'Nao foi possivel verificar atualizacoes do Ekko Studio.',
     'update.noUpdateInfoMessage': 'As informacoes de atualizacao ainda nao estao disponiveis para esta plataforma.',
     'update.packagedOnlyMessage': 'Atualizacoes automaticas estao disponiveis apenas no app desktop empacotado.',
+    'update.customBuildMessage': 'Esta compilacao personalizada do TATin Studio nao instala atualizacoes upstream. Para atualizar, recompile o app desktop a partir da fonte personalizada mantida.',
     'desktop.startingLocalServices': 'Iniciando servicos locais...',
     'desktop.selectRuntimeSource': 'Selecione uma fonte de download do runtime para iniciar os servicos locais.',
     'desktop.downloadFailed': 'Falha no download',

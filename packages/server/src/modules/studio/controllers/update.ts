@@ -1,5 +1,5 @@
 import type { Context } from 'koa'
-import { isTatinBuild } from '../public/custom-build'
+import { rejectOnCustomBuild } from '../public/custom-build'
 import {
   handleUpdate as runStudioUpdate,
   installPreview as installVersionPreview,
@@ -11,11 +11,7 @@ import {
 } from '../services/update/version-preview-manager'
 
 export async function handleUpdate(ctx: Context): Promise<void> {
-  if (isTatinBuild()) {
-    ctx.status = 409
-    ctx.body = { success: false, code: 'custom_build_protected', message: 'TATin Studio: upstream updates would overwrite this custom build. Update from the maintained custom source or explicitly reinstall the upstream package.' }
-    return
-  }
+  if (rejectOnCustomBuild(ctx, 'TATin Studio: upstream updates would overwrite this custom build. Update from the maintained custom source or explicitly reinstall the upstream package.')) return
   await runStudioUpdate(ctx)
 }
 
