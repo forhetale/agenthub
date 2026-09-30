@@ -7,6 +7,7 @@ import {
 } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { DEFAULT_TOOL_APPROVAL_TIMEOUT_MS } from '../config'
+import { splitCommandLine } from './command-line'
 import type {
   AgentToolApprovalChoice,
   AgentToolApprovalRequest,
@@ -357,36 +358,6 @@ function normalizeTerminalInvocation(
   return parts.length > 1
     ? { command: parts[0], args: parts.slice(1) }
     : { command, args }
-}
-
-function splitCommandLine(command: string): string[] {
-  const parts: string[] = []
-  let current = ''
-  let quote: '"' | "'" | undefined
-  let escaped = false
-  for (const character of command.trim()) {
-    if (escaped) {
-      current += character
-      escaped = false
-    } else if (character === '\\') {
-      escaped = true
-    } else if (quote) {
-      if (character === quote) quote = undefined
-      else current += character
-    } else if (character === '"' || character === "'") {
-      quote = character
-    } else if (/\s/.test(character)) {
-      if (current) {
-        parts.push(current)
-        current = ''
-      }
-    } else {
-      current += character
-    }
-  }
-  if (escaped) current += '\\'
-  if (current) parts.push(current)
-  return parts
 }
 
 function executableName(command: string): string {

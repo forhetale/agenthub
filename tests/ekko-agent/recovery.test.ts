@@ -11,6 +11,9 @@ import {
 } from '../../packages/ekko-agent/src'
 
 const temporaryDirectories: string[] = []
+// These cases block database repair with a read-only directory (chmod 0o500).
+// Windows ignores directory mode bits, so startup repairs the database instead.
+const posixDirectoryPermissions = process.platform !== 'win32'
 
 afterEach(async () => {
   vi.unstubAllEnvs()
@@ -149,7 +152,7 @@ describe('Ekko capability recovery', () => {
     }
   })
 
-  it('falls back to ephemeral SQLite and repairs the persistent target with migrations', async () => {
+  it.runIf(posixDirectoryPermissions)('falls back to ephemeral SQLite and repairs the persistent target with migrations', async () => {
     const baseDirectory = await temporaryDirectory('ekko-recovery-database-')
     const databasePath = join(baseDirectory, '.ekko', 'ekko.db')
     const ekkoRoot = join(baseDirectory, '.ekko')
@@ -267,7 +270,7 @@ describe('Ekko capability recovery', () => {
     expect(diagnostics.snapshot().active).toEqual([])
   })
 
-  it('requires approval for rebuild and recovers compatible data before reindexing', async () => {
+  it.runIf(posixDirectoryPermissions)('requires approval for rebuild and recovers compatible data before reindexing', async () => {
     const baseDirectory = await temporaryDirectory('ekko-recovery-rebuild-')
     const ekkoRoot = join(baseDirectory, '.ekko')
     const initial = setupEkkoAgent({ baseDirectory, env: { NODE_ENV: 'test' } })

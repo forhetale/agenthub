@@ -103,7 +103,8 @@ describe('Ekko built-in skills', () => {
     ])
 
     for (const name of names) {
-      const content = await readFile(join(bundledDirectory, name, 'SKILL.md'), 'utf8')
+      // Git may check bundled Markdown out with CRLF on Windows (core.autocrlf).
+      const content = (await readFile(join(bundledDirectory, name, 'SKILL.md'), 'utf8')).replace(/\r\n/g, '\n')
       expect(content.toLowerCase()).not.toContain('openclaw')
       expect(content).toMatch(/^---[\s\S]*?^metadata:\s*\n\s+keywords:\s*\n(?:\s+-\s+.+\n)+---/m)
       const keywordBlock = content.match(/^\s+keywords:\s*\n((?:\s+-\s+.+\n)+)/m)?.[1] || ''

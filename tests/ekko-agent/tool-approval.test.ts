@@ -78,6 +78,14 @@ describe('Ekko tool approvals', () => {
     })).toBeUndefined()
   })
 
+  it.runIf(process.platform === 'win32')('classifies Windows absolute-path command strings like terminal_exec runs them', () => {
+    expect(toolApprovalRequirement('terminal_exec', {
+      command: 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -Command Remove-Item build',
+    })).toMatchObject({
+      key: 'terminal:shell',
+    })
+  })
+
   it('allows only the current call for a once decision', async () => {
     const service = createService()
     const requests: AgentToolApprovalRequest[] = []

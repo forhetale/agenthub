@@ -3009,6 +3009,11 @@ export class CodeExecTool implements AgentTool<CodeExecInput> {
   async execute(input: CodeExecInput, context: AgentToolContext = {}): Promise<AgentToolResult>
 }
 ```
+### `src/tools/command-line.ts`
+
+```ts
+export function splitCommandLine(command: string, platform: NodeJS.Platform = process.platform): string[]
+```
 ### `src/tools/delegation.ts`
 
 ```ts

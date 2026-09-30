@@ -15,6 +15,7 @@ import {
   createDefaultToolRegistry,
   sanitizeAgentToolResult,
 } from '../../packages/ekko-agent/src/index'
+import { splitCommandLine } from '../../packages/ekko-agent/src/tools/command-line'
 
 let workspaceRoot = ''
 
@@ -413,7 +414,7 @@ describe('ekko-agent tools', () => {
     const terminal = new TerminalExecTool()
 
     await expect(terminal.execute({
-      command: `${process.execPath} -e "process.stdout.write(process.argv[1])" hello-split`,
+      command: `"${process.execPath}" -e "process.stdout.write(process.argv[1])" hello-split`,
     }, { workspaceRoot })).resolves.toMatchObject({
       ok: true,
       content: 'hello-split',
@@ -423,6 +424,14 @@ describe('ekko-agent tools', () => {
         exitCode: 0,
       },
     })
+  })
+
+  it('keeps Windows path backslashes when splitting terminal command strings', () => {
+    expect(splitCommandLine(
+      'C:\\Tools\\git.exe -C "C:\\Program Files\\repo" log --format="\\"%s\\""',
+      'win32',
+    )).toEqual(['C:\\Tools\\git.exe', '-C', 'C:\\Program Files\\repo', 'log', '--format="%s"'])
+    expect(splitCommandLine('printf "a\\"b" c\\ d', 'linux')).toEqual(['printf', 'a"b', 'c d'])
   })
 
   it('does not start terminal commands when the signal is already aborted', async () => {
@@ -487,7 +496,9 @@ describe('ekko-agent tools', () => {
     const definitionsByName = new Map(definitions.map(definition => [definition.name, definition]))
     expect(definitionsByName.get('code_exec')?.description).toContain('including a one-line snippet')
     expect(definitionsByName.get('terminal_exec')?.description).toContain('use code_exec instead')
-    expect(definitionsByName.get('terminal_exec')?.description).toContain('npx --dir')
+    expect(definitionsByName.get('terminal_exec')?.description).toContain(
+      process.platform === 'win32' ? 'explicit absolute Windows paths' : 'npx --dir',
+    )
     for (const definition of definitions) {
       expect(definition.description, definition.name).not.toMatch(/[\p{Script=Han}]/u)
       for (const description of collectDescriptions(definition.parameters)) {

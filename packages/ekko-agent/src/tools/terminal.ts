@@ -5,6 +5,7 @@ import { unlink } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { Transform, type TransformCallback } from 'node:stream'
 import { finished } from 'node:stream/promises'
+import { splitCommandLine } from './command-line'
 import type { AgentTool, AgentToolContext, AgentToolResult } from './types'
 import { ensureToolAssetDirectory, ensureWorkspaceTempRoot, workspaceTempEnvironment } from './workspace-temp'
 
@@ -342,47 +343,4 @@ function normalizeTerminalCommand(command: string, args?: string[]): { command: 
     command: parts[0],
     args: parts.slice(1),
   }
-}
-
-function splitCommandLine(command: string): string[] {
-  const parts: string[] = []
-  let current = ''
-  let quote: '"' | "'" | null = null
-  let escaped = false
-
-  for (const char of command.trim()) {
-    if (escaped) {
-      current += char
-      escaped = false
-      continue
-    }
-    if (char === '\\') {
-      escaped = true
-      continue
-    }
-    if (quote) {
-      if (char === quote) {
-        quote = null
-      } else {
-        current += char
-      }
-      continue
-    }
-    if (char === '"' || char === "'") {
-      quote = char
-      continue
-    }
-    if (/\s/.test(char)) {
-      if (current) {
-        parts.push(current)
-        current = ''
-      }
-      continue
-    }
-    current += char
-  }
-
-  if (escaped) current += '\\'
-  if (current) parts.push(current)
-  return parts
 }
