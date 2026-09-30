@@ -7,7 +7,7 @@ describe('packaged MCP invocation across the Studio rename', () => {
 
   it.each(['ekko-studio-mcp.mjs', 'hermes-studio-mcp.mjs', 'hermes-web-ui-mcp.mjs'])('preserves the arguments for %s', name => {
     const script = join(resources, 'webui', 'bin', name)
-    expect(parseBundledMcpArgs(['Hermes Studio', script, 'devices'], resources)).toEqual([script, 'devices'])
+    expect(parseBundledMcpArgs(['Hermes Studio', script, 'use'], resources)).toEqual([script, 'use'])
   })
 
   it('leaves ordinary desktop, CLI, and arbitrary script invocations alone', () => {

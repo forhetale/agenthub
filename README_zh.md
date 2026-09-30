@@ -531,4 +531,4 @@ Studio 状态与 Hermes Agent 状态彼此独立。Studio 默认使用
 该许可证覆盖 Ekko Studio、`hermes-web-ui` npm 包和 CLI、桌面应用、
 固件、发布产物、文档以及本仓库内的关联文件。
 
-MCP 主入口为 `bin/ekko-studio-mcp.mjs`，工具名统一使用 `ekko_studio_*` 前缀。旧的 `hermes-studio-mcp` / `hermes-web-ui-mcp` 命令及 `hermes_studio_*` 调用继续兼容。重启 MCP 客户端后可发现新工具名；Studio 会将托管服务配置迁移为 `ekko-studio-api`、`ekko-studio-browser`、`ekko-studio-devices` 和 `ekko-studio-use`。
+MCP 主入口为 `bin/ekko-studio-mcp.mjs`，工具名统一使用 `ekko_studio_*` 前缀。旧的 `hermes-studio-mcp` / `hermes-web-ui-mcp` 命令及 `hermes_studio_*` 调用继续兼容。重启 MCP 客户端后可发现新工具名；Studio 会将托管服务配置迁移为 `ekko-studio-api`、`ekko-studio-browser` 和 `ekko-studio-use`，并移除已下线的 `ekko-studio-devices` 条目。

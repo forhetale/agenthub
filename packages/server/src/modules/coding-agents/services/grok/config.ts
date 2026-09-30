@@ -4,6 +4,8 @@ import { join } from 'path'
 import { writeManagedPromptFile } from '../prompt-file'
 import { GROK_API_KEY_ENV, GROK_PROVIDER_ID } from './definition'
 
+// Studio-owned names stripped from user Grok configs, including retired
+// toolsets such as `devices` so upgrades do not leave stale entries behind.
 const MANAGED_MCP_NAMES = new Set([
   'hermes-studio-api',
   'hermes-studio-browser',

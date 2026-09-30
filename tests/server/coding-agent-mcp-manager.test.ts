@@ -82,7 +82,7 @@ describe('coding Agent MCP manager', () => {
     const listed = await listCodingAgentMcpServers('dsh')
     expect(listed.servers.find(server => server.name === 'docs')).toMatchObject({ raw_config: { enabled: true }, managed: false })
     const managed = listed.servers.filter(server => server.managed)
-    expect(managed).toHaveLength(4)
+    expect(managed).toHaveLength(3)
     for (const server of managed) expect(server.raw_config.env.ELECTRON_RUN_AS_NODE).toBe('1')
     const path = join(home, '.dsh', 'cordis.patch.yml')
     expect(readFileSync(path, 'utf8')).not.toContain('ekko-studio-api')
@@ -100,6 +100,7 @@ describe('coding Agent MCP manager', () => {
       enabledMcpjsonServers: ['docs'],
       mcpServers: {
         docs: { url: 'https://example.com/mcp', enabled: true },
+        'ekko-studio-devices': { command: 'node', args: ['ekko-studio-mcp.mjs', 'devices'] },
       },
     }, null, 2)}\n`)
 
@@ -108,9 +109,13 @@ describe('coding Agent MCP manager', () => {
       'docs',
       'ekko-studio-api',
       'ekko-studio-browser',
-      'ekko-studio-devices',
       'ekko-studio-use',
     ]))
+    expect(initial.servers.filter(server => server.managed).map(server => server.name)).toEqual([
+      'ekko-studio-api',
+      'ekko-studio-browser',
+      'ekko-studio-use',
+    ])
     expect(initial.servers.find(server => server.name === 'ekko-studio-api')).toMatchObject({
       managed: true,
       connected: false,
@@ -176,6 +181,10 @@ describe('coding Agent MCP manager', () => {
       '[mcp_servers."docs.search".http_headers]',
       '"X-Mode" = "safe"',
       '',
+      '[mcp_servers.ekko-studio-devices]',
+      'command = "node"',
+      'args = ["ekko-studio-mcp.mjs", "devices"]',
+      '',
     ].join('\n'))
 
     await upsertCodingAgentMcpServer(agentId, 'remote-tools', {
@@ -193,6 +202,7 @@ describe('coding Agent MCP manager', () => {
     expect(persisted).toContain('[mcp_servers.remote-tools.http_headers]')
     expect(persisted).not.toContain('[mcp_servers."docs.search"]')
     expect(persisted).not.toContain('[mcp_servers.ekko-studio-api]')
+    expect(persisted).not.toContain('[mcp_servers.ekko-studio-devices]')
   })
 
   it('manages and probes OpenCode MCP using its native config shape', async () => {

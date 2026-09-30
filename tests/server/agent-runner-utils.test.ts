@@ -620,6 +620,24 @@ describe('coding agent run state', () => {
         mode: 'scoped',
         provider: 'test-provider',
         model: 'gpt-test',
+      })).toBe(false)
+
+      writeFileSync(join(codexHome, 'config.toml'), [
+        '[mcp_servers.ekko-studio-api]',
+        'command = "node"',
+        '',
+        '[mcp_servers.ekko-studio-browser]',
+        'command = "node"',
+        '',
+        '[mcp_servers.ekko-studio-use]',
+        'command = "node"',
+        '',
+      ].join('\n'))
+      expect(manager.isSessionLaunchCompatible('chat-session-1', {
+        agentId: 'codex',
+        mode: 'scoped',
+        provider: 'test-provider',
+        model: 'gpt-test',
       })).toBe(true)
 
       manager.shutdown()

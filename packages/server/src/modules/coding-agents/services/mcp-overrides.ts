@@ -8,7 +8,7 @@ interface ManagedMcpOverrides {
 }
 
 function canonicalManagedName(name: string): string {
-  return name.replace(/^hermes-studio-(api|browser|devices|use)$/, 'ekko-studio-$1')
+  return name.replace(/^hermes-studio-(api|browser|use)$/, 'ekko-studio-$1')
 }
 
 function overridesPath(): string {

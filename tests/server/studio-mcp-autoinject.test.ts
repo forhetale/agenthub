@@ -138,15 +138,7 @@ describe('studio MCP autoinject', () => {
       },
       enabled: true,
     })
-    expect(injectedDefault.data.mcp_servers['ekko-studio-devices']).toMatchObject({
-      command: process.execPath,
-      args: [stableLauncher, 'devices'],
-      env: {
-        HERMES_MCP_SERVER_NAME: 'ekko-studio-devices',
-        HERMES_MCP_TOOLSET: 'devices',
-      },
-      enabled: true,
-    })
+    expect(injectedDefault.data.mcp_servers).not.toHaveProperty('ekko-studio-devices')
     expect(injectedDefault.data.mcp_servers['ekko-studio-use']).toMatchObject({
       command: process.execPath,
       args: [stableLauncher, 'use'],
@@ -159,13 +151,11 @@ describe('studio MCP autoinject', () => {
     })
     expect(injectedDefault.data.mcp_servers['ekko-studio-api']).not.toHaveProperty('timeout')
     expect(injectedDefault.data.mcp_servers['ekko-studio-browser']).not.toHaveProperty('timeout')
-    expect(injectedDefault.data.mcp_servers['ekko-studio-devices']).not.toHaveProperty('timeout')
     const injectedWork = await updateConfigYamlForProfileMock.mock.calls[1][1]({})
     expect(injectedWork.data.mcp_servers['ekko-studio-api'].env.HERMES_WEB_UI_PROFILE).toBe('work')
     expect(result.serverNames).toEqual([
       'ekko-studio-api',
       'ekko-studio-browser',
-      'ekko-studio-devices',
       'ekko-studio-use',
     ])
     expect(result.command).toBe(process.execPath)
@@ -351,7 +341,7 @@ describe('studio MCP autoinject', () => {
     expect(Object.keys(migrated.data.mcp_servers).some(name => name.startsWith('hermes-studio-'))).toBe(false)
     expect(migrated.data.mcp_servers['ekko-studio-api'].timeout).toBe(123)
     expect(migrated.data.mcp_servers.custom.command).toBe('user-command')
-    expect(Object.keys(migrated.data.mcp_servers)).toHaveLength(5)
+    expect(Object.keys(migrated.data.mcp_servers)).toHaveLength(4)
     const repeated = await updater(migrated.data)
     expect(repeated.result.status).toBe('unchanged')
     expect(repeated.write).toBe(false)
@@ -413,8 +403,39 @@ describe('studio MCP autoinject', () => {
     expect(updated.data.mcp_servers['hermes-studio']).toBeUndefined()
     expect(updated.data.mcp_servers['ekko-studio-api']).toBeDefined()
     expect(updated.data.mcp_servers['ekko-studio-browser']).toBeDefined()
-    expect(updated.data.mcp_servers['ekko-studio-devices']).toBeDefined()
+    expect(updated.data.mcp_servers['ekko-studio-devices']).toBeUndefined()
     expect(updated.data.mcp_servers['ekko-studio-use']).toBeDefined()
+  })
+
+  it('removes stale managed devices MCP entries left by earlier releases', async () => {
+    const { injectBundledMcpServer } = await import('../../packages/server/src/modules/hermes/services/mcp/studio-autoinject')
+    await injectBundledMcpServer()
+    const updater = updateConfigYamlForProfileMock.mock.calls[0][1]
+    const current = (await updater({})).data
+    const staleDevices = (name: string, enabled: boolean) => ({
+      command: process.execPath,
+      args: [stableLauncher, 'devices'],
+      env: {
+        ...current.mcp_servers['ekko-studio-api'].env,
+        HERMES_MCP_SERVER_NAME: name,
+        HERMES_MCP_TOOLSET: 'devices',
+      },
+      enabled,
+    })
+    current.mcp_servers['ekko-studio-devices'] = staleDevices('ekko-studio-devices', true)
+    current.mcp_servers['hermes-studio-devices'] = staleDevices('hermes-studio-devices', false)
+    current.mcp_servers.custom = { command: 'user-command' }
+
+    const cleaned = await updater(current)
+
+    expect(cleaned.result.status).toBe('updated')
+    expect(Object.keys(cleaned.data.mcp_servers).sort()).toEqual([
+      'custom',
+      'ekko-studio-api',
+      'ekko-studio-browser',
+      'ekko-studio-use',
+    ])
+    expect((await updater(cleaned.data)).result.status).toBe('unchanged')
   })
 
   it('updates old managed PATH-only MCP entries to the bundled node script', async () => {
@@ -450,7 +471,6 @@ describe('studio MCP autoinject', () => {
     expect(updated.data.mcp_servers['ekko-studio-api'].command).toBe(process.execPath)
     expect(updated.data.mcp_servers['ekko-studio-api'].args).toEqual([stableLauncher, 'api'])
     expect(updated.data.mcp_servers['ekko-studio-browser'].args).toEqual([stableLauncher, 'browser'])
-    expect(updated.data.mcp_servers['ekko-studio-devices'].args).toEqual([stableLauncher, 'devices'])
     expect(updated.data.mcp_servers['ekko-studio-use'].args).toEqual([stableLauncher, 'use'])
   })
 
@@ -468,9 +488,6 @@ describe('studio MCP autoinject', () => {
     ])
     expect(injected.data.mcp_servers['ekko-studio-browser'].args).toEqual([
       stableLauncher, 'browser',
-    ])
-    expect(injected.data.mcp_servers['ekko-studio-devices'].args).toEqual([
-      stableLauncher, 'devices',
     ])
     expect(injected.data.mcp_servers['ekko-studio-use'].args).toEqual([
       stableLauncher, 'use',

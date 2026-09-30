@@ -47,7 +47,7 @@ function printHelp() {
 Ekko Studio MCP stdio server.
 
 Usage:
-  ${DISPLAY_COMMAND} [api|browser|devices|use]
+  ${DISPLAY_COMMAND} [api|browser|use]
   ${DISPLAY_COMMAND} --help
   ${DISPLAY_COMMAND} --version
 
@@ -391,10 +391,6 @@ const moduleHints = {
   Config: {
     purpose: 'Read and update Hermes Web UI configuration.',
     keywords: ['config', 'settings', 'preferences'],
-  },
-  Devices: {
-    purpose: 'Discover, pair, and operate LAN peer devices, terminals, commands, and file transfer.',
-    keywords: ['device', 'lan', 'peer', 'terminal', 'file transfer'],
   },
   Files: {
     purpose: 'Browse and operate files exposed through the Hermes file browser.',

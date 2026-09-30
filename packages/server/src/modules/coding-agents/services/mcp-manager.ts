@@ -18,12 +18,17 @@ const CODING_AGENT_IDS = new Set(['claude-code', 'codex', 'pi', 'grok', 'opencod
 const STUDIO_MANAGED_NAMES = new Set([
   'hermes-studio-api',
   'hermes-studio-browser',
-  'hermes-studio-devices',
   'hermes-studio-use',
   'ekko-studio-api',
   'ekko-studio-browser',
-  'ekko-studio-devices',
   'ekko-studio-use',
+])
+// Retired Studio toolsets are no longer injected, but stale copies are still
+// stripped whenever a persisted agent config is rewritten.
+const STRIPPED_STUDIO_NAMES = new Set([
+  ...STUDIO_MANAGED_NAMES,
+  'hermes-studio-devices',
+  'ekko-studio-devices',
 ])
 const MANAGED_ENV_KEY = 'HERMES_WEB_UI_MANAGED_MCP'
 
@@ -318,7 +323,7 @@ async function writeServer(
   if (id === 'claude-code' || id === 'pi') {
     const { root } = parseJsonDocument(originalContent)
     const persistedServers = isRecord(root.mcpServers) ? { ...root.mcpServers } : {}
-    for (const managedName of STUDIO_MANAGED_NAMES) delete persistedServers[managedName]
+    for (const managedName of STRIPPED_STUDIO_NAMES) delete persistedServers[managedName]
     if (config) persistedServers[name] = config
     else delete persistedServers[name]
     root.mcpServers = persistedServers
@@ -328,7 +333,7 @@ async function writeServer(
   if (id === 'opencode') {
     const { root } = parseOpenCodeDocument(originalContent)
     const persistedServers = isRecord(root.mcp) ? { ...root.mcp } : {}
-    for (const managedName of STUDIO_MANAGED_NAMES) delete persistedServers[managedName]
+    for (const managedName of STRIPPED_STUDIO_NAMES) delete persistedServers[managedName]
     if (config) persistedServers[name] = serializeOpenCodeConfig(config)
     else delete persistedServers[name]
     root.mcp = persistedServers
@@ -336,7 +341,7 @@ async function writeServer(
     return
   }
   const { other, blocks } = splitTomlDocument(originalContent)
-  for (const managedName of STUDIO_MANAGED_NAMES) blocks.delete(managedName)
+  for (const managedName of STRIPPED_STUDIO_NAMES) blocks.delete(managedName)
   if (config) blocks.set(name, serializeTomlServer(name, config))
   else blocks.delete(name)
   const mcp = [...blocks.values()].join('\n\n')
@@ -460,7 +465,7 @@ export async function upsertCodingAgentMcpServer(
   scope: CodingAgentConfigScope = {},
 ): Promise<{ ok: true; name: string }> {
   assertAgentId(id)
-  const normalizedName = name.trim().replace(/^hermes-studio-(api|browser|devices|use)$/, 'ekko-studio-$1')
+  const normalizedName = name.trim().replace(/^hermes-studio-(api|browser|use)$/, 'ekko-studio-$1')
   if (!normalizedName || normalizedName.length > 128 || /[/\\\x00-\x1f]/.test(normalizedName)) {
     const error = new Error('Valid server name is required')
     ;(error as any).status = 400

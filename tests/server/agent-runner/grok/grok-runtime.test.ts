@@ -146,10 +146,15 @@ describe('Grok runtime isolation', () => {
       '',
       '[mcp_servers.ekko-studio-api]',
       'command = "old-studio-mcp"',
+      '',
+      '[mcp_servers.ekko-studio-devices]',
+      'command = "old-studio-mcp"',
+      'args = ["devices"]',
     ].join('\n')
 
     expect(stripManagedGrokMcp(config)).toContain('[mcp_servers.user-tools]')
     expect(stripManagedGrokMcp(config)).not.toContain('ekko-studio-api')
+    expect(stripManagedGrokMcp(config)).not.toContain('ekko-studio-devices')
   })
 
   it('separates Grok settings and user MCP without persisting managed MCP', () => {

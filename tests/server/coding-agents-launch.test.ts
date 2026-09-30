@@ -101,7 +101,8 @@ it.each(['scoped', 'global'] as const)('prepares DSH %s ACP homes independently 
   expect(launch.args).toEqual(['--profile', 'acp', '--patch', join(launch.rootDir, 'studio.patch.yml')])
   expect(readFileSync(launch.promptFile!, 'utf8')).toContain('DSH group instructions')
   const servers = readDshMcpServers(readFileSync(join(launch.rootDir, 'cordis.patch.yml'), 'utf8'))
-  expect(servers.size).toBeGreaterThanOrEqual(4)
+  expect([...servers.keys()]).toEqual(expect.arrayContaining(['ekko-studio-api', 'ekko-studio-browser', 'ekko-studio-use']))
+  expect(servers.has('ekko-studio-devices')).toBe(false)
   for (const server of servers.values()) expect(server.env.ELECTRON_RUN_AS_NODE).toBe('1')
   const overlay = readFileSync(join(launch.rootDir, 'studio.patch.yml'), 'utf8')
   expect(overlay).not.toContain('upstream-test-secret')
@@ -599,6 +600,7 @@ describe('coding agent launch preparation', () => {
       },
       mcpServers: {
         user_docs: { url: 'https://docs.example.com/mcp' },
+        'ekko-studio-devices': { command: 'node', args: ['ekko-studio-mcp.mjs', 'devices'] },
       },
     }, null, 2)}\n`)
 
@@ -633,7 +635,7 @@ describe('coding agent launch preparation', () => {
     expect(runtimeMcp.mcpServers.user_docs).toEqual({ url: 'https://docs.example.com/mcp' })
     expect(runtimeMcp.mcpServers['ekko-studio-api']).toMatchObject({ directTools: false, lifecycle: 'lazy' })
     expect(runtimeMcp.mcpServers['ekko-studio-browser']).toMatchObject({ directTools: false, lifecycle: 'lazy' })
-    expect(runtimeMcp.mcpServers['ekko-studio-devices']).toMatchObject({ directTools: false, lifecycle: 'lazy' })
+    expect(runtimeMcp.mcpServers).not.toHaveProperty('ekko-studio-devices')
     expect(runtimeMcp.mcpServers['ekko-studio-use']).toMatchObject({ directTools: false, lifecycle: 'lazy' })
     const runtimeModels = JSON.parse(readFileSync(join(result.rootDir, 'models.json'), 'utf-8'))
     expect(runtimeModels.providers['hermes-studio'].apiKey).toMatch(/^hwui_/)
@@ -1422,7 +1424,7 @@ describe('coding agent launch preparation', () => {
         HERMES_WEB_UI_MANAGED_MCP: '1',
       },
     })
-    for (const name of ['ekko-studio-api', 'ekko-studio-browser', 'ekko-studio-devices', 'ekko-studio-use']) {
+    for (const name of ['ekko-studio-api', 'ekko-studio-browser', 'ekko-studio-use']) {
       expect(mcp.mcpServers[name].env.ELECTRON_RUN_AS_NODE).toBe('1')
     }
     expect(mcp.mcpServers['ekko-studio-browser']).toMatchObject({
@@ -1433,14 +1435,7 @@ describe('coding agent launch preparation', () => {
         HERMES_MCP_TOOLSET: 'browser',
       },
     })
-    expect(mcp.mcpServers['ekko-studio-devices']).toMatchObject({
-      command: process.execPath,
-      args: [join(process.cwd(), 'bin/ekko-studio-mcp.mjs'), 'devices'],
-      env: {
-        HERMES_MCP_SERVER_NAME: 'ekko-studio-devices',
-        HERMES_MCP_TOOLSET: 'devices',
-      },
-    })
+    expect(mcp.mcpServers).not.toHaveProperty('ekko-studio-devices')
     expect(mcp.mcpServers['ekko-studio-use']).toMatchObject({
       command: process.execPath,
       args: [join(process.cwd(), 'bin/ekko-studio-mcp.mjs'), 'use'],
@@ -1477,7 +1472,6 @@ describe('coding agent launch preparation', () => {
         HERMES_MCP_TOOLSET: 'api',
       },
     })
-    expect(mcp.mcpServers['ekko-studio-devices'].command).toBe('/runtime/node')
     expect(mcp.mcpServers['ekko-studio-browser'].command).toBe('/runtime/node')
     expect(mcp.mcpServers['ekko-studio-use'].command).toBe('/runtime/node')
   })
@@ -1496,6 +1490,10 @@ describe('coding agent launch preparation', () => {
         'hermes-web-ui-mcp': {
           command: 'hermes-web-ui-mcp',
           env: { HERMES_WEB_UI_MANAGED_MCP: '1' },
+        },
+        'ekko-studio-devices': {
+          command: 'node',
+          args: ['ekko-studio-mcp.mjs', 'devices'],
         },
         custom: {
           command: 'custom-mcp',
@@ -1516,7 +1514,7 @@ describe('coding agent launch preparation', () => {
     expect(claudeMcp.mcpServers.custom).toEqual({ command: 'custom-mcp' })
     expect(claudeMcp.mcpServers['ekko-studio-api']).toBeDefined()
     expect(claudeMcp.mcpServers['ekko-studio-browser']).toBeDefined()
-    expect(claudeMcp.mcpServers['ekko-studio-devices']).toBeDefined()
+    expect(claudeMcp.mcpServers['ekko-studio-devices']).toBeUndefined()
     expect(claudeMcp.mcpServers['ekko-studio-use']).toBeDefined()
 
     const codexRoot = join(home, 'coding-agent', 'model', 'default', 'openrouter', 'codex')
@@ -1527,6 +1525,10 @@ describe('coding agent launch preparation', () => {
       'command = "hermes-web-ui-mcp"',
       '[mcp_servers.hermes-web-ui-mcp]',
       'command = "hermes-web-ui-mcp"',
+      '[mcp_servers.ekko-studio-devices]',
+      'command = "node"',
+      'args = ["ekko-studio-mcp.mjs", "devices"]',
+      'env = { HERMES_MCP_TOOLSET = "devices", HERMES_WEB_UI_MANAGED_MCP = "1" }',
       '',
     ].join('\n'))
 
@@ -1540,9 +1542,10 @@ describe('coding agent launch preparation', () => {
     const codexConfig = readFileSync(join(codex.rootDir, 'config.toml'), 'utf-8')
     expect(codexConfig).not.toContain('[mcp_servers.hermes-studio]')
     expect(codexConfig).not.toContain('[mcp_servers.hermes-web-ui-mcp]')
+    expect(codexConfig).not.toContain('[mcp_servers.ekko-studio-devices]')
+    expect(codexConfig).not.toContain('HERMES_MCP_TOOLSET = "devices"')
     expect(codexConfig).toContain('[mcp_servers.ekko-studio-api]')
     expect(codexConfig).toContain('[mcp_servers.ekko-studio-browser]')
-    expect(codexConfig).toContain('[mcp_servers.ekko-studio-devices]')
     expect(codexConfig).toContain('[mcp_servers.ekko-studio-use]')
     expect(codexConfig).toMatch(/\[mcp_servers.ekko-studio-use\][\s\S]*?tool_timeout_sec = 360/)
   })
@@ -1671,7 +1674,7 @@ describe('coding agent launch preparation', () => {
     expect(codexConfig).not.toContain('[model_providers.unrelated]')
     expect(codexConfig).toContain('[mcp_servers.ekko-studio-api]')
     expect(codexConfig).toContain('[mcp_servers.ekko-studio-browser]')
-    expect(codexConfig).toContain('[mcp_servers.ekko-studio-devices]')
+    expect(codexConfig).not.toContain('[mcp_servers.ekko-studio-devices]')
     expect(codexConfig).toContain('[mcp_servers.ekko-studio-use]')
     expect(codexConfig).toMatch(/\[mcp_servers.ekko-studio-use\][\s\S]*?tool_timeout_sec = 360/)
   })
@@ -1976,21 +1979,19 @@ describe('coding agent launch preparation', () => {
     expect(config).toContain('Browser MCP exposes a compact toolset rather than resources')
     expect(config).toContain('# 输出格式规范')
     expect(config).toContain('[mcp_servers.ekko-studio-api]')
-    expect(config).toContain('[mcp_servers.ekko-studio-devices]')
+    expect(config).not.toContain('[mcp_servers.ekko-studio-devices]')
     expect(config).toContain('[mcp_servers.ekko-studio-use]')
     expect(config).toContain(`command = "${process.execPath}"`)
     expect(config).toContain(`args = ["${join(process.cwd(), 'bin/ekko-studio-mcp.mjs')}", "api"]`)
-    expect(config).toContain(`args = ["${join(process.cwd(), 'bin/ekko-studio-mcp.mjs')}", "devices"]`)
     expect(config).toContain(`args = ["${join(process.cwd(), 'bin/ekko-studio-mcp.mjs')}", "use"]`)
     expect(config).toContain('ELECTRON_RUN_AS_NODE = "1"')
     expect(config).toContain(`HERMES_WEB_UI_URL = "http://127.0.0.1:8648", HERMES_WEB_UI_HOME = "${home}"`)
     expect(config).toContain('HERMES_WEBUI_STATE_DIR = "')
     expect(config).toContain('HERMES_WEB_UI_PROFILE = "default"')
     expect(config).toContain('HERMES_MCP_SERVER_NAME = "ekko-studio-api"')
-    expect(config).toContain('HERMES_MCP_SERVER_NAME = "ekko-studio-devices"')
     expect(config).toContain('HERMES_MCP_SERVER_NAME = "ekko-studio-use"')
     expect(config).toContain('HERMES_MCP_TOOLSET = "api"')
-    expect(config).toContain('HERMES_MCP_TOOLSET = "devices"')
+    expect(config).not.toContain('HERMES_MCP_TOOLSET = "devices"')
     expect(config).toContain('HERMES_MCP_TOOLSET = "use"')
     expect(config).toContain('HERMES_WEB_UI_MANAGED_MCP = "1"')
 
