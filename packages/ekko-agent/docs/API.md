@@ -51,7 +51,7 @@ JavaScript 运行时也会为不与根字段冲突的 Profile 安装直接属性
 - 调用 `config.ensureDefaults()`，解析、迁移并验证完整配置。
 - Profile 名必须能安全映射为单个目录名，不能包含路径穿越或非法字符。
 - skill、log、workspace 路径必须位于各自的 `.ekko` 受管根目录内。
-- log、workspace 路径必须已经存在且确实是目录。skill 路径只校验受管边界；Skill 初始化失败时 Profile 仍可创建，runtime 会禁用 Skill 路由并保留 Core 与恢复工具。
+- workspace 路径必须已经存在且确实是目录。skill、log 路径只校验受管边界：Skill 初始化失败时 Profile 仍可创建，runtime 会禁用 Skill 路由并保留 Core 与恢复工具；日志目录初始化或自检失败时记录 `logs` 活动故障，Profile 仍可创建，日志写入降级直至 `ekko_repair_logs` 修复通过。
 - `layout.profile` 必须与 Agent 的 `profile` 一致。
 
 检查结果位于 `profileAgent.validation`。任一检查失败时，Agent 不会进入 `ekko.agent` 实例表。
@@ -85,7 +85,7 @@ JavaScript 运行时也会为不与根字段冲突的 Profile 安装直接属性
 | `directories` | `EkkoDirectoryManager` | 安装级目录创建与路径解析。 |
 | `layout` | `EkkoDirectoryLayout` | 安装级 base/root/config/database/skills/logs/workspace 绝对路径。 |
 | `diagnostics` | `EkkoDiagnosticsRegistry` | 不依赖数据库或 Skills 的进程内活动故障与审计注册表。 |
-| `recovery` | `EkkoRecoveryService` | Skills/数据库的确定性诊断、修复、自检与临时上下文服务。 |
+| `recovery` | `EkkoRecoveryService` | Skills/数据库/日志的确定性诊断、修复、自检与临时上下文服务。 |
 | `config` | `EkkoConfigStore` | 全局配置及模型、授权 CRUD。 |
 | `database` | `EkkoDatabaseManager` | 当前共享 SQLite 连接、迁移与事务；持久库不可用时其路径为 `:memory:`，目标持久路径仍位于 `layout.databasePath`。 |
 | `memoryStore` | `SqliteMemoryStore` | 未绑定 Profile 的底层 memory store。 |
@@ -175,7 +175,7 @@ JavaScript 运行时也会为不与根字段冲突的 Profile 安装直接属性
 
 `AgentTool` 字段：`definition.name` 是唯一工具名，`definition.description?` 是模型说明，`definition.parameters?` 是 JSON Schema；`concurrency?` 默认为 `serial`，只有不共享可变状态且允许同批并发的工具才应设为 `parallel`；`execute(input, context?)` 返回 `{ ok, content, contentParts?, data?, error? }`。`AgentToolProvider` 字段为 `id`，并实现 `listTools(context?)`。Ekko runtime 将连续的 `parallel` 调用以最多 8 路并发执行，并把结果按原 tool-call 顺序回放；未标记工具仍是串行屏障。
 
-默认 registry 在由 `EkkoAgentSetup` 创建时还包含五个不依赖 Skill/持久数据库的恢复工具：`ekko_diagnostics`、`ekko_database_schema`、`ekko_repair_skills`、`ekko_repair_database`、`ekko_self_check`。Skills 修复使用打包源和 Ekko 所有权 manifest，不覆盖用户改过的同名 Skill；数据库 `retry` 原地运行代码 migrations，`rebuild` 必须显式 `confirmed=true`，并在重建前隔离原数据库族。每个修复内部都会执行目标自检，只有当前 incident revision 的自检通过后才清除活动故障。
+默认 registry 在由 `EkkoAgentSetup` 创建时还包含六个不依赖 Skill/持久数据库的恢复工具：`ekko_diagnostics`、`ekko_database_schema`、`ekko_repair_skills`、`ekko_repair_logs`、`ekko_repair_database`、`ekko_self_check`。Skills 修复使用打包源和 Ekko 所有权 manifest，不覆盖用户改过的同名 Skill；日志修复重新创建当前 Profile 的日志目录并执行可写目录自检；数据库 `retry` 原地运行代码 migrations，`rebuild` 必须显式 `confirmed=true`，并在重建前隔离原数据库族。`ekko_self_check` 的 `component` 可选 `all`、`skills`、`database`、`memory`、`logs`。每个修复内部都会执行目标自检，只有当前 incident revision 的自检通过后才清除活动故障。
 
 ## Profile `skill` 模块
 
@@ -209,17 +209,19 @@ JavaScript 运行时也会为不与根字段冲突的 Profile 安装直接属性
 | `modelClient?` | 完全自定义 ModelClient；提供后不再按配置创建。 |
 | `toolsEnabled?`, `tools?`, `toolAuthorizer?`, `toolContext?` | 工具总开关、自定义 registry、审批器与默认上下文。 |
 | `skillsEnabled?`, `skills?`, `skillDirectory?`, `skillReviewEveryToolCalls?` | Skill 总开关、进程内 skills、目录覆盖和复盘频率。 |
+| `externalSkillDirectories?`, `disabledSkillNames?` | 只读外部 Skill 根目录与不注入提示词、不参与自动路由的 Skill 名称；省略且使用 Profile skill 目录时取自 `skills.profiles.<profile>` 配置，覆盖 `skillDirectory` 时默认为空。 |
 | `skillsAvailable?` | 每轮求值的动态 Skill 能力探针；故障修复后同一 runtime 可恢复发现与路由。 |
 | `systemPrompt?`, `runtimeInstructions?` | 系统提示覆盖与固定附加指令。 |
 | `temporaryRuntimeInstructions?` | 每轮重新求值的临时指令 Provider；用于进程诊断，不写入 memory。 |
+| `recoveryDirective?` | run 开始前及运行中每步重新求值的恢复指令 Provider，返回 `{ active, automaticToolCalls, allowedToolNames, reminder }`；`active` 且请求中含允许的工具时，模型可见工具收窄为 `allowedToolNames` 并强制工具调用，活动故障因此不会被静默跳过。默认读取 `recovery` 服务中当前 Profile 的活动故障。 |
 | `maxSteps?`, `maxModelRetries?`, `toolFailureRecoveryThreshold?` | 主循环、模型重试和同一工具连续失败后的模型纠错阈值。`maxConsecutiveToolFailures?` 仅作兼容，不再终止运行。 |
 | `backgroundDelegationEnabled?`, `subtaskMaxSteps?` | 后台委派开关和子任务步数。 |
 | `modelDefaults?` | 除 messages/tools/stream 外的默认模型请求字段。 |
 | `contextKey?` | Runtime 上下文缓存键。 |
-| `memory?` | 自定义 MemoryService；默认使用共享服务并由运行身份限定 Profile。 |
+| `memory?` | 自定义 MemoryService，或传 `false` 为该 runtime 禁用 memory；省略时在 `memory.enabled` 为 true 时使用共享服务并由运行身份限定 Profile。 |
 | `logWriter?`, `logProfile?` | 自定义结构化日志写入器和 Profile 标签。 |
 
-`AgentRuntime.run(input)` 的 `input` 字段包括：必填 `messages`；可选 `signal`、`systemPrompt`、`skills`、`maxSteps`、`maxModelRetries`、`toolFailureRecoveryThreshold`、兼容字段 `maxConsecutiveToolFailures`、`toolContext`、`model`、`temperature`、`maxTokens`、`reasoningEffort`、`reasoningSummary`、`metadata`、`modelClient`、`modelDefaults`、`contextKey`、`context`、`memoryEnabled`、`memoryInput`、`backgroundDelegationEnabled`、`logContext`、`onSkillReviewUsage`、`onEvent`。同一工具连续失败达到阈值时，runtime 注入纠错指令并继续运行，不会因该阈值终止。完整方法签名见文末自动清单。
+`AgentRuntime.run(input)` 的 `input` 字段包括：必填 `messages`；可选 `signal`、`systemPrompt`、`skills`、`maxSteps`、`maxModelRetries`、`toolFailureRecoveryThreshold`、兼容字段 `maxConsecutiveToolFailures`、`toolContext`、`model`、`temperature`、`maxTokens`、`reasoningEffort`、`reasoningSummary`、`metadata`、`modelClient`、`modelDefaults`、`contextKey`、`context`、`memoryEnabled`、`memoryInput`、`ephemeralContext`、`skillReviewEnabled`、`backgroundDelegationEnabled`、`logContext`、`onSkillReviewUsage`、`onPlanUpdate`、`onEvent`。同一工具连续失败达到阈值时，runtime 注入纠错指令并继续运行，不会因该阈值终止。`memoryInput` 除可信的 `messages` 外，还可带 `writePolicy`、Host 标记的 `origin` 以及 `recallScopes`/`writeScopes`/`defaultWriteScope`（未声明时默认 Profile scope）。`ephemeralContext: true` 会在本次 run 结束时删除 Provider 原生的续接上下文；`skillReviewEnabled: false` 让隔离的回调 run 不计入也不触发会话级 Skill 复盘；`onPlanUpdate(plan)` 在发布 `plan.updated` 事件前同步调用，用于持久化任务计划，抛错即拒绝该次更新。完整方法签名见文末自动清单。
 
 ## Profile `memory` 模块
 
@@ -238,6 +240,7 @@ JavaScript 运行时也会为不与根字段冲突的 Profile 安装直接属性
 | `expire(id, input)` | Node ID、reason/actor/expectedRevision/identity | 标记过期。 |
 | `delete(id, input)` | expire 字段加 `mode?` | 直接软删或硬删。 |
 | `write(input)` | 完整 create/update/supersede/expire 写请求 | 低级同步写入口。 |
+| `applyBatch(input)` | `operations`（写操作或带 `targetId`/`expectedRevision`/`reason` 的 `delete`）、`actor?`、`explicitUserIntent?`、identity | 原子批量写入：任一操作被拒绝、两个操作修改同一 memory slot 或存储失败时全部不生效，返回 `failedOperationIndex?` 与 `reason`。 |
 | `forget(input)` | id 或 selector、mode、reason 等 | 按选择器直接遗忘。 |
 | `listMessages(input)` | `sessionId`、`afterMessageId?`、`limit?` | 读 memory 消息链。 |
 | `listAuditEvents(query?)` | Node/Session/event/actor/分页 | 本 Profile 审计记录。 |
@@ -245,7 +248,7 @@ JavaScript 运行时也会为不与根字段冲突的 Profile 安装直接属性
 | `drain()` | 无 | 等待共享消息补录队列完成。 |
 | `contextPrompt(context)` | `MemoryContext` | 把 memory 上下文渲染成提示。 |
 
-关键 `MemoryNode` 字段：`id`、`parentId?`、`supersedesId?`、强制的 `profileId`、`domain`、`categoryPath`、`type`、规范化 `key`、`revision`、`valueJson?`、`title`、`content`、`status`、`confidence`、`importance`、`tags`、`entities`、`sourceMessageIds`、`createdAt`、`updatedAt`、`expiresAt?`。
+关键 `MemoryNode` 字段：`id`、`parentId?`、`supersedesId?`、强制的 `profileId`、`scope?`（`profile`、`context` 或 `session`；缺省视为 Profile scope）、Host 标记且 Ekko 不解释的 `origin?`、`domain`、`categoryPath`、`type`、规范化 `key`、`revision`、`valueJson?`、`title`、`content`、`status`、`confidence`、`importance`、`tags`、`entities`、`sourceMessageIds`、`createdAt`、`updatedAt`、`expiresAt?`。
 
 ## Profile `conversation` 模块
 
@@ -342,7 +345,7 @@ API mode 固定映射：`chat_completions` → `openai-chat`，`codex_responses`
 
 | 路径 | 类型 | 说明 |
 | --- | --- | --- |
-| `schemaVersion` | `number` | 当前为 7；读取旧配置时补齐新字段。 |
+| `schemaVersion` | `number` | 当前为 9（`EKKO_CONFIG_SCHEMA_VERSION`）；读取旧配置时补齐新字段。 |
 | `runtime.maxSteps` | `number` | 单次主循环最大步数。 |
 | `runtime.maxModelRetries` | `number` | 单次模型步骤最大重试。 |
 | `runtime.toolFailureRecoveryThreshold` | `number` | 同一工具连续失败后要求模型纠错或换方案的阈值；默认 3，不终止运行。 |
