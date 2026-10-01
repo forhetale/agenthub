@@ -1,6 +1,7 @@
 import { publishAppState, stateEvent } from '../services/webhooks/app-event-state'
 import type { BusinessEvent } from '../services/webhooks/business-events'
 import { parseGroupTaskPlan } from '../services/group-chat/task-plan'
+import { parseGroupRunUsage } from '../services/group-chat/run-usage'
 import { publishGroupMessage, publishGroupInteraction } from '../services/webhooks/domain-events'
 import { Server, Socket, Namespace } from 'socket.io'
 import type { Server as HttpServer } from 'http'
@@ -84,7 +85,7 @@ interface ChatMessage {
     agentSessionId?: string
 }
 
-const GROUP_CHAT_FULL_PAYLOAD_TOOL_NAMES = ['workspace_diff'] as const
+const GROUP_CHAT_FULL_PAYLOAD_TOOL_NAMES = ['workspace_diff', 'run_usage'] as const
 
 function buildOutboundGroupMessage(message: ChatMessage): ChatMessage {
     return buildOutboundToolMessage(message as ChatMessage & Record<string, unknown>, {
@@ -1755,7 +1756,7 @@ class ChatStorage {
     }
 
     private messageUsageTokens(message: Pick<ChatMessage, 'role' | 'content' | 'tool_calls' | 'reasoning' | 'reasoning_content' | 'tool_name'>): number {
-        if (message.tool_name === 'task_plan') return 0
+        if (message.tool_name === 'task_plan' || message.tool_name === 'run_usage') return 0
         const role = message.role || 'user'
         if (role === 'user') return countTokens(this.contentToUsageText(message.content))
         if (role !== 'assistant' && role !== 'tool') return 0
@@ -1779,7 +1780,7 @@ class ChatStorage {
         const where = ['roomId = ?']
         const params: Array<string | number> = [roomId]
         if (options.excludeWorkspaceDiff) {
-            where.push("COALESCE(tool_name, '') NOT IN ('workspace_diff', 'task_plan')")
+            where.push("COALESCE(tool_name, '') NOT IN ('workspace_diff', 'task_plan', 'run_usage')")
         }
         if (options.throughMessageId) {
             const through = db.prepare(
@@ -2177,13 +2178,13 @@ class ChatStorage {
         if (!db) return []
         const boundary = db.prepare(
             `SELECT timestamp FROM gc_messages
-             WHERE roomId = ? AND COALESCE(tool_name, '') NOT IN ('workspace_diff', 'task_plan')
+             WHERE roomId = ? AND COALESCE(tool_name, '') NOT IN ('workspace_diff', 'task_plan', 'run_usage')
              ORDER BY timestamp DESC, id DESC
              LIMIT 1 OFFSET ?`,
         ).get(roomId, GROUP_CHAT_CONTEXT_MESSAGE_WINDOW - 1) as { timestamp: number } | undefined
         const rows = db.prepare(
             `SELECT id FROM gc_messages
-             WHERE roomId = ? AND COALESCE(tool_name, '') NOT IN ('workspace_diff', 'task_plan')${boundary ? ' AND timestamp >= ?' : ''}
+             WHERE roomId = ? AND COALESCE(tool_name, '') NOT IN ('workspace_diff', 'task_plan', 'run_usage')${boundary ? ' AND timestamp >= ?' : ''}
              ORDER BY timestamp DESC, id DESC
              LIMIT ?`,
         ).all(
@@ -2242,6 +2243,13 @@ class ChatStorage {
         db.exec('SAVEPOINT group_message_save')
         try {
             const existing = this.getMessage(msg.id)
+            if (msg.tool_name === 'run_usage' || existing?.tool_name === 'run_usage') {
+                const usage = msg.role === 'tool' ? parseGroupRunUsage(msg.content) : null
+                if (!usage || msg.run_id !== usage.runId) throw new Error('Invalid group run usage')
+                if (existing && (existing.roomId !== msg.roomId || existing.senderId !== msg.senderId
+                    || existing.run_id !== msg.run_id)) throw new Error('Group run usage identity mismatch')
+                msg = { ...msg, content: JSON.stringify(usage), ...(existing ? { timestamp: existing.timestamp } : {}) }
+            }
             if (msg.tool_name === 'task_plan' || existing?.tool_name === 'task_plan') {
                 const plan = msg.role === 'tool' ? parseGroupTaskPlan(msg.content) : null
                 if (!plan || msg.run_id !== plan.run_id) throw new Error('Invalid group task plan')
