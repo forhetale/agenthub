@@ -1,5 +1,5 @@
 import { mergeTaskPlanMessages, type TaskPlanSnapshot } from '@/utils/task-plan'
-import { migrateLegacySessionPins } from '@/utils/legacy-session-pins'
+import { hasLegacySessionPins, migrateLegacySessionPins } from '@/utils/legacy-session-pins'
 import { getBarkSettings } from '@/api/studio/bark'
 import { startRunViaSocket, resumeSession, registerSessionHandlers, unregisterSessionHandlers, getChatRunSocket, respondToolApproval, onPeerUserMessage, onSessionCommand, onSessionTitleUpdated, onSessionWorkspaceUpdated, onSessionSettingsUpdated, respondClarify, type ChatRunTransport, type RunEvent, type ResumeSessionPayload, type StartRunRequest, type ContentBlock as ContentBlockImport } from '@/api/studio/chat'
 import { archiveSession as archiveSessionApi, deleteSession as deleteSessionApi, fetchSessionMessagesPage, fetchSessions, fetchWorkspaceRunChangeFile, setSessionModel, setSessionPushEnabled as persistSessionPushEnabled, setSessionReasoningEffort as persistSessionReasoningEffort, type HermesMessage, type SessionSummary, type WorkspaceRunChangeFileDetail, type WorkspaceRunChangeSummary } from '@/api/studio/sessions'
@@ -1776,7 +1776,8 @@ export const useChatStore = defineStore('chat', () => {
     const selectionSequence = activeSelectionSequence
     isLoadingSessions.value = true
     try {
-      await migrateLegacySessionPins(profile || getActiveProfileName() || 'default')
+      const pinProfile = profile || getActiveProfileName() || 'default'
+      if (hasLegacySessionPins(pinProfile)) await migrateLegacySessionPins(pinProfile)
       const list = await fetchRuntimeSessions(profile)
       if (requestSequence !== loadSessionsRequestSequence) return
       const fresh = list.map(mapHermesSession)

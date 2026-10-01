@@ -10,12 +10,21 @@ export function legacySessionPinsKey(profile: string): string {
   return `${LEGACY_PINS_KEY_PREFIX}${profile || 'default'}`
 }
 
+/** Synchronous check so session loads only wait for a migration when one is pending. */
+export function hasLegacySessionPins(profile: string): boolean {
+  try {
+    return localStorage.getItem(legacySessionPinsKey(profile)) !== null
+  } catch {
+    return false
+  }
+}
+
 /**
  * Pins the legacy browser pins on the server and returns how many succeeded.
  * The legacy entry is dropped once every pin either succeeded or was rejected by the
  * server (for example a deleted session); network or sign-in failures keep it for a retry.
  */
-export async function migrateLegacySessionPins(profile: string, pin: PinSession = setSessionPinned): Promise<number> {
+export async function migrateLegacySessionPins(profile: string, pinSession?: PinSession): Promise<number> {
   const key = legacySessionPinsKey(profile)
   let stored: unknown
   try {
@@ -32,7 +41,8 @@ export async function migrateLegacySessionPins(profile: string, pin: PinSession 
   let retry = false
   for (const id of ids) {
     try {
-      await pin(id, true)
+      // Resolve the API only when a pin is moved, so the usual no-op load never touches it.
+      await (pinSession || setSessionPinned)(id, true)
       migrated++
     } catch (error) {
       if (typeof (error as { status?: unknown })?.status !== 'number') retry = true

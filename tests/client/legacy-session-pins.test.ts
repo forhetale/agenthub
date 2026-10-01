@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { legacySessionPinsKey, migrateLegacySessionPins } from '@/utils/legacy-session-pins'
+import { hasLegacySessionPins, legacySessionPinsKey, migrateLegacySessionPins } from '@/utils/legacy-session-pins'
 
 const httpError = (status: number) => Object.assign(new Error(`API Error ${status}`), { status })
 
@@ -45,5 +45,15 @@ describe('legacy session pin migration', () => {
     await expect(migrateLegacySessionPins('default', pin)).resolves.toBe(0)
     expect(pin).not.toHaveBeenCalled()
     expect(localStorage.getItem(legacySessionPinsKey('default'))).toBeNull()
+  })
+
+  it('reports a pending migration only while the profile still has a legacy entry', async () => {
+    expect(hasLegacySessionPins('work')).toBe(false)
+    localStorage.setItem(legacySessionPinsKey('work'), JSON.stringify(['a']))
+    expect(hasLegacySessionPins('work')).toBe(true)
+    expect(hasLegacySessionPins('default')).toBe(false)
+
+    await migrateLegacySessionPins('work', vi.fn().mockResolvedValue({ ok: true }))
+    expect(hasLegacySessionPins('work')).toBe(false)
   })
 })
