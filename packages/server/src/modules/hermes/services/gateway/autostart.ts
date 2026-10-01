@@ -683,11 +683,13 @@ export async function restartGatewayForProfile(profile: string): Promise<{
 }
 
 export async function ensureProfileGatewaysRunning(): Promise<void> {
+  const { gatewayAutoStart } = await readAppConfig()
+  if (gatewayAutoStart?.enabled === false) return
+
   await recoverWindowsDesktopGatewayOrphansOnce()
 
   const hermesBin = resolveHermesBin()
   const discoveredProfiles = listProfileNamesFromDisk()
-  const { gatewayAutoStart } = await readAppConfig()
   const unified = shouldUseUnifiedGatewayManagement(gatewayAutoStart)
   const profiles = selectGatewayProfilesForAutostart(discoveredProfiles, gatewayAutoStart, unified)
   const skippedProfiles = discoveredProfiles.filter(profile => !profiles.includes(profile))
@@ -698,6 +700,7 @@ export async function ensureProfileGatewaysRunning(): Promise<void> {
       unified,
     )
   }
+  if (profiles.length === 0) return
   let gatewayStatuses: Map<string, string> | undefined
   try {
     gatewayStatuses = await listGatewayStatusesFromProfileList(hermesBin)

@@ -1,8 +1,12 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
+import * as appConfig from '../../packages/server/src/modules/studio/public/app-config'
+import * as profiles from '../../packages/server/src/modules/hermes/services/profiles/profile'
+import * as runtime from '../../packages/server/src/modules/hermes/services/runtime/process'
 import {
+  ensureProfileGatewaysRunning,
   gatewayAutostartDisabledByEnv,
   gatewayAutoStartManagementMode,
   gatewayMultiplexConfigEnabledForDefaultProfile,
@@ -23,6 +27,22 @@ import {
 } from '../../packages/server/src/modules/hermes/services/gateway/autostart'
 
 describe('gateway autostart status parsing', () => {
+  // TATin keeps auto-start on when the switch was never set; only an explicit opt-out skips the work.
+  it('skips gateway discovery and CLI calls when auto-start is explicitly disabled', async () => {
+    const readConfig = vi.spyOn(appConfig, 'readAppConfig').mockResolvedValue({ gatewayAutoStart: { enabled: false } })
+    const discoverProfiles = vi.spyOn(profiles, 'listProfileNamesFromDisk').mockReturnValue(['default'])
+    const exec = vi.spyOn(runtime, 'execHermesWithBin').mockRejectedValue(new Error('Unexpected Hermes command'))
+    try {
+      await ensureProfileGatewaysRunning()
+      expect(discoverProfiles).not.toHaveBeenCalled()
+      expect(exec).not.toHaveBeenCalled()
+    } finally {
+      readConfig.mockRestore()
+      discoverProfiles.mockRestore()
+      exec.mockRestore()
+    }
+  })
+
   it('selects all profiles by default for gateway autostart', () => {
     expect(selectProfilesForGatewayAutostart(['default', 'work', 'test'])).toEqual(['default', 'work', 'test'])
   })

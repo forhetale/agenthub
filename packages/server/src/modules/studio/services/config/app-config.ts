@@ -12,6 +12,7 @@ export interface ModelVisibilityRule {
 }
 
 export interface GatewayAutoStartConfig {
+  // Only explicit true enables automatic gateway startup and restarts.
   enabled?: boolean
   include?: string[]
   exclude?: string[]
@@ -34,6 +35,7 @@ function normalizeProfileList(values: unknown): string[] {
 }
 
 export function normalizeGatewayAutoStartConfig(value: unknown): GatewayAutoStartConfig {
+  // TATin keeps the pre-0.7.26 default: an unset switch still auto-starts gateways.
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
   const raw = value as Record<string, unknown>
   const normalized: GatewayAutoStartConfig = {}
@@ -76,7 +78,7 @@ export interface AppConfig {
   providerPreferredModels?: Record<string, Record<string, string>>
 
   // Web UI startup policy for automatically starting Hermes API gateways.
-  // Defaults to legacy behavior: all local profiles are eligible. This is a
+  // Disabled by default; users must explicitly enable it. This is a
   // Web UI-level setting, not the active Hermes profile's config.yaml.
   gatewayAutoStart?: GatewayAutoStartConfig
 }

@@ -365,6 +365,7 @@ export default {
 
   // Common
   common: {
+    close: 'Close',
     loading: 'Loading...',
     cancel: 'Cancel',
     delete: 'Delete',
@@ -998,6 +999,9 @@ export default {
     newCliChat: 'New CLI',
     deleteSession: 'Delete this session?',
     sessionDeleted: 'Session deleted',
+    sessionListActions: 'Session list actions',
+    filterByProfile: 'Filter by Profile',
+    selectedSessions: '{count} selected',
     toggleBatchMode: 'Batch selection',
     selectAll: 'Select all',
     confirmBatchDelete: 'Delete {count} selected sessions?',
@@ -1102,6 +1106,7 @@ export default {
   },
 
   workflow: {
+    listActions: 'Workflow list actions',
     quality: { results: "JEV quality observations", rerun: "Edit and rerun from this node", decision: { pass: "Passed", needs_improvement: "Needs improvement", unknown: "Unknown" } },
     title: 'Workflow',
     profile: 'Profile',
@@ -1574,6 +1579,7 @@ export default {
 
   // Skills
   skills: {
+    filterBySource: "Filter by source",
     title: 'Skills',
     targetFilter: 'Runtime',
     targets: {
@@ -2167,6 +2173,10 @@ export default {
 
   // Logs
   logs: {
+    file: "Log file",
+    level: "Log level",
+    lines: "Lines",
+    filters: "Filter logs",
     title: 'Logs',
     all: 'All',
     searchPlaceholder: 'Search...',
@@ -3338,6 +3348,24 @@ export default {
 
   // Usage
   usage: {
+    costStates: {
+      unknown: "Not recorded",
+      partial: "Partial cost; some usage is unpriced",
+      reported: "Provider-reported cost",
+      estimated: "Estimated cost",
+      mixed: "Includes reported and estimated costs",
+    },
+    pricing: {
+      title: "Model pricing",
+      help: "Without a custom price, models.dev is used to estimate costs for matching models. USD per million tokens. Match provider and model IDs exactly (e.g. global). Used only when no cost is returned. Blank cache rates mean unknown. Changes apply to future calls; historical costs are not recalculated.",
+      provider: "Provider ID",
+      model: "Model ID",
+      input: "Input",
+      output: "Output",
+      cacheRead: "Cache read",
+      cacheWrite: "Cache write",
+      error: "Could not load or save pricing. Check provider/model IDs, duplicates and non-negative rates.",
+    },
     title: 'Usage Statistics',
     refresh: 'Refresh',
     totalTokens: 'Total Tokens',
@@ -3468,6 +3496,14 @@ export default {
 
   // Changelog
   changelog: {
+    new_0_7_26_1: 'Unified Studio navigation, page headers, and list actions, with improved mobile layouts (#3232)',
+    new_0_7_26_2: 'Unified page loading feedback and improved logo loading visibility, including reduced-motion mode (#3232, #3236)',
+    new_0_7_26_3: 'Improved custom backgrounds and glass layers, fixed window edges and rounded corners, and made microphone buttons follow theme colors (#3236)',
+    new_0_7_26_4: 'Adjusted desktop window control placement and styling by platform while preserving native Windows rounded corners (#3234, #3235)',
+    new_0_7_26_5: 'Profile lists load without CLI checks and initial message bubbles render correctly; Gateway still starts automatically unless you turn it off (#3233)',
+    new_0_7_26_6: 'Added usage cost recording and custom model pricing, with estimates from the local model catalog and improved context-limit matching (#3226)',
+    new_0_7_26_7: 'Added compatibility with DSH registry presets and native plugin configuration, and fixed plugin pages not filling the available space (#3218)',
+    new_0_7_26_8: 'Fixed Cursor logo visibility on light Agent Manager cards (#3222)',
     new_0_7_25_1: 'Added Cursor CLI support for chat, group chats, and workflows, with native settings, skills management, and isolated Studio MCP (#3110)',
     new_0_7_25_2: 'Added configurable JEV memory recall, relevance filtering, write review, skill matching, and learning preflight (#3159, #3161, #3169)',
     new_0_7_25_3: 'Added optional JEV browser target matching and action verification, group summary review and message routing, and workflow quality checks (#3208, #3211)',

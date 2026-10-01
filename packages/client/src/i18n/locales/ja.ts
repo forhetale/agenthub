@@ -377,6 +377,7 @@ export default {
 
   // 共通
   common: {
+    close: '閉じる',
     loading: '読み込み中...',
     cancel: 'キャンセル',
     retry: '再試行',
@@ -942,6 +943,9 @@ export default {
     interactionCountdown: '残り {time}',
     interactionCountdownElapsed: '00:00 · サーバー確認待ち',
     deleteSession: 'このセッションを削除しますか？',
+    sessionListActions: 'セッション一覧の操作',
+    filterByProfile: 'プロファイルで絞り込み',
+    selectedSessions: '{count} 件選択中',
     toggleBatchMode: '一括選択',
     selectAll: 'すべて選択',
     confirmBatchDelete: '{count}件のセッションを削除しますか？',
@@ -1173,6 +1177,7 @@ export default {
 
   // スキル
   skills: {
+    filterBySource: "ソースで絞り込む",
     title: 'スキル',
     targetFilter: 'ランタイム',
     targets: {
@@ -1719,6 +1724,10 @@ export default {
 
   // ログ
   logs: {
+    file: "ログファイル",
+    level: "ログレベル",
+    lines: "行数",
+    filters: "ログを絞り込む",
     title: 'ログ',
     all: 'すべて',
     searchPlaceholder: '検索...',
@@ -2601,6 +2610,24 @@ export default {
 
   // 使用統計
   usage: {
+    costStates: {
+      unknown: "未記録",
+      partial: "一部の費用のみ記録",
+      reported: "プロバイダー報告額",
+      estimated: "推定費用",
+      mixed: "報告額と推定額を含む",
+    },
+    pricing: {
+      title: "モデル料金",
+      help: "カスタム料金が未設定の場合、一致するモデルの models.dev 料金で推定します。100万トークンあたりの米ドル。プロバイダーとモデルの ID を完全一致で指定（例: global）。費用が返されない場合のみ推定します。キャッシュ料金の空欄は不明を意味します。変更は今後の呼び出しに適用され、過去の費用は再計算されません。",
+      provider: "プロバイダー ID",
+      model: "モデル ID",
+      input: "入力",
+      output: "出力",
+      cacheRead: "キャッシュ読取",
+      cacheWrite: "キャッシュ書込",
+      error: "料金の読み込みまたは保存に失敗しました。ID、重複、負の料金がないか確認してください。",
+    },
     title: '使用統計',
     refresh: '更新',
     totalTokens: '総トークン数',
@@ -2647,6 +2674,7 @@ export default {
   },
 
   workflow: {
+    listActions: 'ワークフロー一覧の操作',
     quality: { results: "JEV quality observations", rerun: "Edit and rerun from this node", decision: { pass: "Passed", needs_improvement: "Needs improvement", unknown: "Unknown" } },
     title: 'ワークフロー',
     profile: 'プロファイル',
@@ -3056,6 +3084,14 @@ export default {
   },
 
   changelog: {
+    new_0_7_26_1: 'Studio のナビゲーション、ページヘッダー、一覧操作を統一し、モバイルレイアウトを改善 (#3232)',
+    new_0_7_26_2: 'ページ読み込み表示を統一し、動きを減らす設定時を含め、ロゴの読み込み表示を改善 (#3232, #3236)',
+    new_0_7_26_3: 'カスタム背景とガラス効果の階層を改善し、ウィンドウの縁と角丸を修正。マイクボタンをテーマの配色に対応 (#3236)',
+    new_0_7_26_4: 'プラットフォームに合わせてデスクトップのウィンドウ操作ボタンの位置とスタイルを調整し、Windows 標準の角丸を維持 (#3234, #3235)',
+    new_0_7_26_5: 'Profile 一覧の読み込みから CLI チェックを分離し、メッセージ吹き出しの初回描画を修正。Gateway はオフにしない限り引き続き自動起動します (#3233)',
+    new_0_7_26_6: '使用料金の記録とモデル単価のカスタマイズを追加。ローカルモデルカタログによる料金見積もりに対応し、コンテキスト上限の照合を改善 (#3226)',
+    new_0_7_26_7: 'DSH レジストリのプリセットとネイティブプラグイン設定に対応し、プラグインページが表示領域全体を使わない問題を修正 (#3218)',
+    new_0_7_26_8: 'Agent Manager の明るいカード上で Cursor ロゴが見えにくい問題を修正 (#3222)',
     new_0_7_25_1: 'チャット、グループチャット、ワークフローで Cursor CLI に対応し、ネイティブ設定、スキル管理、分離された Studio MCP 設定を追加 (#3110)',
     new_0_7_25_2: '設定可能な JEV の記憶検索、関連性フィルタリング、書き込みレビュー、スキル照合、学習事前チェックを追加 (#3159, #3161, #3169)',
     new_0_7_25_3: '任意で有効にできる JEV のブラウザー対象照合と操作検証、グループ要約レビューとメッセージ振り分け、ワークフロー品質チェックを追加 (#3208, #3211)',

@@ -377,6 +377,7 @@ export default {
 
   // Common
   common: {
+    close: 'Schließen',
     loading: 'Laden...',
     cancel: 'Abbrechen',
     retry: 'Erneutern',
@@ -942,6 +943,9 @@ export default {
     interactionCountdown: '{time} verbleibend',
     interactionCountdownElapsed: '00:00 · Serverbestätigung ausstehend',
     deleteSession: 'Diese Sitzung loschen?',
+    sessionListActions: 'Aktionen für die Sitzungsliste',
+    filterByProfile: 'Nach Profil filtern',
+    selectedSessions: '{count} ausgewählt',
     toggleBatchMode: 'Batch-Auswahl',
     selectAll: 'Alle auswählen',
     confirmBatchDelete: '{count} ausgewählte Sitzungen löschen?',
@@ -1173,6 +1177,7 @@ jobTriggered: 'Job ausgelost',
 
   // Skills
   skills: {
+    filterBySource: "Nach Quelle filtern",
     title: 'Fahigkeiten',
     targetFilter: 'Runtime',
     targets: {
@@ -1719,6 +1724,10 @@ jobTriggered: 'Job ausgelost',
 
   // Logs
   logs: {
+    file: "Protokolldatei",
+    level: "Protokollstufe",
+    lines: "Zeilen",
+    filters: "Protokolle filtern",
     title: 'Protokolle',
     all: 'Alle',
     searchPlaceholder: 'Suchen...',
@@ -2602,6 +2611,24 @@ jobTriggered: 'Job ausgelost',
 
   // Usage
   usage: {
+    costStates: {
+      unknown: "Nicht erfasst",
+      partial: "Teilkosten; einige Nutzungen ohne Preis",
+      reported: "Vom Anbieter gemeldete Kosten",
+      estimated: "Geschätzte Kosten",
+      mixed: "Gemeldete und geschätzte Kosten",
+    },
+    pricing: {
+      title: "Modellpreise",
+      help: "Ohne eigene Preise werden passende Modelle anhand von models.dev geschätzt. USD pro Million Tokens. Anbieter- und Modell-ID müssen genau passen (z. B. global). Schätzung nur ohne gemeldete Kosten. Leere Cachepreise bedeuten unbekannt. Änderungen gelten für künftige Aufrufe; frühere Kosten werden nicht neu berechnet.",
+      provider: "Anbieter-ID",
+      model: "Modell-ID",
+      input: "Eingabe",
+      output: "Ausgabe",
+      cacheRead: "Cache lesen",
+      cacheWrite: "Cache schreiben",
+      error: "Preise konnten nicht geladen oder gespeichert werden. IDs, Duplikate und nicht negative Preise prüfen.",
+    },
     title: 'Nutzungsstatistiken',
     refresh: 'Aktualisieren',
     totalTokens: 'Gesamt-Tokens',
@@ -2648,6 +2675,7 @@ jobTriggered: 'Job ausgelost',
   },
 
   workflow: {
+    listActions: 'Aktionen für die Workflow-Liste',
     quality: { results: "JEV quality observations", rerun: "Edit and rerun from this node", decision: { pass: "Passed", needs_improvement: "Needs improvement", unknown: "Unknown" } },
     title: 'Workflow',
     profile: 'Profil',
@@ -3057,6 +3085,14 @@ jobTriggered: 'Job ausgelost',
   },
 
   changelog: {
+    new_0_7_26_1: 'Studio-Navigation, Seitenkopfzeilen und Listenaktionen vereinheitlicht sowie mobile Layouts verbessert (#3232)',
+    new_0_7_26_2: 'Ladeanzeigen der Seiten vereinheitlicht und die Sichtbarkeit des Ladelogos auch bei reduzierten Animationen verbessert (#3232, #3236)',
+    new_0_7_26_3: 'Benutzerdefinierte Hintergründe und Glasebenen verbessert, Fensterränder und abgerundete Ecken korrigiert sowie Mikrofontasten an die Theme-Farben angepasst (#3236)',
+    new_0_7_26_4: 'Position und Stil der Fenstersteuerung je nach Plattform angepasst und native abgerundete Windows-Fensterecken beibehalten (#3234, #3235)',
+    new_0_7_26_5: 'Profillisten laden ohne CLI-Prüfungen, und die erste Darstellung von Nachrichtenblasen wurde korrigiert; der Gateway startet weiterhin automatisch, solange er nicht deaktiviert wird (#3233)',
+    new_0_7_26_6: 'Kostenerfassung und benutzerdefinierte Modellpreise ergänzt, mit Schätzungen aus dem lokalen Modellkatalog und verbessertem Abgleich der Kontextlimits (#3226)',
+    new_0_7_26_7: 'Kompatibilität mit DSH-Registry-Voreinstellungen und nativer Plugin-Konfiguration ergänzt; Plugin-Seiten nutzen nun den verfügbaren Platz vollständig (#3218)',
+    new_0_7_26_8: 'Sichtbarkeit des Cursor-Logos auf hellen Karten im Agent Manager korrigiert (#3222)',
     new_0_7_25_1: 'Cursor CLI für Chats, Gruppenchats und Workflows ergänzt, mit nativen Einstellungen, Skill-Verwaltung und isolierter Studio-MCP-Konfiguration (#3110)',
     new_0_7_25_2: 'Konfigurierbare JEV-Funktionen für Erinnerungsabruf, Relevanzfilterung, Schreibprüfung, Skill-Zuordnung und Lernvorprüfung hinzugefügt (#3159, #3161, #3169)',
     new_0_7_25_3: 'Optionale JEV-Prüfungen für Browserziele und Aktionen, Gruppenzusammenfassungen, Nachrichtenweiterleitung und Workflow-Qualität hinzugefügt (#3208, #3211)',

@@ -845,6 +845,7 @@ function responseId(data: any): string {
 
 function usageFromChat(data: any) {
   return {
+    ...data?.usage,
     input_tokens: Number(data?.usage?.prompt_tokens || 0),
     output_tokens: Number(data?.usage?.completion_tokens || 0),
     total_tokens: Number(data?.usage?.total_tokens || 0),
@@ -855,6 +856,7 @@ function usageFromAnthropic(data: any) {
   const inputTokens = Number(data?.usage?.input_tokens || 0)
   const outputTokens = Number(data?.usage?.output_tokens || 0)
   return {
+    ...data?.usage,
     input_tokens: inputTokens,
     output_tokens: outputTokens,
     total_tokens: inputTokens + outputTokens,
