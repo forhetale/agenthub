@@ -3,7 +3,12 @@ import type { TaskPlanSnapshot } from '../contracts/task-plan'
 
 type PlanUpdate = Pick<TaskPlanSnapshot, 'explanation' | 'plan'>
 type TerminalState = Exclude<TaskPlanSnapshot['execution_state'], 'running'>
-type RunState = { isWorking: boolean; isAborting?: boolean; activeRunMarker?: string; responseRun?: { runMarker?: string } }
+type RunState = { isWorking: boolean; isAborting?: boolean; runId?: string; activeRunMarker?: string; responseRun?: { runMarker?: string } }
+
+/** Turn markers identify one turn. Coding-agent group runs only set runId. */
+function activeTurnId(state: RunState | undefined): string {
+  return state?.activeRunMarker || state?.responseRun?.runMarker || state?.runId || ''
+}
 type Binding = { sessionId: string; profile: string; resolve: () => RunState | undefined; snapshot?: TaskPlanSnapshot; publish?: (snapshot: TaskPlanSnapshot) => void }
 
 export class TaskPlanError extends Error {
@@ -58,7 +63,7 @@ export class TaskPlanRuns {
     const binding = this.bindings.get(contextId)
     if (!binding || binding.profile !== profile) throw new TaskPlanError('Task plan context is unavailable or has expired', 409)
     const state = binding.resolve()
-    const runId = state?.activeRunMarker || state?.responseRun?.runMarker
+    const runId = activeTurnId(state)
     if (!state?.isWorking || state.isAborting || !runId || (binding.snapshot && binding.snapshot.run_id !== runId)) {
       throw new TaskPlanError('Task plan context has no active turn', 409)
     }
@@ -73,6 +78,15 @@ export class TaskPlanRuns {
     binding.snapshot = snapshot
     binding.publish ? binding.publish(snapshot) : this.publish(binding.sessionId, snapshot)
     return structuredClone(snapshot)
+  }
+
+  isActive(contextId: string, profile: string): boolean {
+    const binding = this.bindings.get(contextId)
+    if (!binding || binding.profile !== profile) return false
+    const state = binding.resolve()
+    const runId = activeTurnId(state)
+    return Boolean(state?.isWorking && !state.isAborting && runId
+      && (!binding.snapshot || binding.snapshot.run_id === runId))
   }
 
   finish(contextId: string, executionState: TerminalState): void {

@@ -413,8 +413,9 @@ describe('ekko-agent tools', () => {
   it('normalizes shell-like terminal command strings when args are omitted', async () => {
     const terminal = new TerminalExecTool()
 
+    const executable = process.execPath.includes(' ') ? `"${process.execPath}"` : process.execPath
     await expect(terminal.execute({
-      command: `"${process.execPath}" -e "process.stdout.write(process.argv[1])" hello-split`,
+      command: `${executable} -e "process.stdout.write(process.argv[1])" hello-split`,
     }, { workspaceRoot })).resolves.toMatchObject({
       ok: true,
       content: 'hello-split',
@@ -497,7 +498,7 @@ describe('ekko-agent tools', () => {
     expect(definitionsByName.get('code_exec')?.description).toContain('including a one-line snippet')
     expect(definitionsByName.get('terminal_exec')?.description).toContain('use code_exec instead')
     expect(definitionsByName.get('terminal_exec')?.description).toContain(
-      process.platform === 'win32' ? 'explicit absolute Windows paths' : 'npx --dir',
+      process.platform === 'win32' ? 'explicit absolute Windows paths are supported' : 'npx --dir',
     )
     for (const definition of definitions) {
       expect(definition.description, definition.name).not.toMatch(/[\p{Script=Han}]/u)

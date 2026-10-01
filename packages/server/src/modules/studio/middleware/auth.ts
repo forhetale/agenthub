@@ -1,6 +1,7 @@
 import type { Context, Next } from 'koa'
 import { createHmac, timingSafeEqual } from 'crypto'
 import { getToken } from '../services/auth/token-auth'
+import { runMcpCredentials } from '../services/auth/run-mcp-credentials'
 import {
   findUserById,
   listUserProfiles,
@@ -235,6 +236,42 @@ export async function requireUserJwt(ctx: Context, next: Next): Promise<void> {
 
   const secret = await getJwtSecret()
   const token = requestToken(ctx)
+  if (runMcpCredentials.recognizes(token)) {
+    const binding = runMcpCredentials.authenticate(token)
+    if (!binding) {
+      ctx.status = 401
+      ctx.body = { error: 'Run credential is unavailable or has expired' }
+      return
+    }
+    const body = ctx.request.body as Record<string, unknown> | undefined
+    const profiles = [ctx.get('x-hermes-profile'), ctx.query.profile, body?.profile].filter(value => value !== undefined && value !== '')
+    const interaction = ctx.method === 'POST' && (
+      ctx.path === '/api/studio/task-plans/update' || ctx.path === '/api/studio/clarifications/request'
+    )
+    if (ctx.get('x-studio-run-context') !== binding.contextId
+      || profiles.some(value => typeof value !== 'string' || value.trim() !== binding.profile)
+      || (interaction && body?.context_id !== binding.contextId)) {
+      ctx.status = 403
+      ctx.body = { error: 'Request does not belong to this run context' }
+      return
+    }
+    if (binding.userId !== undefined) {
+      const user = findUserById(binding.userId)
+      if (!user || user.status !== 'active' || (user.role !== 'super_admin' && !userCanAccessProfile(user.id, binding.profile))) {
+        ctx.status = 403
+        ctx.body = { error: 'Run requester no longer has access to this profile' }
+        return
+      }
+      ctx.state.user = toAuthenticatedUser(user)
+    } else if (!interaction) {
+      ctx.status = 403
+      ctx.body = { error: 'This run credential only permits its task plan and clarification requests' }
+      return
+    }
+    ctx.state.profile = { name: binding.profile }
+    await next()
+    return
+  }
   const payload = token ? verifyUserJwt(token, secret) : null
   if (!payload) {
     if (await allowServerTokenForAgentEndpoint(ctx, token)) {

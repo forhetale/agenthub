@@ -5,6 +5,7 @@ import { NButton, NSelect, NSpin, NTabPane, NTabs, useMessage } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import AuxiliaryModelsPanel from '@/components/hermes/models/AuxiliaryModelsPanel.vue'
 import CombinationModelsPanel from '@/components/hermes/models/CombinationModelsPanel.vue'
+import JevSettingsPanel from '@/components/hermes/models/JevSettingsPanel.vue'
 import ProvidersPanel from '@/components/hermes/models/ProvidersPanel.vue'
 import ProviderFormModal from '@/components/hermes/models/ProviderFormModal.vue'
 import VoiceSettings from '@/components/hermes/settings/VoiceSettings.vue'
@@ -43,9 +44,9 @@ watch(() => route.query.modelProfile, profile => {
   showModal.value = false
   void loadProvidersForProfile()
 })
-type ModelsTab = 'general' | 'auxiliary' | 'combination' | 'stt' | 'tts'
+type ModelsTab = 'general' | 'auxiliary' | 'combination' | 'stt' | 'tts' | 'jev'
 
-const MODELS_TABS = new Set<ModelsTab>(['general', 'auxiliary', 'combination', 'stt', 'tts'])
+const MODELS_TABS = new Set<ModelsTab>(['general', 'auxiliary', 'combination', 'stt', 'tts', 'jev'])
 const activeTab = ref<ModelsTab>('general')
 
 function normalizeTab(value: unknown): ModelsTab {
@@ -231,7 +232,9 @@ async function handleRefreshModelCache() {
     </header>
 
     <div class="models-content">
-      <NSpin v-if="profileLoading" class="models-profile-loading" />
+      <div v-if="profileLoading" class="models-profile-loading" role="status" aria-live="polite">
+        <NSpin size="large" :description="t('common.loading')" />
+      </div>
       <NTabs v-else-if="selectedProfile" :key="selectedProfile" v-model:value="activeTab" type="line" animated @update:value="handleTabUpdate">
         <NTabPane name="general" :tab="t('models.generalTitle')">
           <NSpin :show="modelsStore.loading && modelsStore.providers.length === 0">
@@ -243,6 +246,9 @@ async function handleRefreshModelCache() {
         </NTabPane>
         <NTabPane name="combination" :tab="t('models.combinationTitle')">
           <CombinationModelsPanel />
+        </NTabPane>
+        <NTabPane name="jev" tab="JEV">
+          <JevSettingsPanel :profile="selectedProfile" />
         </NTabPane>
         <NTabPane name="stt" :tab="t('settings.voice.sttProvidersTitle')">
           <VoiceSettings :key="`stt-${selectedProfile}`" kind="stt" />
@@ -291,8 +297,19 @@ async function handleRefreshModelCache() {
 
 .models-content {
   flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
   overflow-y: auto;
   padding: 20px;
+}
+
+.models-profile-loading {
+  flex: 1;
+  min-height: 160px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .models-profile-select {

@@ -34,6 +34,7 @@ async function loadUpdater(bundledWebUiVersion: string) {
       getLocale: () => 'en',
       getName: () => 'Ekko Studio',
       getPath: () => webuiRoot,
+      getAppPath: () => webuiRoot,
     },
     dialog: { showMessageBox },
   }))
@@ -61,6 +62,16 @@ describe('desktop updater custom-build guard', () => {
     expect(isCustomBuildWebUi(createWebUiRoot(null))).toBe(false)
     // In development the desktop app bundles the repository root as its Web UI.
     expect(isCustomBuildWebUi(process.cwd())).toBe(true)
+  })
+
+  it('refuses to download or install upstream desktop updates on a custom build', async () => {
+    const { updater, autoUpdater } = await loadUpdater('0.7.21-tatin.5')
+
+    expect(() => updater.downloadDesktopUpdate()).toThrow('Custom builds do not download upstream desktop updates')
+    await expect(updater.installDesktopUpdate()).resolves.toMatchObject({ status: updater.getDesktopUpdateState().status })
+
+    expect(autoUpdater.downloadUpdate).not.toHaveBeenCalled()
+    expect(autoUpdater.quitAndInstall).not.toHaveBeenCalled()
   })
 
   it('never contacts the upstream update feed from a custom build', async () => {
@@ -100,16 +111,18 @@ describe('desktop updater helpers', () => {
   })
 
   it('includes local and roaming pending update cache directories', async () => {
+    const local = 'C:\\Users\\A\\AppData\\Local'
+    const roaming = 'C:\\Users\\A\\AppData\\Roaming'
     expect(pendingUpdateDirectories({
-      appDataPath: 'C:\\Users\\A\\AppData\\Roaming',
-      localAppData: 'C:\\Users\\A\\AppData\\Local',
+      appDataPath: roaming,
+      localAppData: local,
       appName: 'Ekko Studio',
     })).toEqual(expect.arrayContaining([
-      'C:\\Users\\A\\AppData\\Local/Ekko Studio-updater/pending',
-      'C:\\Users\\A\\AppData\\Local/ekko-studio-updater/pending',
-      'C:\\Users\\A\\AppData\\Local/Hermes Studio-updater/pending',
-      'C:\\Users\\A\\AppData\\Local/hermes-studio-updater/pending',
-      'C:\\Users\\A\\AppData\\Roaming/hermes-studio-updater/pending',
+      join(local, 'Ekko Studio-updater', 'pending'),
+      join(local, 'ekko-studio-updater', 'pending'),
+      join(local, 'Hermes Studio-updater', 'pending'),
+      join(local, 'hermes-studio-updater', 'pending'),
+      join(roaming, 'hermes-studio-updater', 'pending'),
     ]))
   })
 
@@ -122,7 +135,7 @@ describe('desktop updater helpers', () => {
     expect(updaterSource).toContain('autoUpdater.autoDownload = false')
     expect(updaterSource).toContain('autoUpdater.autoInstallOnAppQuit = true')
     expect(updaterSource).toContain("buttons: [t('update.download'), t('update.later')]")
-    expect(updaterSource).toContain('if (response === 0) {\n    await autoUpdater.downloadUpdate()')
+    expect(updaterSource).toContain('if (response === 0) downloadDesktopUpdate()')
     expect(updaterSource).not.toContain('setInterval(')
   })
 
@@ -132,7 +145,7 @@ describe('desktop updater helpers', () => {
 
     expect(mainSource).toContain('async function prepareAppShutdown(): Promise<void>')
     expect(mainSource).toContain('await stopWebUiServer().catch(() => undefined)')
-    expect(mainSource).toContain('initAutoUpdater({ beforeQuitAndInstall: prepareAppShutdown })')
+    expect(mainSource).toContain('beforeQuitAndInstall: prepareAppShutdown,')
     expect(mainSource).toContain('try {\n      await prepareAppShutdown()\n    } finally {\n      appLifecycle.finalizeExit(0)')
 
     const prepareCurrentInstance = updaterSource.indexOf('await options.beforeQuitAndInstall?.()')

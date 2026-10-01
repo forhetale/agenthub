@@ -44,6 +44,9 @@ describe('session push notifications', () => {
     expect(formatSessionPushContent('codex', 'run.completed', 'en')).toBe(
       'Codex has a completed message. Open TATin Studio to view it.',
     )
+    expect(formatSessionPushContent('cursor', 'run.completed', 'zh')).toBe(
+      'Cursor 有一条已完成消息，请到 TATin Studio 查看',
+    )
   })
 
   it('falls back to Simplified Chinese for unknown notification locales', () => {

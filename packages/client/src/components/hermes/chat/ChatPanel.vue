@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { AGENT_OPTIONS } from "@/utils/agent-options"
 import { setSessionPinned } from "@/api/studio/sessions";
 import DshSessionPresetSelect from "@/components/coding-agents/dsh/DshSessionPresetSelect.vue";
 import {
@@ -44,6 +45,7 @@ import { useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { copyToClipboard } from "@/utils/clipboard";
 import FolderPicker from "./FolderPicker.vue";
+import StarIcon from "@/components/common/StarIcon.vue";
 import ChatInput from "./ChatInput.vue";
 import RealtimeVoiceStage from "./RealtimeVoiceStage.vue";
 import ConversationMonitorPane from "./ConversationMonitorPane.vue";
@@ -57,6 +59,7 @@ import { buildVisibleSessionCategoryGroups, partitionRecentSessions } from "./se
 import { buildSessionCategoryMenuChildren, resolveRecentSessionCategoryLabel } from "./session-category-menu";
 import { buildActiveSessionMenuOptions, buildSessionContextMenuOptions } from "./session-menu-options";
 import PageSidebarNav from "@/components/layout/PageSidebarNav.vue";
+import PageSidebarFooter from "@/components/layout/PageSidebarFooter.vue";
 import { isStoredSuperAdmin } from "@/api/client";
 import { useDefaultWorkspace } from "@/composables/useDefaultWorkspace";
 import { useCollapsedProviderGroups } from "@/composables/useCollapsedProviderGroups";
@@ -999,16 +1002,7 @@ const hiddenDefaultWorkspaces = computed(() => {
   return defaultWorkspaces.value.filter(ws => !visible.has(ws));
 });
 
-const newChatAgentOptions = computed(() => [
-  { label: "Hermes", value: "hermes" },
-  { label: "Ekko", value: "ekko-agent" },
-  { label: "Claude", value: "claude-code" },
-  { label: "Codex", value: "codex" },
-  { label: "Pi", value: "pi" },
-  { label: "Grok", value: "grok" },
-  { label: "OpenCode", value: "opencode" },
-  { label: "DeepSeek Harness", value: "dsh" },
-]);
+const newChatAgentOptions = computed(() => AGENT_OPTIONS.map(option => ({ ...option })));
 
 const newChatApiModeOptions = computed(() => [
   { label: t("codingAgents.protocolOpenAiChat"), value: "chat_completions" },
@@ -1025,7 +1019,9 @@ function effectiveNewChatMode(
   agent: typeof newChatAgent.value,
   requestedMode: typeof newChatAgentMode.value,
 ) {
-  return agent === "ekko-agent" ? "scoped" : requestedMode;
+  if (agent === "ekko-agent") return "scoped";
+  if (agent === "cursor") return "global";
+  return requestedMode;
 }
 
 function getModelGroupsForProfile(profile: string) {
@@ -1124,7 +1120,7 @@ const selectedNewChatProviderGroup = computed(() =>
 );
 
 const isNewChatCodingAgent = computed(() => newChatAgent.value !== "hermes");
-const isNewChatExternalCodingAgent = computed(() => newChatAgent.value === "claude-code" || newChatAgent.value === "codex" || newChatAgent.value === "pi" || newChatAgent.value === "grok" || (newChatAgent.value === "opencode" || newChatAgent.value === "dsh"));
+const isNewChatExternalCodingAgent = computed(() => newChatAgent.value === "claude-code" || newChatAgent.value === "codex" || newChatAgent.value === "pi" || newChatAgent.value === "grok" || newChatAgent.value === "cursor" || (newChatAgent.value === "opencode" || newChatAgent.value === "dsh"));
 const effectiveNewChatAgentMode = computed(() =>
   effectiveNewChatMode(newChatAgent.value, newChatAgentMode.value),
 );
@@ -1370,6 +1366,8 @@ async function confirmNewChat() {
         ? "grok"
       : newChatAgent.value === "dsh" ? "dsh" : newChatAgent.value === "opencode"
         ? "opencode"
+      : newChatAgent.value === "cursor"
+        ? "cursor"
       : newChatAgent.value === "ekko-agent"
         ? "ekko-agent"
       : "hermes";
@@ -1845,10 +1843,6 @@ const contextMenuCategoriesKey = computed(() => [
   ...sessionCategories.value.map(category => `${category.id}:${category.name}`),
 ].join("|"));
 
-function openSettingsPage() {
-  router.push({ name: "hermes.settings" });
-}
-
 function handleContextMenu(e: MouseEvent, sessionId: string) {
   e.preventDefault();
   showCategoryContextMenu.value = false;
@@ -2132,6 +2126,8 @@ const sessionModelCodingAgentId = computed<ChatCodingAgentId | undefined>(() =>
         ? "grok"
       : sessionModelSession.value?.agent === "dsh" ? "dsh" : sessionModelSession.value?.agent === "opencode"
         ? "opencode"
+      : sessionModelSession.value?.agent === "cursor"
+        ? "cursor"
       : sessionModelSession.value?.agent === "ekko-agent"
         ? "ekko-agent"
         : undefined),
@@ -2658,24 +2654,7 @@ async function handleSessionModelCustomSubmit() {
           </template>
         </template>
       </div>
-      <div v-if="showSessions" class="page-sidebar-bottom">
-        <button class="page-sidebar-menu-btn" type="button" @click="openSettingsPage">
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.8"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <circle cx="12" cy="12" r="3" />
-            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-          </svg>
-          <span>{{ t("sidebar.settings") }}</span>
-        </button>
-      </div>
+      <PageSidebarFooter v-if="showSessions" />
     </aside>
 
     <NDropdown
@@ -2995,7 +2974,7 @@ async function handleSessionModelCustomSubmit() {
             v-if="showNewChatModal && newChatAgent === 'dsh'"
             v-model="newChatAgentPreset" :disabled="newChatLoading" @valid="newChatPresetReady = $event"
           />
-          <label v-if="isNewChatExternalCodingAgent" class="new-chat-field">
+          <label v-if="isNewChatExternalCodingAgent && newChatAgent !== 'cursor'" class="new-chat-field">
             <span class="new-chat-label">{{ t("codingAgents.launchModeScope") }}</span>
             <NRadioGroup v-model:value="newChatAgentMode" name="new-chat-coding-agent-mode">
               <NRadioButton
@@ -3115,8 +3094,16 @@ async function handleSessionModelCustomSubmit() {
                   <span v-if="index < visibleDefaultWorkspaces.length - 1 || hasHiddenDefaults" class="workspace-chip-separator">/</span>
                 </template>
                 <div v-if="hasHiddenDefaults" class="workspace-chip-dropdown">
-                  <button class="workspace-chip-more" @click="showDefaultWorkspaceMenu = !showDefaultWorkspaceMenu">
-                    {{ t("chat.more") }} ▼
+                  <button
+                    class="workspace-chip-more"
+                    type="button"
+                    :aria-expanded="showDefaultWorkspaceMenu"
+                    @click="showDefaultWorkspaceMenu = !showDefaultWorkspaceMenu"
+                  >
+                    <span>{{ t("chat.more") }}</span>
+                    <svg class="workspace-more-chevron" :class="{ expanded: showDefaultWorkspaceMenu }" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="m6 9 6 6 6-6" />
+                    </svg>
                   </button>
                   <div v-if="showDefaultWorkspaceMenu" class="workspace-dropdown-menu">
                     <div
@@ -3152,17 +3139,13 @@ async function handleSessionModelCustomSubmit() {
                 >
                   <template #icon>
                     <span
-                      v-if="defaultWorkspaces.includes(ws.path)"
                       class="recent-pin-icon"
+                      :class="{ 'is-pinned': defaultWorkspaces.includes(ws.path) }"
                       @click.stop="handleTogglePinRecent(ws.path)"
-                      :title="t('chat.workspaceUnpin')"
-                    >★</span>
-                    <span
-                      v-else
-                      class="recent-pin-icon"
-                      @click.stop="handleTogglePinRecent(ws.path)"
-                      :title="t('chat.workspacePin')"
-                    >☆</span>
+                      :title="defaultWorkspaces.includes(ws.path) ? t('chat.workspaceUnpin') : t('chat.workspacePin')"
+                    >
+                      <StarIcon :filled="defaultWorkspaces.includes(ws.path)" width="14" height="14" />
+                    </span>
                   </template>
                   {{ getFolderName(ws.path) }}
                 </NButton>
@@ -4107,48 +4090,6 @@ async function handleSessionModelCustomSubmit() {
   padding: 10px 6px 12px;
 }
 
-.page-sidebar-bottom {
-  flex-shrink: 0;
-  padding: 10px 12px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.page-sidebar-menu-btn {
-  flex: 1 1 auto;
-  width: auto;
-  min-width: 0;
-  height: 36px;
-  border: none;
-  border-radius: $radius-sm;
-  background: transparent;
-  color: $text-secondary;
-  display: inline-flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 8px;
-  padding: 8px 10px;
-  cursor: pointer;
-  transition:
-    background-color $transition-fast,
-    color $transition-fast;
-
-  &:hover {
-    background: rgba(var(--accent-primary-rgb), 0.06);
-    color: $text-primary;
-  }
-}
-
-.page-sidebar-menu-btn span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 13px;
-  line-height: 18px;
-}
-
 .session-loading,
 .session-empty {
   padding: 16px 10px;
@@ -4569,7 +4510,9 @@ async function handleSessionModelCustomSubmit() {
 .default-workspace-chips {
   display: flex;
   align-items: center;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  min-width: 0;
   margin-bottom: 8px;
 }
 
@@ -4581,6 +4524,8 @@ async function handleSessionModelCustomSubmit() {
 
 .workspace-chips-container {
   display: flex;
+  flex: 1 1 240px;
+  min-width: 0;
   align-items: center;
   gap: 6px;
   flex-wrap: nowrap;
@@ -4588,6 +4533,7 @@ async function handleSessionModelCustomSubmit() {
 }
 
 .workspace-chip {
+  min-width: 0;
   padding: 4px 12px;
   font-size: 13px;
   color: var(--text-secondary);
@@ -4616,6 +4562,7 @@ async function handleSessionModelCustomSubmit() {
 }
 
 .workspace-chip-separator {
+  flex-shrink: 0;
   color: var(--n-text-color-3);
   font-size: 13px;
   user-select: none;
@@ -4623,12 +4570,16 @@ async function handleSessionModelCustomSubmit() {
 
 .workspace-chip-dropdown {
   position: relative;
-  display: inline-block;
+  display: flex;
+  flex-shrink: 0;
 }
 
 .workspace-chip-more {
   display: inline-flex;
   align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  line-height: inherit;
   padding: 4px 12px;
   font-size: 13px;
   background: var(--bg-card);
@@ -4645,12 +4596,21 @@ async function handleSessionModelCustomSubmit() {
   color: var(--text-primary);
 }
 
+.workspace-more-chevron {
+  flex-shrink: 0;
+
+  &.expanded {
+    transform: rotate(180deg);
+  }
+}
+
 .workspace-dropdown-menu {
   position: absolute;
   top: 100%;
-  left: 0;
+  inset-inline-end: 0;
   margin-top: 4px;
-  min-width: 200px;
+  width: 240px;
+  max-width: calc(100vw - 48px);
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: 6px;
@@ -4706,14 +4666,18 @@ async function handleSessionModelCustomSubmit() {
 }
 
 .recent-pin-icon {
-  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   line-height: 1;
   cursor: pointer;
-  color: $text-muted;
-  transition: color $transition-fast;
+  color: inherit;
+  opacity: 0.6;
+  transition: opacity $transition-fast;
 
-  &:hover {
-    color: #f5a623;
+  &:hover,
+  &.is-pinned {
+    opacity: 1;
   }
 }
 </style>

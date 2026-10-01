@@ -1,9 +1,11 @@
 <script setup lang="ts">
+import { GROUP_AGENT_OPTIONS } from "@/utils/agent-options"
 import DshSessionPresetSelect from "@/components/coding-agents/dsh/DshSessionPresetSelect.vue"
 import { ref, computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, provide, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useMessage, NInput, NButton, NSpace, NSelect, NPopconfirm, NInputNumber, NDropdown, NModal, NPopover, NDrawer, NDrawerContent, NSwitch, type DropdownOption } from 'naive-ui'
+import { nextCodingAgentMode, storedPriorAgentMode, submittedCodingAgentSelection } from '@/utils/coding-agent-mode'
 import { useGroupChatStore } from '@/stores/hermes/group-chat'
 import { useAppStore } from '@/stores/hermes/app'
 import { useProfilesStore } from '@/stores/hermes/profiles'
@@ -37,6 +39,7 @@ import PendingInteractionCountdown from '@/components/hermes/chat/PendingInterac
 import FolderPicker from '@/components/hermes/chat/FolderPicker.vue'
 import ProfileAvatar from '@/components/hermes/profiles/ProfileAvatar.vue'
 import PageSidebarNav from '@/components/layout/PageSidebarNav.vue'
+import PageSidebarFooter from "@/components/layout/PageSidebarFooter.vue";
 import { copyToClipboard } from '@/utils/clipboard'
 import type { Attachment } from '@/stores/hermes/chat'
 import type {
@@ -50,6 +53,7 @@ import type {
     RoomSummaryAnchor,
     RoomSummaryConfig,
     RoomSummaryState,
+    RoomSummaryReview,
 } from '@/api/studio/group-chat'
 import { useFilesStore } from '@/stores/hermes/files'
 import { useToolPanelStore } from '@/stores/hermes/tool-panel'
@@ -142,6 +146,7 @@ const agentHandoffRecommendation = computed(() => Math.max(4, store.agents.lengt
 const isContinuingHandoff = ref(false)
 const roomSummaryState = ref<RoomSummaryState | null>(null)
 const roomSummaryAnchor = ref<RoomSummaryAnchor | null>(null)
+const roomSummaryReview = ref<RoomSummaryReview | null>(null)
 const roomSummaryDraft = ref('')
 const isLoadingRoomSummary = ref(false)
 const isSavingRoomSummary = ref(false)
@@ -169,6 +174,7 @@ let agentPairingRefreshTimer: ReturnType<typeof setInterval> | null = null
 let remoteRoomRefreshTimer: ReturnType<typeof setInterval> | null = null
 const selectedAgentType = ref<GroupAgentType>('hermes')
 const selectedAgentMode = ref<'scoped' | 'global'>('scoped')
+const priorAgentMode = ref<'scoped' | 'global' | undefined>()
 const selectedProfile = ref<string | null>(null)
 const selectedAgentProvider = ref('')
 const selectedAgentModel = ref('')
@@ -235,18 +241,9 @@ const profileOptions = computed(() =>
     profilesStore.profiles.map(p => ({ label: p.name, value: p.name }))
 )
 
-type GroupAgentType = 'hermes' | 'ekko' | 'codex' | 'claude' | 'pi' | 'grok' | 'opencode' | 'dsh'
+type GroupAgentType = 'hermes' | 'ekko' | 'codex' | 'claude' | 'pi' | 'grok' | 'opencode' | 'dsh' | 'cursor'
 
-const groupAgentTypeDefinitions: Array<{ label: string; value: GroupAgentType }> = [
-    { label: 'Hermes', value: 'hermes' },
-    { label: 'Ekko', value: 'ekko' },
-    { label: 'Claude', value: 'claude' },
-    { label: 'Codex', value: 'codex' },
-    { label: 'Pi', value: 'pi' },
-    { label: 'Grok', value: 'grok' },
-    { label: 'OpenCode', value: 'opencode' },
-  { label: 'DeepSeek Harness', value: 'dsh' },
-]
+const groupAgentTypeDefinitions = GROUP_AGENT_OPTIONS
 
 const groupAgentTypeOptions = computed(() => groupAgentTypeDefinitions.map((option) => {
     const disabled = !isAgentStatusAvailable(agentStatusSnapshot.value, option.value)
@@ -260,7 +257,7 @@ const groupAgentTypeOptions = computed(() => groupAgentTypeDefinitions.map((opti
 const firstAvailableGroupAgentType = computed<GroupAgentType | null>(() =>
     groupAgentTypeOptions.value.find(option => !option.disabled)?.value || null
 )
-const supportsGlobalAgentMode = computed(() => ['claude', 'codex', 'pi', 'grok', 'opencode', 'dsh'].includes(selectedAgentType.value))
+const supportsGlobalAgentMode = computed(() => ['claude', 'codex', 'pi', 'grok', 'opencode', 'dsh', 'cursor'].includes(selectedAgentType.value))
 const usesGlobalAgentMode = computed(() => supportsGlobalAgentMode.value && selectedAgentMode.value === 'global')
 const agentModeOptions = computed(() => [
     { label: t('codingAgents.launchModeGlobal'), value: 'global' },
@@ -300,6 +297,8 @@ function getAgentModelGroups(profile: string) {
                         ? 'pi'
                         : selectedAgentType.value === 'grok'
                             ? 'grok'
+                            : selectedAgentType.value === 'cursor'
+                                ? 'cursor'
                             : selectedAgentType.value === 'dsh' ? 'dsh' : selectedAgentType.value === 'opencode'
                                 ? 'opencode'
                             : 'codex'
@@ -405,6 +404,10 @@ const summaryApiModeOptions = computed(() => [
     { label: t('codingAgents.protocolOpenAiResponses'), value: 'codex_responses' },
     { label: t('codingAgents.protocolAnthropicMessages'), value: 'anthropic_messages' },
 ])
+const liveRoomSummaryReview = computed(() => {
+    const roomId = store.currentRoomId
+    return roomId ? store.roomSummaryReviews.get(roomId) || roomSummaryReview.value : roomSummaryReview.value
+})
 const liveRoomSummaryState = computed(() => {
     const roomId = store.currentRoomId
     return (roomId && store.roomSummaryStates.get(roomId))
@@ -529,8 +532,15 @@ function handleAgentTypeChange(agent: GroupAgentType) {
     }
     selectedRuntimePreset.value = undefined
     selectedRuntimePresetReady.value = false
+    const switched = nextCodingAgentMode({
+        previousAgent: selectedAgentType.value,
+        nextAgent: agent,
+        agentMode: selectedAgentMode.value,
+        priorAgentMode: priorAgentMode.value,
+    })
     selectedAgentType.value = agent
-    if (!['claude', 'codex', 'pi', 'grok', 'opencode', 'dsh'].includes(agent)) selectedAgentMode.value = 'scoped'
+    selectedAgentMode.value = switched.agentMode
+    priorAgentMode.value = switched.priorAgentMode
     if (selectedProfile.value) syncAgentModelSelection(selectedProfile.value)
 }
 
@@ -966,10 +976,6 @@ function acknowledgeGroupChatRefactorNotice() {
     showGroupChatRefactorNotice.value = false
 }
 
-function openSettingsPage() {
-    router.push({ name: 'hermes.settings' })
-}
-
 const remoteRooms = computed(() => buildRemoteGroupChatRooms(
     remoteRoomConnections.value,
 ))
@@ -1337,6 +1343,7 @@ function resetAgentForm() {
     selectedRuntimePresetReady.value = false
     selectedAgentType.value = firstAvailableGroupAgentType.value || 'hermes'
     selectedAgentMode.value = 'scoped'
+    priorAgentMode.value = undefined
     selectedAgentProvider.value = ''
     selectedAgentModel.value = ''
     selectedAgentApiMode.value = 'codex_responses'
@@ -1349,11 +1356,15 @@ function resetAgentForm() {
 function currentAgentPresetInput(): GroupAgentPresetInput | null {
     if (!canConfirmAddAgent.value || !selectedProfile.value) return null
     return {
-        agent: selectedAgentType.value,
-        agentMode: usesGlobalAgentMode.value ? 'global' : 'scoped',
+        ...submittedCodingAgentSelection({
+            agent: selectedAgentType.value,
+            agentMode: selectedAgentMode.value,
+            priorAgentMode: priorAgentMode.value,
+            provider: selectedAgentProvider.value,
+            model: selectedAgentModel.value,
+            usesGlobal: usesGlobalAgentMode.value,
+        }),
         profile: selectedProfile.value,
-        provider: usesGlobalAgentMode.value ? '' : selectedAgentProvider.value,
-        model: usesGlobalAgentMode.value ? '' : selectedAgentModel.value,
         apiMode: selectedAgentType.value === 'hermes' || usesGlobalAgentMode.value ? '' : selectedAgentApiMode.value,
         reasoningEffort: usesGlobalAgentMode.value ? '' : selectedAgentReasoningEffort.value,
         agentPreset: selectedAgentType.value === 'dsh' ? selectedRuntimePreset.value : undefined,
@@ -1419,6 +1430,7 @@ function applyAgentPreset(presetId: string | null) {
     const input = groupAgentPresetToRoomAgentInput(preset)
     selectedAgentType.value = input.agent
     selectedAgentMode.value = input.agentMode === 'global' ? 'global' : 'scoped'
+    priorAgentMode.value = storedPriorAgentMode(input.priorAgentMode)
     selectedProfile.value = input.profile
     selectedAgentProvider.value = input.provider || ''
     selectedAgentModel.value = input.model || ''
@@ -1568,6 +1580,7 @@ async function handleEditAgent(agent: RoomAgent) {
     editingAgent.value = agent
     selectedAgentType.value = agent.agent || 'hermes'
     selectedAgentMode.value = agent.agentMode === 'global' ? 'global' : 'scoped'
+    priorAgentMode.value = storedPriorAgentMode(agent.priorAgentMode)
     selectedProfile.value = agent.profile
     selectedAgentProvider.value = agent.provider || ''
     selectedAgentModel.value = agent.model || ''
@@ -1636,6 +1649,8 @@ async function loadRoomSummaryState(roomId: string) {
         if (store.currentRoomId !== roomId) return
         roomSummaryState.value = store.roomSummaryStates.get(roomId) || result.summary
         roomSummaryAnchor.value = result.anchor
+        roomSummaryReview.value = result.review
+        if (result.review) store.applyRoomSummaryReview(result.review)
         roomSummaryDraft.value = roomSummaryState.value.summary
     } catch {
         // A missing summary should not block entering or reading the room.
@@ -1715,11 +1730,15 @@ async function confirmAddAgent() {
     try {
         await store.addAgentToRoom(store.currentRoomId, {
             presetId: selectedAgentPresetId.value || undefined,
-            agent: selectedAgentType.value,
-            agentMode: usesGlobalAgentMode.value ? 'global' : 'scoped',
+            ...submittedCodingAgentSelection({
+                agent: selectedAgentType.value,
+                agentMode: selectedAgentMode.value,
+                priorAgentMode: priorAgentMode.value,
+                provider: selectedAgentProvider.value,
+                model: selectedAgentModel.value,
+                usesGlobal: usesGlobalAgentMode.value,
+            }),
             profile: selectedProfile.value,
-            provider: usesGlobalAgentMode.value ? '' : selectedAgentProvider.value,
-            model: usesGlobalAgentMode.value ? '' : selectedAgentModel.value,
             apiMode: selectedAgentType.value === 'hermes' || usesGlobalAgentMode.value ? undefined : selectedAgentApiMode.value,
             reasoningEffort: usesGlobalAgentMode.value ? '' : selectedAgentReasoningEffort.value,
             agentPreset: selectedAgentType.value === 'dsh' ? selectedRuntimePreset.value : undefined,
@@ -1750,11 +1769,15 @@ async function confirmUpdateAgent() {
     isSavingAgent.value = true
     try {
         await store.updateAgentInRoom(store.currentRoomId, editingAgent.value.id, {
-            agent: selectedAgentType.value,
-            agentMode: usesGlobalAgentMode.value ? 'global' : 'scoped',
+            ...submittedCodingAgentSelection({
+                agent: selectedAgentType.value,
+                agentMode: selectedAgentMode.value,
+                priorAgentMode: priorAgentMode.value,
+                provider: selectedAgentProvider.value,
+                model: selectedAgentModel.value,
+                usesGlobal: usesGlobalAgentMode.value,
+            }),
             profile: selectedProfile.value,
-            provider: usesGlobalAgentMode.value ? '' : selectedAgentProvider.value,
-            model: usesGlobalAgentMode.value ? '' : selectedAgentModel.value,
             apiMode: selectedAgentType.value === 'hermes' || usesGlobalAgentMode.value ? undefined : selectedAgentApiMode.value,
             reasoningEffort: usesGlobalAgentMode.value ? '' : selectedAgentReasoningEffort.value,
             agentPreset: selectedAgentType.value === 'dsh' ? selectedRuntimePreset.value : undefined,
@@ -1862,6 +1885,8 @@ async function handleOpenRoomSettings() {
         if (store.currentRoomId !== summaryRoomId) return
         roomSummaryState.value = store.roomSummaryStates.get(summaryRoomId) || result.summary
         roomSummaryAnchor.value = result.anchor
+        roomSummaryReview.value = result.review
+        if (result.review) store.applyRoomSummaryReview(result.review)
         roomSummaryDraft.value = roomSummaryState.value.summary
     } catch (err: any) {
         message.error(err?.message || t('groupChat.summaryLoadFailed'))
@@ -2198,15 +2223,7 @@ function handleClarifyKeydown(event: KeyboardEvent) {
                     </div>
                 </section>
             </div>
-            <div class="page-sidebar-bottom">
-                <button class="page-sidebar-menu-btn" type="button" @click="openSettingsPage">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="12" cy="12" r="3" />
-                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-                    </svg>
-                    <span>{{ t('sidebar.settings') }}</span>
-                </button>
-            </div>
+            <PageSidebarFooter />
         </div>
 
         <NDropdown
@@ -2856,7 +2873,7 @@ function handleClarifyKeydown(event: KeyboardEvent) {
                     <DshSessionPresetSelect v-if="selectedAgentType === 'dsh'" class="form-group"
                         v-model="selectedRuntimePreset" :disabled="isSavingAgent"
                         @valid="selectedRuntimePresetReady = $event" />
-                    <div v-if="supportsGlobalAgentMode" class="form-group">
+                    <div v-if="supportsGlobalAgentMode && selectedAgentType !== 'cursor'" class="form-group">
                         <label class="form-label">{{ t('codingAgents.launchModeScope') }}</label>
                         <NSelect
                             :value="selectedAgentMode"
@@ -3457,6 +3474,13 @@ function handleClarifyKeydown(event: KeyboardEvent) {
                                     <strong>{{ liveRoomSummaryState?.summarizedTurnCount || 0 }}</strong>
                                 </span>
                             </div>
+                            <div v-if="liveRoomSummaryReview" class="summary-review" :class="`is-${liveRoomSummaryReview.decision}`">
+                                <strong>{{ t('groupChat.summaryQuality') }} · {{ t(`groupChat.summaryQualityDecision.${liveRoomSummaryReview.decision}`) }}</strong>
+                                <span>{{ t('groupChat.summaryQualityVersion', { version: liveRoomSummaryReview.sourceVersion }) }}</span>
+                                <ul v-if="liveRoomSummaryReview.ruleResults.length">
+                                    <li v-for="rule in liveRoomSummaryReview.ruleResults" :key="rule.id">{{ t(`groupChat.summaryQualityRule.${rule.id}`) }} · {{ t(`groupChat.summaryQualityDecision.${rule.decision}`) }}</li>
+                                </ul>
+                            </div>
                             <div v-if="liveRoomSummaryState?.lastError" class="summary-error">
                                 {{ liveRoomSummaryState.lastError }}
                             </div>
@@ -3973,48 +3997,6 @@ export default defineComponent({ components: { CreateRoomForm } })
     text-align: center;
     font-size: 13px;
     color: $text-muted;
-}
-
-.page-sidebar-bottom {
-    flex-shrink: 0;
-    padding: 10px 12px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.page-sidebar-menu-btn {
-    flex: 1 1 auto;
-    width: auto;
-    min-width: 0;
-    height: 36px;
-    border: none;
-    border-radius: $radius-sm;
-    background: transparent;
-    color: $text-secondary;
-    display: inline-flex;
-    align-items: center;
-    justify-content: flex-start;
-    gap: 8px;
-    padding: 8px 10px;
-    cursor: pointer;
-    transition:
-        background-color $transition-fast,
-        color $transition-fast;
-
-    &:hover {
-        background: rgba(var(--accent-primary-rgb), 0.06);
-        color: $text-primary;
-    }
-
-    span {
-        min-width: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        font-size: 13px;
-        line-height: 18px;
-    }
 }
 
 // ─── Chat Main ──────────────────────────────────────────
@@ -5314,4 +5296,11 @@ export default defineComponent({ components: { CreateRoomForm } })
     }
 
 }
+</style>
+
+<style scoped lang="scss">
+.summary-review { margin: 12px 0; padding: 12px; border: 1px solid var(--border-color); border-radius: 8px; display: grid; gap: 6px; }
+.summary-review.is-pass { border-color: #18a058; }
+.summary-review.is-needs_improvement { border-color: #f0a020; }
+.summary-review ul { margin: 0; padding-inline-start: 20px; }
 </style>

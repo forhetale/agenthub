@@ -67,8 +67,7 @@ describe('code_exec', () => {
       expect(JSON.parse(result.content)).toMatchObject({
         status: 'completed',
         language: 'python',
-        // Python text-mode stdout writes CRLF on Windows.
-        output: expect.stringMatching(/^HELLO FROM PYTHON\r?\n$/),
+        output: `HELLO FROM PYTHON${process.platform === 'win32' ? '\r\n' : '\n'}`,
         toolCallsMade: 1,
         exitCode: 0,
       })

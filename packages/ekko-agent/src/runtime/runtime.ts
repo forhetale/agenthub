@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto'
+import { EkkoJevClient } from '../jev'
 import { watch, type FSWatcher } from 'node:fs'
 import {
   agentReasoningEstimatedTokens,
@@ -12,6 +13,7 @@ import {
   normalizeAgentMessages,
 } from '../model/messages'
 import { countTextTokens } from '../model/tokens'
+import { projectBrowserHistory } from '../model/browser-context'
 import type { AgentMessageInput, AgentOutputMessage } from '../model/messages'
 import type { AgentMessage, AgentToolCall, AgentToolDefinition, ModelRequest, ModelResponse } from '../model/types'
 import type { AgentSkill } from '../skills/types'
@@ -159,6 +161,7 @@ function cloneAgentMessages(messages: AgentMessage[]): AgentMessage[] {
 }
 
 export class AgentRuntime {
+  readonly jev: EkkoJevClient
   private readonly modelClient?: AgentRuntimeOptions['modelClient']
   private readonly profileId?: string
   private readonly toolsEnabled: boolean
@@ -192,6 +195,7 @@ export class AgentRuntime {
   private readonly runtimeLogger?: EkkoRuntimeLogger
 
   constructor(options: AgentRuntimeOptions) {
+    this.jev = new EkkoJevClient(options.jev)
     this.profileId = String(options.profileId || '').trim() || undefined
     this.modelClient = options.modelClient
     this.toolsEnabled = options.toolsEnabled !== false
@@ -353,9 +357,20 @@ export class AgentRuntime {
   }
 
   async run(input: AgentRuntimeRunInput): Promise<AgentRuntimeRunResult> {
+    const runId = randomUUID()
+    return this.jev.runScoped(input.signal, () => this.runWithSnapshot(input, runId), diagnostic => {
+      const context = { sessionId: this.contextKeyFor(input), ...input.logContext }
+      if (diagnostic.stage === 'skill_routing' || diagnostic.stage === 'skill_review') {
+        this.runtimeLogger?.skillJev(runId, diagnostic, context)
+      } else {
+        this.runtimeLogger?.memoryJev(runId, diagnostic, context)
+      }
+    })
+  }
+
+  private async runWithSnapshot(input: AgentRuntimeRunInput, runId: string): Promise<AgentRuntimeRunResult> {
     await this.refreshTools(this.runToolContext(input))
 
-    const runId = randomUUID()
     const events: AgentRuntimeEvent[] = []
     const steps: AgentRuntimeStep[] = []
     const maxSteps = input.maxSteps ?? this.maxSteps
@@ -434,12 +449,7 @@ export class AgentRuntime {
         memoryIds: memoryContext.usedMemoryIds,
       })
     }
-    const skillRouting = await this.skillRouting(input)
-    const messages = this.prepareMessages(
-      input,
-      memoryContext ? this.memory?.contextPrompt(memoryContext) : undefined,
-      skillRouting.names,
-    )
+    const messages: AgentMessage[] = []
     let output: AgentOutputMessage = {
       role: 'assistant',
       content: '',
@@ -461,6 +471,13 @@ export class AgentRuntime {
 
     input.signal?.addEventListener('abort', interruptPlan, { once: true })
     try {
+      const skillRouting = await this.skillRouting(input, true)
+      messages.push(...this.prepareMessages(
+        input,
+        memoryContext ? this.memory?.contextPrompt(memoryContext) : undefined,
+        skillRouting.names,
+      ))
+      if (activeBoundaryRun?.pending) return completeBoundaryInterrupt(0)
       const automaticRecoveryCalls = this.currentRecoveryDirective()?.automaticToolCalls ?? []
       if (automaticRecoveryCalls.length) {
         const toolCalls: AgentToolCall[] = automaticRecoveryCalls
@@ -883,7 +900,7 @@ export class AgentRuntime {
     }
   }
 
-  private async skillRouting(input: AgentRuntimeRunInput): Promise<SkillRoutingResolution> {
+  private async skillRouting(input: AgentRuntimeRunInput, semantic = false): Promise<SkillRoutingResolution> {
     if (
       !this.toolsEnabled ||
       !this.areSkillsAvailable() ||
@@ -905,6 +922,7 @@ export class AgentRuntime {
       latestUserMessage,
       this.externalSkillDirectories,
       this.disabledSkillNames,
+      semantic,
     )
   }
 
@@ -1079,7 +1097,7 @@ export class AgentRuntime {
       reasoningEffort: input.reasoningEffort ?? modelDefaults?.reasoningEffort,
       reasoningSummary: input.reasoningSummary ?? modelDefaults?.reasoningSummary,
       metadata: input.metadata ?? modelDefaults?.metadata,
-      messages,
+      messages: projectBrowserHistory(messages),
       signal,
       tools,
       toolChoice: tools ? modelDefaults?.toolChoice : undefined,
@@ -1243,6 +1261,7 @@ export class AgentRuntime {
       )
       const result = await sanitizeAgentToolResult(validatedResult, {
         tempRoot: workspaceToolAssetDirectory(context),
+        compactJson: /(?:ekko|hermes)_studio_browser_/.test(toolCall.name),
       })
       throwIfAborted(signal)
       emit({
