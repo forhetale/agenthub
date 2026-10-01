@@ -26,6 +26,8 @@ const bridgeMock = vi.hoisted(() => ({
 }))
 const sessionStoreMocks = vi.hoisted(() => ({
   clearSessionMessages: vi.fn(),
+  getSessionMessageCountByRole: vi.fn(() => 0),
+  updateSession: vi.fn(),
 }))
 const listWorkspaceRunChangesForAssistantMessagesMock = vi.hoisted(() => vi.fn(() => []))
 
@@ -96,6 +98,8 @@ vi.mock('../../packages/server/src/modules/studio/public/notifications', () => n
 
 vi.mock('../../packages/server/src/modules/studio/repositories/session-store', () => ({
   clearSessionMessages: sessionStoreMocks.clearSessionMessages,
+  getSessionMessageCountByRole: sessionStoreMocks.getSessionMessageCountByRole,
+  updateSession: sessionStoreMocks.updateSession,
   getSession: vi.fn(() => ({ id: 'session-1', profile: 'default', source: 'cli' })),
   getSessionMetadata: vi.fn(() => ({
     id: 'session-1',
@@ -447,6 +451,58 @@ describe('ChatRunSocket queued bridge runs', () => {
     await vi.waitFor(() => expect(handleBridgeRunMock).toHaveBeenCalled())
     expect(handleBridgeRunMock.mock.calls.at(-1)![2].push_enabled).toBeUndefined()
     expect(notificationMocks.defaultSessionPushEnabled).not.toHaveBeenCalled()
+  })
+
+  it('applies a push choice made before the first message to a row another request already created', async () => {
+    const { getSession } = await import('../../packages/server/src/modules/studio/repositories/session-store')
+    const { applyStartingPushChoice } = await import('../../packages/server/src/modules/studio/sockets/chat-run')
+    const original = vi.mocked(getSession).getMockImplementation()!
+    const rows: Record<string, any> = {
+      precreated: { id: 'precreated', profile: 'default', user_id: null, push_enabled: 1 },
+      mine: { id: 'mine', profile: 'default', user_id: '42', push_enabled: 0 },
+      theirs: { id: 'theirs', profile: 'default', user_id: '7', push_enabled: 1 },
+      started: { id: 'started', profile: 'default', user_id: '42', push_enabled: 1 },
+    }
+    vi.mocked(getSession).mockImplementation(((id: string) => rows[id] ?? null) as any)
+    sessionStoreMocks.getSessionMessageCountByRole.mockImplementation(((id: string) => id === 'started' ? 2 : 0) as any)
+    try {
+      applyStartingPushChoice('precreated', { push_enabled: false }, 42)
+      applyStartingPushChoice('mine', { push_enabled: true }, 42)
+      applyStartingPushChoice('theirs', { push_enabled: false }, 42)
+      applyStartingPushChoice('started', { push_enabled: false }, 42)
+      applyStartingPushChoice('precreated', {}, 42)
+      expect(sessionStoreMocks.updateSession.mock.calls).toEqual([
+        ['precreated', { push_enabled: 0 }],
+        ['mine', { push_enabled: 1 }],
+      ])
+      expect(notificationMocks.defaultSessionPushEnabled).not.toHaveBeenCalled()
+    } finally {
+      vi.mocked(getSession).mockImplementation(original)
+      sessionStoreMocks.getSessionMessageCountByRole.mockReset().mockReturnValue(0)
+    }
+  })
+
+  it('passes the starting push choice to a chat the user opens with a command', async () => {
+    const { getSession } = await import('../../packages/server/src/modules/studio/repositories/session-store')
+    const original = vi.mocked(getSession).getMockImplementation()!
+    vi.mocked(getSession).mockImplementation(((id: string) => id === 'command-chat' ? null : original(id)) as any)
+    notificationMocks.defaultSessionPushEnabled.mockClear().mockReturnValue(true)
+    sessionCommandMocks.parseSessionCommand.mockReturnValueOnce({ name: 'plan', rawName: 'plan', args: 'refactor login' } as any)
+    sessionCommandMocks.handleSessionCommand.mockResolvedValueOnce(true as any)
+    try {
+      const { ChatRunSocket } = await import('../../packages/server/src/modules/studio/sockets/chat-run')
+      const { handlers, io, socket } = makeServerHarness()
+      socket.data.user = { id: 42, username: 'owner', role: 'user' }
+      const server = new ChatRunSocket(io as any)
+      ;(server as any).onConnection(socket)
+
+      await handlers.get('run')?.({ session_id: 'command-chat', input: '/plan refactor login', source: 'cli', profile: 'default' })
+
+      await vi.waitFor(() => expect(sessionCommandMocks.handleSessionCommand).toHaveBeenCalled())
+      expect(sessionCommandMocks.handleSessionCommand.mock.calls.at(-1)![2]).toEqual(expect.objectContaining({ pushEnabled: true }))
+    } finally {
+      vi.mocked(getSession).mockImplementation(original)
+    }
   })
 
   it('dispatches unknown slash bridge input through the normal bridge run path', async () => {

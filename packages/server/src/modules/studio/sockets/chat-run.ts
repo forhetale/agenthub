@@ -21,7 +21,7 @@ import type { Server, Socket } from 'socket.io'
 import { randomUUID } from 'crypto'
 import { logger } from '../public/logging'
 import { getSystemPrompt } from '../public/runs/prompt'
-import { clearSessionMessages, deleteSession, getSession, getSessionMetadata, listSessions, updateMessageDisplayContent } from '../repositories/session-store'
+import { clearSessionMessages, deleteSession, getSession, getSessionMessageCountByRole, getSessionMetadata, listSessions, updateMessageDisplayContent, updateSession } from '../repositories/session-store'
 import { listWorkspaceRunChangesForAssistantMessages } from '../repositories/workspace-run-changes-store'
 import { getSessionCategory } from '../repositories/session-category-store'
 import { getActiveProfileName, getProfileDir, listProfileNamesFromDisk } from '../public/profile-config'
@@ -215,6 +215,25 @@ export async function ensureBridgeReadyForChatRun(): Promise<ChatRunBridgeReadin
 function isCodingAgentExecution(source: string | undefined, data?: { coding_agent_id?: string; agent_id?: string }): boolean {
   return source === 'coding_agent'
     || ((source === 'workflow' || source === 'group_chat') && Boolean(data?.coding_agent_id || data?.agent_id))
+}
+
+/**
+ * A chat the user starts follows their explicit push choice, or their Bark default when they made
+ * none; sessions the system creates stay quiet. Another request (for example choosing a workspace)
+ * may create the row before the first message, so a choice made until then still applies to it.
+ */
+export function applyStartingPushChoice(sessionId: string, data: { push_enabled?: boolean }, userId: unknown): void {
+  const existing = getSession(sessionId)
+  if (!existing) {
+    if (data.push_enabled === undefined) data.push_enabled = defaultSessionPushEnabled(userId)
+    return
+  }
+  if (data.push_enabled === undefined) return
+  const owner = existing.user_id == null || existing.user_id === '' ? null : String(existing.user_id)
+  if (owner !== null && owner !== String(userId)) return
+  if (getSessionMessageCountByRole(sessionId, 'user') > 0) return
+  const pushEnabled = data.push_enabled ? 1 : 0
+  if (existing.push_enabled !== pushEnabled) updateSession(sessionId, { push_enabled: pushEnabled })
 }
 
 function resolveSessionCategoryId(value: unknown): number | null {
@@ -481,10 +500,7 @@ export class ChatRunSocket {
       if (data.category_id !== undefined) {
         data.category_id = resolveSessionCategoryId(data.category_id)
       }
-      // A chat the user starts without choosing follows their Bark default; system-created sessions stay quiet.
-      if (data.push_enabled === undefined && data.session_id && !getSession(data.session_id)) {
-        data.push_enabled = defaultSessionPushEnabled((socket.data.user as AuthenticatedUser | undefined)?.id)
-      }
+      if (data.session_id) applyStartingPushChoice(data.session_id, data, (socket.data.user as AuthenticatedUser | undefined)?.id)
       if (data.session_id) {
         const state = getOrCreateSession(this.sessionMap, data.session_id)
         const source = resolveRunSource(data.source, data.session_id)
@@ -502,6 +518,7 @@ export class ChatRunSocket {
               model_groups: data.model_groups,
               instructions: data.instructions,
               queueId: data.queue_id,
+              pushEnabled: data.push_enabled,
               runQueuedItem: this.runQueuedItem.bind(this),
             })
             if (handled !== false) return

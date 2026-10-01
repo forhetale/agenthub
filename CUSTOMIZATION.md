@@ -39,8 +39,9 @@ the upstream BSL-1.1 license remain unchanged except for the deltas described be
    Chinese). Hermes' own Channels platform page and the HTTP webhook pipeline remain
    unchanged.
    - Each user chooses whether chats they start **push by default** (on unless turned off);
-     each chat can still turn push off or on in its settings. Sessions the system creates
-     (workflows, group chat agents, CLI commands) never push unless their creator enabled it.
+     each chat can still turn push off or on in its settings, including before its first
+     message, and a chat started with a slash command counts as one the user starts. Sessions
+     the system creates (workflows, group chat agents) never push unless their creator enabled it.
    - **Title and reply summary** is an opt-in per user (off by default): notifications are
      titled with the chat title, and completed runs show a plain summary of the final reply
      (up to 160 characters). Approvals and questions keep their status text.
@@ -176,7 +177,7 @@ This fork keeps the license and all upstream copyright notices intact.
 2. **Bark 推送通道（新增）**：按登录用户隔离的 Bark 消息推送，入口在 **侧边栏 → 消息推送**（该页面现在只包含这个 Bark 面板）。本分支不需要的上游功能已全部移除：**App 下载页**（手机平台下载卡片、下载二维码、移动版本清单请求）、**小方盒 / MCU 语音**（设备管理与远程中继、固件 OTA 分发、ESP32-C3 固件包、MCU 语音接口与事件、提示音与数据表）、**App 互联与中继**（app-login、连接与授权码表、云端/本地中继、App 分片上传、app_access 令牌、App 事件订阅）、**局域网设备**（`/api/devices/*`、devices 表、局域网发现与对等终端、对应 MCP 工具集）、**Studio 社交渠道消息**（Telegram / 飞书 / 微信适配器与账号表），以及「消息推送」页除 Bark 面板外的全部标签。会话推送现在**只走 Bark**，并新增通知语言选项（默认中文）；Hermes 自带「频道」平台页与 HTTP Webhook 链路保持不变。
    - 粘贴 Bark App 复制的推送地址即可解析服务地址与 Device Key，也可手动填写；**保存**后用**发送测试**验证（测试使用已保存的配置）。
    - 只发送三类会话状态通知：**运行完成、等待审批、等待回答**；中断不推送；点击通知不会审批任何操作。
-   - **新会话默认推送**：每个用户可自行选择（默认开启），各会话仍可在设置里单独开关。系统自动创建的会话（工作流、群聊 Agent、命令行命令）除非创建者显式开启，否则不推送。
+   - **新会话默认推送**：每个用户可自行选择（默认开启），各会话仍可在设置里单独开关（发送第一条消息前的选择同样生效），以斜杠命令开始的会话也算用户自己发起的会话。系统自动创建的会话（工作流、群聊 Agent）除非创建者显式开启，否则不推送。
    - **推送附带标题和回复摘要**：每个用户可选，默认关闭。开启后通知标题为会话标题，运行完成时正文为最终回复的摘要（最多 160 字）；审批与提问仍使用状态文案。
    - 推送在服务端发送，后端需保持运行；没有跨重启的持久发送队列，最近结果与去重缓存随重启清空。"服务已接受"只代表 Bark 服务端受理，不代表手机必达。
 

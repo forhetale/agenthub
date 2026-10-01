@@ -242,7 +242,7 @@ describe('plan session command', () => {
     expect(namespaceEmit).not.toHaveBeenCalled()
   })
 
-  it('creates a new slash-command session with a command-derived title', async () => {
+  it('creates a new slash-command session with a command-derived title and the starting push choice', async () => {
     getSessionMock.mockReturnValueOnce(null)
     const state = { messages: [], isWorking: false, events: [], queue: [] }
     const { bridge, nsp, runQueuedItem, sessionMap, socket } = makeContext(state, {
@@ -261,6 +261,7 @@ describe('plan session command', () => {
       sessionMap,
       bridge: bridge as any,
       profile: 'default',
+      pushEnabled: true,
       runQueuedItem,
     })
 
@@ -269,6 +270,7 @@ describe('plan session command', () => {
       profile: 'default',
       source: 'cli',
       title: '[goal] build a todo app',
+      push_enabled: true,
     }))
   })
 

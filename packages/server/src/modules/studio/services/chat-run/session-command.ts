@@ -51,6 +51,8 @@ interface SessionCommandContext {
   model_groups?: Array<{ provider: string; models: string[] }>
   instructions?: string
   queueId?: string
+  /** Push choice for a chat the user starts with a command (their explicit choice or Bark default). */
+  pushEnabled?: boolean
   runQueuedItem: (socket: Socket, sessionId: string, next: QueuedRun, fallbackProfile?: string) => void
 }
 
@@ -718,7 +720,7 @@ export async function handleSessionCommand(
       }
       const title = command.args.slice(0, 120)
       if (!getSession(sessionId)) {
-        createSession({ id: sessionId, profile: ctx.profile, source: 'cli', model: ctx.model, title })
+        createSession({ id: sessionId, profile: ctx.profile, source: 'cli', model: ctx.model, title, push_enabled: ctx.pushEnabled })
       }
       const updated = renameSession(sessionId, title)
       emitCommand({
@@ -1166,6 +1168,7 @@ function ensureCommandSession(sessionId: string, command: ParsedSessionCommand, 
     source: 'cli',
     model: ctx.model,
     title: buildCommandSessionTitle(command),
+    push_enabled: ctx.pushEnabled,
   })
 }
 
