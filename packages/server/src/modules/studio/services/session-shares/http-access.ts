@@ -1,4 +1,3 @@
-import { prepareSessionShareSetting } from './settings'
 import type { Context, Next } from 'koa'
 import { SessionShareError, type SessionShareAction } from '../../contracts/session-shares'
 import { authenticateSessionShare, authorizeSessionShare, assertShareProfile, sessionShareExecutionUser, watchSessionShare, type SessionShareAccess } from './access'
@@ -15,11 +14,6 @@ export function sessionShareHttpOperation(method: string, path: string, query: R
     if (['conversations', 'count', 'hermes', 'search', 'usage', 'context-length'].includes(sessionId)) throw new SessionShareError('share_endpoint_forbidden')
     const suffix = match[2] || ''
     if (method === 'GET' && ['', 'context', 'usage'].includes(suffix)) return { action: 'read', sessionId }
-    if (method === 'GET' && suffix === 'share-models') return { action: 'switchModel', sessionId }
-    if (method === 'GET' && suffix === 'share-workspaces') return { action: 'switchWorkspace', sessionId }
-    if (method === 'POST' && suffix === 'model') return { action: 'switchModel', sessionId }
-    if (method === 'POST' && suffix === 'reasoning-effort') return { action: 'reasoningEffort', sessionId }
-    if (method === 'POST' && suffix === 'workspace') return { action: 'switchWorkspace', sessionId }
     if (method === 'GET' && suffix === 'export') return { action: 'download', sessionId }
     if (method === 'GET' && ['workspace-files/list', 'workspace-file/read', 'workspace-file/diff', 'workspace-file/content'].includes(suffix)) {
       const action = suffix === 'workspace-file/content' && query.download === '1' ? 'download' : 'workspaceRead'
@@ -53,9 +47,6 @@ export async function handleSessionShareHttp(ctx: Context, next: Next): Promise<
     const body = ctx.request.body as any
     assertShareProfile(access, ctx.get('x-hermes-profile'), ctx.query.profile, body?.profile)
     authorizeSessionShare(access, operation.action, operation.sessionId)
-    if (ctx.method === 'POST' && ['switchModel', 'reasoningEffort', 'switchWorkspace'].includes(operation.action)) {
-      await prepareSessionShareSetting(access, operation.action, body)
-    }
     ctx.state.sessionShare = access
     ctx.state.sessionShareFileAction = operation.fileAction
     ctx.state.profile = { name: access.share.profile }

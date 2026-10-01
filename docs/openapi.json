@@ -17828,10 +17828,7 @@
                       "workspaceRead",
                       "workspaceWrite",
                       "outsideWorkspace",
-                      "terminal",
-                      "switchModel",
-                      "reasoningEffort",
-                      "switchWorkspace"
+                      "terminal"
                     ]
                   },
                   "sessionId": {
@@ -18869,15 +18866,11 @@
           "Sessions"
         ],
         "summary": "Create model",
-        "description": "POST /api/studio/sessions/:id/model\nApp session sharing: requires the claimed recipient identity and switchModel permission; scope is fixed to the shared session. workspace-file/content with download=1 requires download instead. Agent and terminal execution retain existing host permissions.",
+        "description": "POST /api/studio/sessions/:id/model",
         "operationId": "setModel",
         "security": [
           {
             "BearerAuth": []
-          },
-          {
-            "AppAccessToken": [],
-            "SessionShareToken": []
           }
         ],
         "responses": {
@@ -18937,8 +18930,7 @@
               }
             }
           }
-        },
-        "x-session-share-permission": "switchModel"
+        }
       }
     },
     "/api/studio/sessions/{id}/pin": {
@@ -19049,15 +19041,11 @@
           "Sessions"
         ],
         "summary": "Create reasoning-effort",
-        "description": "POST /api/studio/sessions/:id/reasoning-effort\nApp session sharing: requires the claimed recipient identity and reasoningEffort permission; scope is fixed to the shared session. workspace-file/content with download=1 requires download instead. Agent and terminal execution retain existing host permissions.",
+        "description": "POST /api/studio/sessions/:id/reasoning-effort",
         "operationId": "setReasoningEffort",
         "security": [
           {
             "BearerAuth": []
-          },
-          {
-            "AppAccessToken": [],
-            "SessionShareToken": []
           }
         ],
         "responses": {
@@ -19092,8 +19080,7 @@
               }
             }
           }
-        },
-        "x-session-share-permission": "reasoningEffort"
+        }
       }
     },
     "/api/studio/sessions/{id}/rename": {
@@ -19148,91 +19135,6 @@
             }
           }
         }
-      }
-    },
-    "/api/studio/sessions/{id}/share-models": {
-      "get": {
-        "tags": [
-          "Sessions"
-        ],
-        "summary": "Get share-models",
-        "description": "Selectable models for this session. Returns provider/model labels and IDs without provider secrets or endpoints. GET /api/studio/sessions/:id/share-models\nApp session sharing: requires the claimed recipient identity and switchModel permission; scope is fixed to the shared session. workspace-file/content with download=1 requires download instead. Agent and terminal execution retain existing host permissions.",
-        "operationId": "models",
-        "security": [
-          {
-            "AppAccessToken": [],
-            "SessionShareToken": []
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Success"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "404": {
-            "description": "Not found"
-          }
-        },
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "x-session-share-permission": "switchModel"
-      }
-    },
-    "/api/studio/sessions/{id}/share-workspaces": {
-      "get": {
-        "tags": [
-          "Sessions"
-        ],
-        "summary": "Get share-workspaces",
-        "description": "Browse only directories that this share may select as workspace. Empty path returns authorized roots; an absolute path returns child directories. GET /api/studio/sessions/:id/share-workspaces\nApp session sharing: requires the claimed recipient identity and switchWorkspace permission; scope is fixed to the shared session. workspace-file/content with download=1 requires download instead. Agent and terminal execution retain existing host permissions.",
-        "operationId": "workspaces",
-        "security": [
-          {
-            "AppAccessToken": [],
-            "SessionShareToken": []
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Success"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "404": {
-            "description": "Not found"
-          }
-        },
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "path",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            },
-            "description": "Existing absolute directory in the share scope. Omit to list authorized roots."
-          }
-        ],
-        "x-session-share-permission": "switchWorkspace"
       }
     },
     "/api/studio/sessions/{id}/unarchive": {
@@ -19318,15 +19220,11 @@
           "Sessions"
         ],
         "summary": "Create workspace",
-        "description": "POST /api/studio/sessions/:id/workspace\nApp session sharing: requires the claimed recipient identity and switchWorkspace permission; scope is fixed to the shared session. workspace-file/content with download=1 requires download instead. Agent and terminal execution retain existing host permissions.",
+        "description": "POST /api/studio/sessions/:id/workspace",
         "operationId": "setWorkspace",
         "security": [
           {
             "BearerAuth": []
-          },
-          {
-            "AppAccessToken": [],
-            "SessionShareToken": []
           }
         ],
         "responses": {
@@ -19364,8 +19262,7 @@
               }
             }
           }
-        },
-        "x-session-share-permission": "switchWorkspace"
+        }
       }
     },
     "/api/studio/sessions/{id}/workspace-file/content": {
@@ -19966,7 +19863,8 @@
         "operationId": "createSessionShare",
         "security": [
           {
-            "BearerAuth": []
+            "BearerAuth": [],
+            "AppAccessToken": []
           }
         ],
         "responses": {
@@ -20064,21 +19962,6 @@
                       "terminal": {
                         "type": "boolean",
                         "default": false
-                      },
-                      "switchModel": {
-                        "type": "boolean",
-                        "default": false,
-                        "description": "Change the shared session model using the scoped share-models catalog. Does not grant reasoning-effort changes."
-                      },
-                      "reasoningEffort": {
-                        "type": "boolean",
-                        "default": false,
-                        "description": "Change the shared session reasoning effort independently of model selection."
-                      },
-                      "switchWorkspace": {
-                        "type": "boolean",
-                        "default": false,
-                        "description": "Select an existing directory within the original workspace, or an explicit extraPaths grant when outsideWorkspace is enabled. Does not grant filesystem read/write or expand the share scope."
                       }
                     }
                   },
@@ -20102,30 +19985,8 @@
                         }
                       }
                     }
-                  },
-                  "sharer": {
-                    "type": "object",
-                    "additionalProperties": false,
-                    "required": [
-                      "id",
-                      "name"
-                    ],
-                    "description": "App-provided attribution only. Management authority comes from the authenticated local Studio owner, not this metadata.",
-                    "properties": {
-                      "id": {
-                        "type": "integer",
-                        "minimum": 1
-                      },
-                      "name": {
-                        "type": "string",
-                        "maxLength": 200
-                      }
-                    }
                   }
-                },
-                "required": [
-                  "sharer"
-                ]
+                }
               }
             }
           }
@@ -20140,7 +20001,8 @@
         "operationId": "listSessionShares",
         "security": [
           {
-            "BearerAuth": []
+            "BearerAuth": [],
+            "AppAccessToken": []
           }
         ],
         "responses": {
@@ -20188,7 +20050,8 @@
         "operationId": "updateSessionShare",
         "security": [
           {
-            "BearerAuth": []
+            "BearerAuth": [],
+            "AppAccessToken": []
           }
         ],
         "responses": {
@@ -20274,21 +20137,6 @@
                       "terminal": {
                         "type": "boolean",
                         "default": false
-                      },
-                      "switchModel": {
-                        "type": "boolean",
-                        "default": false,
-                        "description": "Change the shared session model using the scoped share-models catalog. Does not grant reasoning-effort changes."
-                      },
-                      "reasoningEffort": {
-                        "type": "boolean",
-                        "default": false,
-                        "description": "Change the shared session reasoning effort independently of model selection."
-                      },
-                      "switchWorkspace": {
-                        "type": "boolean",
-                        "default": false,
-                        "description": "Select an existing directory within the original workspace, or an explicit extraPaths grant when outsideWorkspace is enabled. Does not grant filesystem read/write or expand the share scope."
                       }
                     }
                   },
@@ -20328,7 +20176,8 @@
         "operationId": "revokeSessionShare",
         "security": [
           {
-            "BearerAuth": []
+            "BearerAuth": [],
+            "AppAccessToken": []
           }
         ],
         "responses": {
@@ -23401,21 +23250,6 @@
               "terminal": {
                 "type": "boolean",
                 "default": false
-              },
-              "switchModel": {
-                "type": "boolean",
-                "default": false,
-                "description": "Change the shared session model using the scoped share-models catalog. Does not grant reasoning-effort changes."
-              },
-              "reasoningEffort": {
-                "type": "boolean",
-                "default": false,
-                "description": "Change the shared session reasoning effort independently of model selection."
-              },
-              "switchWorkspace": {
-                "type": "boolean",
-                "default": false,
-                "description": "Select an existing directory within the original workspace, or an explicit extraPaths grant when outsideWorkspace is enabled. Does not grant filesystem read/write or expand the share scope."
               }
             }
           },
