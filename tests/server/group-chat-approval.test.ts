@@ -41,6 +41,21 @@ describe('group chat approval and context baseline', () => {
     vi.restoreAllMocks()
   })
 
+  it('restores pending clarification notifications only for rooms the requesting socket can manage', async () => {
+    const human = await connectGroupChatClient(port, 'notification-user', 'Notification user')
+    harness.sockets.push(human)
+    const server = groupServer as any
+    vi.spyOn(server, 'pendingClarifySnapshots').mockReturnValue([
+      { roomId: 'allowed-room', clarify_id: 'allowed-question', remaining_timeout_ms: 1000 },
+      { roomId: 'private-room', clarify_id: 'private-question', remaining_timeout_ms: 1000 },
+    ])
+    vi.spyOn(server, 'canSocketManageRoom').mockImplementation((socket: any, roomId: unknown) => socket.id === human.id && roomId === 'allowed-room')
+    const snapshot = await emitAck<any>(human, 'load_pending_approvals', {})
+    expect(snapshot.pendingClarifies).toEqual([
+      { roomId: 'allowed-room', clarify_id: 'allowed-question', remaining_timeout_ms: 1000 },
+    ])
+  })
+
   async function joinPair() {
     const agentSessionId = groupRuntimeSessionId('room-1', 'default', 'Agent')
     const agent = await connectGroupChatClient(port, 'agent-1', 'Agent', {
@@ -60,6 +75,26 @@ describe('group chat approval and context baseline', () => {
   function wait(ms = 30) {
     return new Promise(resolve => setTimeout(resolve, ms))
   }
+
+  it('publishes authenticated group interactions through webhooks with their run', async () => {
+    const { agent, human, agentSessionId } = await joinPair()
+    const { businessEvents } = await import('../../packages/server/src/modules/studio/services/webhooks/business-events')
+    const events: any[] = []
+    const stop = businessEvents.subscribe('test-group-interactions', event => { if (event.type.startsWith('group.')) events.push(event) })
+    try {
+      for (const [request, resolved, id] of [ ['approval.requested', 'approval.resolved', 'approval_id'], ['clarify.requested', 'clarify.resolved', 'clarify_id'] ]) {
+        const requested = once(human, request)
+        agent.emit(request, { roomId: 'room-1', agentName: 'Agent', agentSessionId, runId: 'agent-runtime', [id]: id, command: 'SECRET', question: 'SECRET' })
+        await requested
+        const finished = once(human, resolved)
+        agent.emit(resolved, { roomId: 'room-1', agentName: 'Agent', agentSessionId, [id]: id, resolved: true })
+        await finished
+      }
+      expect(events.map(event => event.type)).toEqual(['group.approval.requested', 'group.approval.resolved', 'group.clarification.requested', 'group.clarification.resolved'])
+      expect(events.every(event => event.subject.run_id === 'agent-runtime' && !('push_target_id' in event))).toBe(true)
+      expect(JSON.stringify(events)).not.toContain('SECRET')
+    } finally { stop() }
+  })
 
   it('relays context status without overwriting the persisted room token count', async () => {
     const { agent, human, agentSessionId } = await joinPair()
@@ -216,6 +251,7 @@ describe('group chat approval and context baseline', () => {
     }
 
     await expect(emitAck<any>(owner, 'load_pending_approvals', {})).resolves.toEqual({
+      pendingClarifies: [],
       pendingApprovals: [expect.objectContaining({
         roomId: 'room-1',
         agentName: 'Agent',
@@ -957,7 +993,7 @@ describe('group chat approval and context baseline', () => {
     await expect(clarifyResolved).resolves.toMatchObject({
       clarify_id: 'clarify-expired', resolved: false, reason: 'Remote Agent run timed out',
     })
-    await expect(emitAck<any>(human, 'load_pending_approvals', {})).resolves.toEqual({ pendingApprovals: [] })
+    await expect(emitAck<any>(human, 'load_pending_approvals', {})).resolves.toEqual({ pendingApprovals: [], pendingClarifies: [] })
   })
 
   it('interrupts only the active run generation and denies its pending approvals', async () => {
@@ -1003,6 +1039,7 @@ describe('group chat approval and context baseline', () => {
     expect(respondApproval).toHaveBeenCalledTimes(1)
     expect(respondApproval).toHaveBeenCalledWith('approval-current', 'deny')
     await expect(emitAck<any>(human, 'load_pending_approvals', {})).resolves.toEqual({
+      pendingClarifies: [],
       pendingApprovals: [
         expect.objectContaining({ approval_id: 'approval-next' }),
         expect.objectContaining({ approval_id: 'approval-missing-generation' }),
@@ -1099,7 +1136,7 @@ describe('group chat approval and context baseline', () => {
     await expect(resolved).resolves.toMatchObject({
       approval_id: 'approval-stale', choice: 'deny', reason: 'unknown approval request: approval-stale',
     })
-    await expect(emitAck<any>(human, 'load_pending_approvals', {})).resolves.toEqual({ pendingApprovals: [] })
+    await expect(emitAck<any>(human, 'load_pending_approvals', {})).resolves.toEqual({ pendingApprovals: [], pendingClarifies: [] })
   })
 
   it('does not route a pending approval through a different room', async () => {

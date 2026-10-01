@@ -616,13 +616,15 @@ describe('coding agent run state', () => {
 
       expect(compatible()).toBe(false)
 
-      // The legacy combined server and configs written before the plan toolset existed must be refreshed.
+      // The legacy combined server and configs written before the interaction toolset existed must be refreshed.
       writeFileSync(join(codexHome, 'config.toml'), '[mcp_servers.hermes-studio]\ncommand = "node"\n')
       expect(compatible()).toBe(false)
       writeFileSync(join(codexHome, 'config.toml'), managedConfig(['api', 'browser', 'use']))
       expect(compatible()).toBe(false)
-
       writeFileSync(join(codexHome, 'config.toml'), managedConfig(['api', 'browser', 'use', 'plan']))
+      expect(compatible()).toBe(false)
+
+      writeFileSync(join(codexHome, 'config.toml'), managedConfig(['api', 'browser', 'use', 'interaction']))
       expect(compatible()).toBe(true)
 
       manager.shutdown()

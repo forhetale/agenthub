@@ -12,7 +12,7 @@ const MANAGED_SERVERS: ReadonlyArray<{ name: string; toolset: string }> = [
   { name: 'ekko-studio-api', toolset: 'api' },
   { name: 'ekko-studio-browser', toolset: 'browser' },
   { name: 'ekko-studio-use', toolset: 'use' },
-  { name: 'ekko-studio-plan', toolset: 'plan' },
+  { name: 'ekko-studio-interaction', toolset: 'plan' },
 ]
 // Retired entries such as `ekko-studio-devices` carry MANAGED_ENV_KEY, so the
 // managed-entry sweep in injectIntoProfile removes them from existing profiles.
@@ -22,6 +22,7 @@ const MANAGED_SERVER_NAMES: Set<string> = new Set(MANAGED_SERVERS.map(server => 
 // headroom; unrelated API/browser calls retain the client default.
 const MANAGED_USE_MCP_TIMEOUT_SECONDS = 30 * 60 + 60
 const LEGACY_SERVER_NAMES = new Set([
+  'ekko-studio-plan',
   'hermes-studio-api',
   'hermes-studio-browser',
   'hermes-studio-devices',
@@ -186,6 +187,7 @@ function managedConfig(
     HERMES_WEB_UI_PROFILE: profile,
     HERMES_MCP_SERVER_NAME: serverName,
     HERMES_MCP_TOOLSET: toolset,
+    HERMES_MCP_USER_CLARIFICATION: '0',
     [MANAGED_ENV_KEY]: '1',
   }
 
@@ -229,6 +231,7 @@ function sameConfig(existing: Record<string, any>, desired: Record<string, unkno
     existing.env.HERMES_WEB_UI_PROFILE === desiredEnv.HERMES_WEB_UI_PROFILE &&
     existing.env.HERMES_MCP_SERVER_NAME === desiredEnv.HERMES_MCP_SERVER_NAME &&
     existing.env.HERMES_MCP_TOOLSET === desiredEnv.HERMES_MCP_TOOLSET &&
+    existing.env.HERMES_MCP_USER_CLARIFICATION === desiredEnv.HERMES_MCP_USER_CLARIFICATION &&
     existing.env.HERMES_WEB_UI_TOKEN === undefined &&
     existing.env[MANAGED_ENV_KEY] === desiredEnv[MANAGED_ENV_KEY]
 }
@@ -246,7 +249,7 @@ async function injectIntoProfile(
     let hadManagedExisting = false
 
     for (const { name } of MANAGED_SERVERS) {
-      const legacyName = name.replace(/^ekko-/, 'hermes-')
+      const legacyName = name === 'ekko-studio-interaction' ? 'ekko-studio-plan' : name.replace(/^ekko-/, 'hermes-')
       const legacy = cfg.mcp_servers[legacyName]
       if (!cfg.mcp_servers[name] && isManagedServer(legacy)) {
         cfg.mcp_servers[name] = legacy
@@ -301,7 +304,7 @@ async function injectIntoProfile(
       if (isRecord(existing) && existing.enabled === false) {
         return {
           data: cfg,
-          write: false,
+          write: changed,
           result: {
             profile,
             status: 'skipped',

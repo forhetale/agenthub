@@ -1675,7 +1675,7 @@ export default {
       localInboxPayloadTitle: '受信した Webhook ペイロード',
       clearInboxConfirm: 'ローカルテスト受信箱のすべてのイベントを消去しますか？',
       columns: { name: '名前', url: 'URL', events: 'イベント', profiles: 'プロファイル', status: '状態', actions: '操作', receivedAt: '受信日時', event: 'イベント', eventId: 'イベント ID', deliveryId: '配信 ID' },
-      events: { messageCreated: 'ユーザーメッセージ作成', runQueued: '実行をキューに追加', runStarted: '実行開始', toolStarted: 'ツール開始', toolCompleted: 'ツール完了', toolFailed: 'ツール失敗', approvalRequested: '承認要求', approvalResolved: '承認処理済み', clarificationRequested: '確認要求', clarificationResolved: '確認処理済み', completed: '実行完了', failed: '実行失敗' },
+      events: { runUpdated: '実行状態を更新', planUpdated: 'タスクカードの進捗更新', groupMessageCreated: 'グループメッセージ作成', messageCreated: 'ユーザーメッセージ作成', runQueued: '実行をキューに追加', runStarted: '実行開始', toolStarted: 'ツール開始', toolCompleted: 'ツール完了', toolFailed: 'ツール失敗', approvalRequested: '承認要求', approvalResolved: '承認処理済み', clarificationRequested: '確認要求', clarificationResolved: '確認処理済み', completed: '実行完了', failed: '実行失敗' },
       status: { enabled: '有効', disabled: '無効' },
       runtime: { idle: '待機中', delivering: '配信中', retrying: '再試行待ち', success: '配信済み', failed: '失敗', dropped: '破棄済み' },
       actions: { add: 'Webhook を追加', localTest: 'ローカルテスト受信先を使用', test: 'テスト', enable: '有効化', disable: '無効化', refresh: '更新', clear: '消去', view: '表示' },
@@ -2913,6 +2913,12 @@ export default {
   },
 
   changelog: {
+    new_0_7_23_2: 'Coding Agent の確認質問と保存可能なグループチャットのタスクカードを追加し、タスク計画を各ターンの末尾に固定 (#3080, #3085)',
+    new_0_7_23_3: 'セッションのピン留めをデバイス間で同期し、最近のセッションより上に表示 (#3091)',
+    new_0_7_23_4: '再接続後にグループチャットの未回答の確認質問を復元し、Webhook 購読に実行状態・タスク進捗・グループチャット・ワークフローのイベントを追加 (#3090, #3093)',
+    new_0_7_23_6: 'Coding Agent がメッセージ履歴を再生する際に DeepSeek の推論内容が失われる問題を修正 (#3078)',
+    new_0_7_23_7: 'MCP サーバーが HTTP トランスポートの別名を使用すると Ekko ランタイムでツールが読み込まれない問題を修正 (#3081)',
+    new_0_7_23_8: 'スキルの空のメタデータ値が次のフィールドを読み込む問題を修正し、複数行の説明と空行を維持 (#3083)',
     new_0_7_22_1: '独立したタスク計画 MCP を追加。Hermes と Coding Agent でもチャットのタスク計画を更新でき、各ターンでタスクのコンテキストを更新 (#3053)',
     new_0_7_22_2: 'チャットの思考中表示に対応する Agent のロゴを表示 (#3052)',
     new_0_7_22_3: 'Ekko Chat の履歴でツール呼び出しと結果の対応を修正し、MCP HTTP トランスポートの別名に対応 (#3030, #3031)',

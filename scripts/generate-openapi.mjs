@@ -337,8 +337,11 @@ function addEndpoint(paths, method, path, controllerMethod, tagInfo, content, ma
     }
     for (const parameter of parameters) {
       if (parameter.name === 'category') {
-        parameter.schema = { oneOf: [{ type: 'integer', minimum: 1 }, { type: 'string', enum: ['none'] }] }
-        parameter.description = 'Filter by category ID; none selects uncategorized sessions.'
+        parameter.schema = { oneOf: [{ type: 'integer', minimum: 1 }, { type: 'string', enum: ['none', 'pinned'] }] }
+        parameter.description = 'Filter by category ID; none selects uncategorized sessions, pinned selects database-pinned sessions.'
+      } else if (parameter.name === 'pinned') {
+        parameter.schema = { type: 'boolean' }
+        parameter.description = 'Filter by database pin state before pagination and counting. The pinned category takes precedence.'
       } else if (parameter.name === 'include' || parameter.name === 'exclude') {
         parameter.schema = { type: 'array', items: { type: 'string' } }
         parameter.style = 'form'
@@ -907,6 +910,13 @@ Object.keys(openapi.paths).sort().forEach(key => {
 openapi.paths = sortedPaths
 
 // Add special endpoints after sorting
+openapi.paths['/api/studio/sessions/{id}/pin'].post.requestBody = {
+  required: true,
+  content: { 'application/json': { schema: {
+    type: 'object', required: ['is_pinned'], properties: { is_pinned: { type: 'boolean' } },
+  } } },
+}
+
 // Shared task planning is bound to an authenticated, active turn capability.
 openapi.paths['/api/studio/task-plans/update'] = {
   post: {
@@ -931,6 +941,34 @@ openapi.paths['/api/studio/task-plans/update'] = {
       200: { description: 'Persisted task plan snapshot with session_id, run_id, plan_id, revision, execution_state, explanation, plan, created_at and updated_at (milliseconds).' },
       400: { description: 'Invalid plan; at most one step can be in_progress and step ids must be unique.' },
       409: { description: 'Context expired, belongs to another profile, or has no active turn.' },
+      503: { description: 'Chat run service unavailable.' },
+    },
+  },
+}
+
+// MCP user questions wait for a reply on the existing clarify.respond transport.
+openapi.paths['/api/studio/clarifications/request'] = {
+  post: {
+    tags: ['Chat Run'], summary: 'Ask a user clarification in the current coding-agent turn', operationId: 'requestClarification',
+    description: 'Requires the current interaction context_id and matching authenticated profile. Emits clarify.requested in Studio, waits up to five minutes, and returns the answer or an explicit timeout/dismissed/cancelled reason. Expired contexts cannot prompt a later turn. Caller-supplied session/run ids are ignored.',
+    security: [{ BearerAuth: [] }],
+    requestBody: { required: true, content: { 'application/json': { schema: {
+      type: 'object', required: ['context_id', 'question'],
+      properties: {
+        context_id: { type: 'string' },
+        question: { type: 'string', minLength: 1, maxLength: 4000 },
+        choices: { type: 'array', maxItems: 20, items: { type: 'string', minLength: 1, maxLength: 500 } },
+      },
+    } } } },
+    responses: {
+      200: { description: 'Clarification settled.', content: { 'application/json': { schema: {
+        type: 'object', required: ['ok', 'clarify_id', 'response', 'reason'], properties: {
+          ok: { type: 'boolean' }, clarify_id: { type: 'string' }, response: { type: 'string' },
+          reason: { type: 'string', enum: ['response', 'dismissed', 'timeout', 'cancelled'] },
+        },
+      } } } },
+      400: { description: 'Missing context or invalid question/choices.' },
+      409: { description: 'Expired or inactive context, wrong profile, or another question is pending.' },
       503: { description: 'Chat run service unavailable.' },
     },
   },

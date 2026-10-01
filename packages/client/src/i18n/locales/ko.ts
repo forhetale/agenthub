@@ -1675,7 +1675,7 @@ export default {
       localInboxPayloadTitle: '수신한 웹훅 페이로드',
       clearInboxConfirm: '로컬 테스트 수신함의 모든 이벤트를 지울까요?',
       columns: { name: '이름', url: 'URL', events: '이벤트', profiles: '프로필', status: '상태', actions: '작업', receivedAt: '수신 시간', event: '이벤트', eventId: '이벤트 ID', deliveryId: '전송 ID' },
-      events: { messageCreated: '사용자 메시지 생성됨', runQueued: '실행 대기열 추가됨', runStarted: '실행 시작됨', toolStarted: '도구 시작됨', toolCompleted: '도구 완료됨', toolFailed: '도구 실패', approvalRequested: '승인 요청됨', approvalResolved: '승인 처리됨', clarificationRequested: '확인 요청됨', clarificationResolved: '확인 처리됨', completed: '실행 완료', failed: '실행 실패' },
+      events: { runUpdated: '실행 상태 업데이트', planUpdated: '작업 카드 진행 상황 업데이트', groupMessageCreated: '그룹 메시지 생성됨', messageCreated: '사용자 메시지 생성됨', runQueued: '실행 대기열 추가됨', runStarted: '실행 시작됨', toolStarted: '도구 시작됨', toolCompleted: '도구 완료됨', toolFailed: '도구 실패', approvalRequested: '승인 요청됨', approvalResolved: '승인 처리됨', clarificationRequested: '확인 요청됨', clarificationResolved: '확인 처리됨', completed: '실행 완료', failed: '실행 실패' },
       status: { enabled: '활성화됨', disabled: '비활성화됨' },
       runtime: { idle: '대기', delivering: '전송 중', retrying: '재시도 대기', success: '전송됨', failed: '실패', dropped: '삭제됨' },
       actions: { add: '웹훅 추가', localTest: '로컬 테스트 수신기 사용', test: '테스트', enable: '활성화', disable: '비활성화', refresh: '새로고침', clear: '지우기', view: '보기' },
@@ -2913,6 +2913,12 @@ export default {
   },
 
   changelog: {
+    new_0_7_23_2: 'Coding Agent 확인 질문과 저장 가능한 그룹 채팅 작업 카드를 추가하고 작업 계획을 각 대화 턴의 끝에 고정했습니다 (#3080, #3085)',
+    new_0_7_23_3: '고정한 세션을 기기 간에 동기화하고 최근 세션 위에 표시합니다 (#3091)',
+    new_0_7_23_4: '다시 연결하면 그룹 채팅에서 답변을 기다리는 확인 질문을 복원하고, Webhook 구독에 실행 상태·작업 진행·그룹 채팅·워크플로 이벤트를 추가했습니다 (#3090, #3093)',
+    new_0_7_23_6: 'Coding Agent가 메시지 기록을 재생할 때 DeepSeek 추론 내용이 사라지는 문제를 수정했습니다 (#3078)',
+    new_0_7_23_7: 'MCP 서버가 HTTP 전송 별칭을 사용할 때 Ekko 런타임 도구가 로드되지 않는 문제를 수정했습니다 (#3081)',
+    new_0_7_23_8: '빈 스킬 메타데이터 값이 다음 필드를 읽는 문제를 수정하고 여러 줄 설명과 빈 줄을 보존했습니다 (#3083)',
     new_0_7_22_1: '독립적인 작업 계획 MCP를 추가하여 Hermes와 Coding Agent도 채팅 작업 계획을 갱신하고 매 턴 작업 컨텍스트를 새로 반영 (#3053)',
     new_0_7_22_2: '채팅의 생각 중 표시에 해당 Agent 로고 표시 (#3052)',
     new_0_7_22_3: 'Ekko Chat 기록에서 도구 호출과 결과의 연결을 수정하고 MCP HTTP 전송 방식의 별칭 지원 (#3030, #3031)',

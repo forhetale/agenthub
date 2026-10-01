@@ -1,3 +1,5 @@
+import { publishAppState, stateEvent } from '../services/webhooks/app-event-state'
+import { publishDomainEvent } from '../services/webhooks/domain-events'
 import type { Server, Socket } from 'socket.io'
 import { authenticateUserToken, isAuthEnabled, type AuthenticatedUser } from '../public/auth'
 import { listUserProfiles } from '../repositories/users-store'
@@ -190,9 +192,20 @@ export class WorkflowSocketServer {
     return { ...status, run }
   }
 
+  private appState(snapshot: WorkflowSocketRuntimeStatus) {
+    const profile = this.manager.get(snapshot.workflowId)?.profile || 'default'
+    // Never put execution inputs, outputs, errors or credentials onto the notification stream.
+    return stateEvent('workflow.run.updated', profile, { workflow_id: snapshot.workflowId, run_id: snapshot.runId || undefined },
+      { state: { workflowId: snapshot.workflowId, runId: snapshot.runId, status: snapshot.status,
+        startedAt: snapshot.startedAt, updatedAt: snapshot.updatedAt, pendingApprovals: snapshot.pendingApprovals,
+        run: snapshot.run ? { id: snapshot.run.id, profile, status: snapshot.run.status,
+          node_sessions: snapshot.run.node_sessions.map(node => ({ session_id: node.session_id, profile: node.profile, status: node.status })) } : null } })
+  }
+
   private emitRuntimeStatus(status: WorkflowRuntimeStatus): void {
     try {
       const snapshot = this.statusWithEvidence(status)
+      publishAppState(this.appState(snapshot))
       this.nsp.to(this.workflowRoom(status.workflowId)).emit('workflow.status.updated', snapshot)
       if (!status.runId || !snapshot.run || !['completed', 'failed'].includes(status.status)
         || snapshot.run.status !== status.status || this.notifiedRuns.has(status.runId)) return
@@ -200,6 +213,7 @@ export class WorkflowSocketServer {
       if (!workflow) return
       this.notifiedRuns.add(status.runId)
       if (this.notifiedRuns.size > 2000) this.notifiedRuns.delete(this.notifiedRuns.values().next().value!)
+      publishDomainEvent(status.status === 'failed' ? 'workflow.run.failed' : 'workflow.run.completed', workflow.profile || 'default', { workflow_id: status.workflowId, run_id: status.runId }, { title: workflow.name.slice(0,120), preview: '' })
     } catch (err: any) {
       logger.error(err, '[workflow-socket] failed to load persisted execution evidence for workflow %s', status.workflowId)
       this.nsp.to(this.workflowRoom(status.workflowId)).emit('workflow.status.error', {

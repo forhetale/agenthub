@@ -2116,7 +2116,7 @@ export default {
       localInboxPayloadTitle: '收到的 Webhook Payload',
       clearInboxConfirm: '確定要清空本機測試收件匣中的所有事件？',
       columns: { name: '名稱', url: 'URL', events: '事件', profiles: 'Profile', status: '狀態', actions: '操作', receivedAt: '接收時間', event: '事件', eventId: 'Event ID', deliveryId: 'Delivery ID' },
-      events: { messageCreated: '使用者訊息已建立', runQueued: '執行已排入佇列', runStarted: '執行已開始', toolStarted: '工具已開始', toolCompleted: '工具已完成', toolFailed: '工具執行失敗', approvalRequested: '要求授權', approvalResolved: '授權已處理', clarificationRequested: '要求澄清', clarificationResolved: '澄清已處理', completed: '執行完成', failed: '執行失敗' },
+      events: { runUpdated: '執行狀態更新', planUpdated: '任務卡片進度更新', groupMessageCreated: '群聊訊息已建立', messageCreated: '使用者訊息已建立', runQueued: '執行已排入佇列', runStarted: '執行已開始', toolStarted: '工具已開始', toolCompleted: '工具已完成', toolFailed: '工具執行失敗', approvalRequested: '要求授權', approvalResolved: '授權已處理', clarificationRequested: '要求澄清', clarificationResolved: '澄清已處理', completed: '執行完成', failed: '執行失敗' },
       status: { enabled: '已啟用', disabled: '已停用' },
       runtime: { idle: '閒置', delivering: '投遞中', retrying: '等待重試', success: '已送達', failed: '投遞失敗', dropped: '已捨棄' },
       actions: { add: '新增 Webhook', localTest: '使用本機測試接收器', test: '測試', enable: '啟用', disable: '停用', refresh: '重新整理', clear: '清空', view: '檢視' },
@@ -3276,6 +3276,12 @@ export default {
 
   // 更新日誌
   changelog: {
+    new_0_7_23_2: '新增 Coding Agent 釐清互動與群聊任務卡，任務計畫可儲存還原，並固定顯示於每輪訊息末尾 (#3080, #3085)',
+    new_0_7_23_3: '置頂對話改為跨裝置同步，並優先顯示置頂對話 (#3091)',
+    new_0_7_23_4: '重新連線後還原群聊中待回答的釐清提問，Webhook 訂閱新增執行狀態、任務進度、群聊與工作流程事件 (#3090, #3093)',
+    new_0_7_23_6: '修正 Coding Agent 重播歷史訊息時遺失 DeepSeek 推理內容的問題 (#3078)',
+    new_0_7_23_7: '修正 Ekko 執行階段未辨識 MCP HTTP 傳輸別名，導致工具未載入的問題 (#3081)',
+    new_0_7_23_8: '修正技能中繼資料中的空值錯誤讀取下一欄位，同時保留多行描述與空白行 (#3083)',
     new_0_7_22_1: '新增獨立任務計畫 MCP，讓 Hermes 和 Coding Agent 也能更新聊天中的任務計畫，並在每輪對話更新任務上下文 (#3053)',
     new_0_7_22_2: '聊天思考狀態改為顯示對應 Agent 的圖示 (#3052)',
     new_0_7_22_3: '修復 Ekko Chat 工具呼叫與結果的歷史記錄配對，並相容 MCP HTTP 傳輸方式的別名 (#3030, #3031)',

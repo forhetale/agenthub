@@ -68,6 +68,7 @@ const positionalArgs = process.argv.slice(2).filter(arg => !arg.startsWith('-'))
 const requestedToolset = String(positionalArgs[0] || process.env.HERMES_MCP_TOOLSET || 'api').trim().toLowerCase()
 const ACTIVE_TOOLSET = TOOLSETS.has(requestedToolset) ? requestedToolset : 'api'
 const SHARED_TASK_PLAN_ENABLED = process.env.HERMES_MCP_NATIVE_TASK_PLAN !== '1'
+const USER_CLARIFICATION_ENABLED = SHARED_TASK_PLAN_ENABLED && process.env.HERMES_MCP_USER_CLARIFICATION === '1'
 
 if (process.argv.includes('-h') || process.argv.includes('--help')) {
   printHelp()
@@ -184,6 +185,33 @@ function normalizePublicHeaders(headers) {
   return normalized
 }
 
+// Clarification requests can wait five minutes before producing response headers.
+// Avoid fetch's 300-second headers deadline racing that business deadline.
+async function fetchUserInteraction(url, options) {
+  return new Promise((resolve, reject) => {
+    const target = new URL(url)
+    const transport = target.protocol === 'https:' ? httpsRequest : httpRequest
+    let timer
+    const req = transport(target, { method: options.method, headers: options.headers, signal: options.signal }, res => {
+      const chunks = []
+      res.on('data', chunk => chunks.push(chunk))
+      res.on('error', error => { clearTimeout(timer); reject(error) })
+      res.on('end', () => {
+        clearTimeout(timer)
+        const text = Buffer.concat(chunks).toString('utf8')
+        const headers = new Headers()
+        for (const [name, value] of Object.entries(res.headers)) {
+          if (value != null) headers.set(name, Array.isArray(value) ? value.join(', ') : value)
+        }
+        resolve({ status: res.statusCode || 500, headers, text: async () => text })
+      })
+    })
+    timer = setTimeout(() => req.destroy(new Error('User interaction transport timed out')), 330_000)
+    req.on('error', error => { clearTimeout(timer); reject(error) })
+    req.end(options.body)
+  })
+}
+
 async function requestEnvelope(path, options = {}) {
   const profile = typeof options.profile === 'string' && options.profile.trim()
     ? options.profile.trim()
@@ -197,10 +225,12 @@ async function requestEnvelope(path, options = {}) {
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(profile ? { 'X-Hermes-Profile': profile } : {}),
   }
-  const response = await fetch(`${baseUrl()}${appendQuery(path, options.query)}`, {
+  const fetchRequest = path === '/api/studio/clarifications/request' ? fetchUserInteraction : fetch
+  const response = await fetchRequest(`${baseUrl()}${appendQuery(path, options.query)}`, {
     method,
     headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
+    signal: options.signal,
   })
   const responseHeaders = {}
   response.headers.forEach((value, key) => {
@@ -972,6 +1002,16 @@ const tools = [
       }, ['path']),
   },
   {
+    name: 'ekko_studio_clarify',
+    toolset: 'plan',
+    description: 'Ask the user one necessary clarification question during a Coding Agent turn in Studio and wait for their response. Provide optional choices or omit them for free text. Use only the latest interaction context_id. A timeout, dismissal, or cancellation is not consent; inspect reason before continuing. Unavailable to background tasks and delegated subagents.',
+    inputSchema: inputSchema({
+      context_id: { type: 'string', description: 'Current turn interaction context supplied by Studio.' },
+      question: { type: 'string', minLength: 1, maxLength: 4000 },
+      choices: { type: 'array', maxItems: 20, items: { type: 'string', minLength: 1, maxLength: 500 } },
+    }, ['context_id', 'question']),
+  },
+  {
     name: 'ekko_studio_update_plan',
     toolset: 'plan',
     description: 'Create or update the current turn task plan shown in Studio. For multi-step work, send the full ordered plan before starting and whenever progress changes. Keep step ids stable, use at most one in_progress step, and mark completion only after verification. Requires the context_id supplied in the current run instructions; cannot start a run or modify another turn.',
@@ -1545,7 +1585,8 @@ function resolveToolName(name) {
 
 function activeToolsetTools() {
   return tools.filter(tool => tool.toolset === ACTIVE_TOOLSET
-    && (SHARED_TASK_PLAN_ENABLED || tool.name !== 'ekko_studio_update_plan'))
+    && (SHARED_TASK_PLAN_ENABLED || tool.toolset !== 'plan')
+    && (USER_CLARIFICATION_ENABLED || tool.name !== 'ekko_studio_clarify'))
 }
 
 function categoryToolCatalog(query = '') {
@@ -1562,7 +1603,8 @@ function categoryToolByName(name) {
 
 function serverInstructions() {
   if (ACTIVE_TOOLSET === 'plan') return SHARED_TASK_PLAN_ENABLED
-    ? 'Use ekko_studio_update_plan directly to maintain the current Studio task card. Use only the context_id supplied with the latest input; expired contexts cannot update another turn.'
+    ? 'Use ekko_studio_update_plan from ekko-studio-interaction to maintain the current Studio task card. Use only the context_id supplied with the latest input; expired contexts cannot update another turn.'
+      + (USER_CLARIFICATION_ENABLED ? ' Use ekko_studio_clarify from this same MCP server to ask a necessary question and wait for the user in Studio, using the latest interaction context_id. Never treat timeout, dismissal, or cancellation as approval.' : '')
     : ''
   if (ACTIVE_TOOLSET === 'api') {
     return 'Ekko Studio API operations. Use ekko_studio_api_openapi_get without filters for the compact module index, call it again with tag/path/method filters for endpoint details, then call ekko_studio_api_request with the documented relative path and JSON fields.'
@@ -1622,7 +1664,7 @@ async function callCategoryToolset(args = {}) {
   return errorText('Invalid category toolset action. Allowed: list, describe, call.')
 }
 
-async function callTool(name, args = {}) {
+async function callTool(name, args = {}, signal) {
   if (!isToolCallable(name)) {
     return errorText(`Tool is not available in the active '${ACTIVE_TOOLSET}' MCP toolset: ${name}`)
   }
@@ -1696,6 +1738,10 @@ async function callTool(name, args = {}) {
       })
       return jsonText(await requestEnvelope(path, options))
     }
+    case 'ekko_studio_clarify':
+      return jsonText(await request('/api/studio/clarifications/request', withAuthArgs(args, {
+        method: 'POST', body: pickDefined(args, ['context_id', 'question', 'choices']), signal,
+      })))
     case 'ekko_studio_update_plan':
       return jsonText(await request('/api/studio/task-plans/update', withAuthArgs(args, {
         method: 'POST', body: pickDefined(args, ['context_id', 'explanation', 'plan']),
@@ -1858,7 +1904,12 @@ async function callTool(name, args = {}) {
   }
 }
 
+const pendingInteractions = new Map()
 async function handle(message) {
+  if (message?.method === 'notifications/cancelled') {
+    pendingInteractions.get(message.params?.requestId)?.abort()
+    return null
+  }
   if (!message || message.id === undefined) return null
 
   try {
@@ -1876,12 +1927,16 @@ async function handle(message) {
         }
       case 'tools/list':
         return { jsonrpc: '2.0', id: message.id, result: { tools: visibleTools() } }
-      case 'tools/call':
-        return {
-          jsonrpc: '2.0',
-          id: message.id,
-          result: await callTool(message.params?.name, message.params?.arguments || {}),
-        }
+      case 'tools/call': {
+        const abort = resolveToolName(message.params?.name) === 'ekko_studio_clarify' ? new AbortController() : undefined
+        if (abort) pendingInteractions.set(message.id, abort)
+        try {
+          return {
+            jsonrpc: '2.0', id: message.id,
+            result: await callTool(message.params?.name, message.params?.arguments || {}, abort?.signal),
+          }
+        } finally { pendingInteractions.delete(message.id) }
+      }
       default:
         return {
           jsonrpc: '2.0',
@@ -1895,6 +1950,7 @@ async function handle(message) {
 }
 
 const rl = createInterface({ input: process.stdin, crlfDelay: Infinity })
+rl.on('close', () => { for (const pending of pendingInteractions.values()) pending.abort() })
 rl.on('line', async line => {
   const text = line.trim()
   if (!text) return

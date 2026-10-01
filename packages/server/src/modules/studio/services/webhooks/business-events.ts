@@ -7,8 +7,8 @@ export interface BusinessEvent {
   occurred_at: string
   profile: string
   source: string
-  subject: { session_id?: string; run_id?: string; room_id?: string; message_id?: string; workflow_id?: string; approval_id?: string; clarification_id?: string }
-  /** Internal source data. Never sent directly to App or HTTP subscribers. */
+  subject: { session_id?: string; run_id?: string; room_id?: string; message_id?: string; workflow_id?: string; approval_id?: string; clarification_id?: string; plan_id?: string }
+  /** Internal source data. Never sent directly to HTTP subscribers. */
   payload: Record<string, unknown>
   chat?: ChatRunWebhookEvent
 }

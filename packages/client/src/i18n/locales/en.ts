@@ -2134,7 +2134,7 @@ export default {
         deliveryId: 'Delivery ID',
       },
       events: {
-        messageCreated: 'User message created',
+        runUpdated: 'Run state updated', planUpdated: 'Task card progress updated', groupMessageCreated: 'Group message created', messageCreated: 'User message created',
         runQueued: 'Run queued',
         runStarted: 'Run started',
         toolStarted: 'Tool started',
@@ -3325,6 +3325,12 @@ export default {
 
   // Changelog
   changelog: {
+    new_0_7_23_2: 'Added Coding Agent clarification prompts and persistent group chat task cards; task plans now stay at the end of each turn (#3080, #3085)',
+    new_0_7_23_3: 'Session pins now sync across devices and appear above recent sessions (#3091)',
+    new_0_7_23_4: 'Pending group chat clarifications are restored after reconnecting, and Webhook subscriptions gain run status, task progress, group chat and workflow events (#3090, #3093)',
+    new_0_7_23_6: 'Fixed lost DeepSeek reasoning content when Coding Agents replay message history (#3078)',
+    new_0_7_23_7: 'Fixed Ekko runtime tools failing to load when MCP servers use HTTP transport aliases (#3081)',
+    new_0_7_23_8: 'Fixed empty skill metadata values reading the next field while preserving multiline descriptions and blank lines (#3083)',
     new_0_7_22_1: 'Added a standalone task-plan MCP so Hermes and Coding Agents can update chat task plans, with task context refreshed each turn (#3053)',
     new_0_7_22_2: 'Chat thinking indicators now show the corresponding Agent logo (#3052)',
     new_0_7_22_3: 'Fixed Ekko Chat history pairing between tool calls and results, and added support for MCP HTTP transport aliases (#3030, #3031)',

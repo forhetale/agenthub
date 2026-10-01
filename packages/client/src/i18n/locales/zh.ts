@@ -2172,7 +2172,7 @@ export default {
         deliveryId: 'Delivery ID',
       },
       events: {
-        messageCreated: '用户消息已创建',
+        runUpdated: '运行状态更新', planUpdated: '任务卡片进度更新', groupMessageCreated: '群聊消息已创建', messageCreated: '用户消息已创建',
         runQueued: '运行已排队',
         runStarted: '运行已开始',
         toolStarted: '工具已开始',
@@ -3373,6 +3373,12 @@ export default {
 
   // 更新日志
   changelog: {
+    new_0_7_23_2: '新增 Coding Agent 澄清交互与群聊任务卡，任务计划可保存恢复，并固定显示在每轮消息末尾 (#3080, #3085)',
+    new_0_7_23_3: '会话置顶改为跨设备同步，置顶会话优先显示 (#3091)',
+    new_0_7_23_4: '重新连接后恢复群聊中待回答的澄清提问，Webhook 订阅新增运行状态、任务进度、群聊和工作流事件 (#3090, #3093)',
+    new_0_7_23_6: '修复 Coding Agent 重放历史消息时丢失 DeepSeek 推理内容的问题 (#3078)',
+    new_0_7_23_7: '修复 Ekko 运行时未识别 MCP HTTP 传输别名，导致工具未加载的问题 (#3081)',
+    new_0_7_23_8: '修复技能元数据中的空值错误读取下一字段，同时保留多行描述与空行 (#3083)',
     new_0_7_22_1: '新增独立任务计划 MCP，让 Hermes 和 Coding Agent 也能更新聊天中的任务计划，并在每轮对话刷新任务上下文 (#3053)',
     new_0_7_22_2: '聊天思考状态改为显示对应 Agent 的图标 (#3052)',
     new_0_7_22_3: '修复 Ekko Chat 工具调用与结果的历史记录配对，并兼容 MCP HTTP 传输方式的别名 (#3030, #3031)',

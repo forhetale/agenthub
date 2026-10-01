@@ -986,7 +986,7 @@ describe('coding agent launch preparation', () => {
       const servers = agent === 'codex' ? runtime.mcp_servers : runtime.mcpServers
       expect(servers['user.tools']).toEqual(external)
       expect(servers['hermes-studio']).toBeUndefined()
-      for (const toolset of ['api', 'browser', 'use', 'plan']) {
+      for (const toolset of ['api', 'browser', 'use', 'interaction']) {
         expect(servers[`ekko-studio-${toolset}`]).toMatchObject({ env: { ELECTRON_RUN_AS_NODE: '1' } })
       }
       if (agent === 'codex') {
@@ -1001,11 +1001,11 @@ describe('coding agent launch preparation', () => {
         expect(launch.args.filter(arg => arg.includes('pi-mcp-adapter'))).toEqual([])
       }
     }
-    await upsertCodingAgentMcpServer(agent, 'ekko-studio-plan', { enabled: false }, { profile: 'default', provider: 'global' })
+    await upsertCodingAgentMcpServer(agent, 'ekko-studio-interaction', { enabled: false }, { profile: 'default', provider: 'global' })
     const disabled = await prepareCodingAgentLaunch(agent, input)
     const content = readFileSync(join(disabled.rootDir, sourceConfig), 'utf8')
-    if (agent === 'codex') expect((parseToml(content).mcp_servers as any)['ekko-studio-plan'].enabled).toBe(false)
-    else expect(JSON.parse(content).mcpServers['ekko-studio-plan']).toBeUndefined()
+    if (agent === 'codex') expect((parseToml(content).mcp_servers as any)['ekko-studio-interaction'].enabled).toBe(false)
+    else expect(JSON.parse(content).mcpServers['ekko-studio-interaction']).toBeUndefined()
     expect(readFileSync(join(source, sourceConfig), 'utf8')).toBe(original)
     expect(readFileSync(join(source, 'settings.json'), 'utf8')).toBe(settings)
     expect(readFileSync(join(source, 'auth.json'), 'utf8')).toBe('{"user":"login-fixture"}')
@@ -1071,8 +1071,10 @@ describe('coding agent launch preparation', () => {
         '--mcp-config', join(home, 'coding-agent', 'model', 'default', 'global', 'claude-code', 'mcp.json'),
         '--permission-mode',
         'auto',
+        '--allowedTools',
+        'mcp__ekko-studio-interaction__ekko_studio_update_plan',
       ],
-      shellCommand: `cd ${join(home, 'coding-agent', 'workspace', 'default', 'global')} && claude --append-system-prompt-file ${join(home, 'coding-agent', 'model', 'default', 'global', 'claude-code', 'hermes-rules.md')} --mcp-config ${join(home, 'coding-agent', 'model', 'default', 'global', 'claude-code', 'mcp.json')} --permission-mode auto`,
+      shellCommand: `cd ${join(home, 'coding-agent', 'workspace', 'default', 'global')} && claude --append-system-prompt-file ${join(home, 'coding-agent', 'model', 'default', 'global', 'claude-code', 'hermes-rules.md')} --mcp-config ${join(home, 'coding-agent', 'model', 'default', 'global', 'claude-code', 'mcp.json')} --permission-mode auto --allowedTools mcp__ekko-studio-interaction__ekko_studio_update_plan`,
     })
   })
 
@@ -1501,7 +1503,7 @@ describe('coding agent launch preparation', () => {
         HERMES_WEB_UI_MANAGED_MCP: '1',
       },
     })
-    for (const name of ['ekko-studio-api', 'ekko-studio-browser', 'ekko-studio-use', 'ekko-studio-plan']) {
+    for (const name of ['ekko-studio-api', 'ekko-studio-browser', 'ekko-studio-use', 'ekko-studio-interaction']) {
       expect(mcp.mcpServers[name].env.ELECTRON_RUN_AS_NODE).toBe('1')
     }
     expect(mcp.mcpServers['ekko-studio-browser']).toMatchObject({
@@ -1624,7 +1626,8 @@ describe('coding agent launch preparation', () => {
     expect(codexConfig).toContain('[mcp_servers.ekko-studio-api]')
     expect(codexConfig).toContain('[mcp_servers.ekko-studio-browser]')
     expect(codexConfig).toContain('[mcp_servers.ekko-studio-use]')
-    expect(codexConfig).toContain('[mcp_servers.ekko-studio-plan]')
+    expect(codexConfig).toContain('[mcp_servers.ekko-studio-interaction]')
+    expect(codexConfig).toMatch(/\[mcp_servers.ekko-studio-interaction\][\s\S]*?tool_timeout_sec = 360/)
     expect(codexConfig).toMatch(/\[mcp_servers.ekko-studio-use\][\s\S]*?tool_timeout_sec = 360/)
   })
 
@@ -1754,7 +1757,8 @@ describe('coding agent launch preparation', () => {
     expect(codexConfig).toContain('[mcp_servers.ekko-studio-browser]')
     expect(codexConfig).not.toContain('[mcp_servers.ekko-studio-devices]')
     expect(codexConfig).toContain('[mcp_servers.ekko-studio-use]')
-    expect(codexConfig).toContain('[mcp_servers.ekko-studio-plan]')
+    expect(codexConfig).toContain('[mcp_servers.ekko-studio-interaction]')
+    expect(codexConfig).toMatch(/\[mcp_servers.ekko-studio-interaction\][\s\S]*?tool_timeout_sec = 360/)
     expect(codexConfig).toMatch(/\[mcp_servers.ekko-studio-use\][\s\S]*?tool_timeout_sec = 360/)
   })
 
@@ -1929,9 +1933,12 @@ describe('coding agent launch preparation', () => {
       join(result.rootDir, 'hermes-rules.md'),
       '--permission-mode',
       'auto',
+      '--allowedTools',
+      'mcp__ekko-studio-interaction__ekko_studio_update_plan',
     ])
     const launcher = readFileSync(join(result.rootDir, 'launch.sh'), 'utf-8')
     expect(launcher).toContain('--permission-mode auto')
+    expect(launcher).toContain('--allowedTools mcp__ekko-studio-interaction__ekko_studio_update_plan')
     expect(launcher).not.toContain('--dangerously-skip-permissions')
     expect(result.rootDir).toBe(join(home, 'coding-agent', 'model', 'default', 'openrouter', 'claude-code'))
   })

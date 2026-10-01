@@ -23,6 +23,7 @@ const STUDIO_MANAGED_NAMES = new Set([
   'ekko-studio-browser',
   'ekko-studio-use',
   'ekko-studio-plan',
+  'ekko-studio-interaction',
 ])
 // Retired Studio toolsets are no longer injected, but stale copies are still
 // stripped whenever a persisted agent config is rewritten.
@@ -300,6 +301,7 @@ async function readServers(id: string, scope: CodingAgentConfigScope): Promise<{
     servers = parseTomlServers(file.content)
   }
 
+  servers.delete('ekko-studio-plan')
   const managed = getCodingAgentManagedMcpServerConfigs(id as CodingAgentId, scope.profile)
   for (const [name, config] of Object.entries(managed)) {
     servers.set(name, normalizeConfig(config))
