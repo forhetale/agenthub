@@ -1192,7 +1192,7 @@ function mapHermesSession(s: SessionSummary): Session {
     lastActiveAt: s.last_active != null ? Math.round(s.last_active * 1000) : undefined,
     isPinned: Boolean(s.is_pinned),
     isArchived: Boolean(s.is_archived),
-    pushEnabled: Boolean(s.push_enabled),
+    pushEnabled: s.push_enabled == null ? undefined : Boolean(s.push_enabled),
     workspace: s.workspace || null,
     categoryId: s.category_id ?? null,
   }
@@ -3741,7 +3741,7 @@ export const useChatStore = defineStore('chat', () => {
         reasoning_effort: isCodingAgentExecution && codingAgentMode === 'global'
           ? undefined
           : activeSession.value?.reasoningEffort || undefined,
-        push_enabled: Boolean(activeSession.value?.pushEnabled),
+        push_enabled: activeSession.value?.pushEnabled !== false,
       }
       if (shouldSendInitialSessionConfig && activeSession.value) {
         activeSession.value.messageCount = Math.max(activeSession.value.messageCount || 0, 1)
@@ -5433,7 +5433,7 @@ export const useChatStore = defineStore('chat', () => {
     const session = target || activeTarget
     if (!session) return false
 
-    const previousEnabled = Boolean(session.pushEnabled)
+    const previousEnabled = session.pushEnabled !== false
     if (target) target.pushEnabled = enabled
     if (activeTarget) activeTarget.pushEnabled = enabled
     if (session.isLocalOnly) return true

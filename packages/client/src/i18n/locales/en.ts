@@ -1837,7 +1837,7 @@ export default {
     showAllModels: 'Show all models',
     clearVisibleModels: 'Clear selection',
     generalTitle: 'General Models',
-    auxiliaryTitle: 'Auxiliary Models',
+    auxiliaryTitle: 'Auxiliary Models (Hermes)',
     modelRoutingTitle: 'Model Routing',
     modelRoutingSubtitle: 'Set the default models used by delegated agents and auxiliary tasks for this Profile.',
     modelRoutingLoadFailed: 'Failed to load model routing',
@@ -1852,7 +1852,7 @@ export default {
     delegationSaved: 'Subagent model saved',
     delegationSaveFailed: 'Failed to save subagent model',
     auxiliarySubtitle: 'Side-task model overrides for compression, vision, approvals, MCP, and background maintenance.',
-    combinationTitle: 'Model Ensembles',
+    combinationTitle: 'Model Ensembles (Hermes)',
     fallbackTitle: 'Fallback',
     fallbackSubtitle: 'If the main model fails, Hermes tries these in order without losing the conversation.',
     fallbackAdd: 'Add fallback',
@@ -3325,6 +3325,10 @@ export default {
 
   // Changelog
   changelog: {
+    new_0_7_24_2: 'New sessions now enable push notifications by default while keeping saved opt-outs (#3133)',
+    new_0_7_24_4: 'Scoped Coding Agents now use Studio profile context and compaction settings consistently, including native compact recovery (#3112, #3134)',
+    new_0_7_24_5: 'Improved group chat recovery and avatars after clearing history, and preserved generated titles for attachment messages (#3107, #3132)',
+    new_0_7_24_8: 'Fixed DSH manifests and Coding Agent integrations, including package identity, MCP namespaces, and Studio guidance gating (#3103, #3109, #3116)',
     new_0_7_23_2: 'Added Coding Agent clarification prompts and persistent group chat task cards; task plans now stay at the end of each turn (#3080, #3085)',
     new_0_7_23_3: 'Session pins now sync across devices and appear above recent sessions (#3091)',
     new_0_7_23_4: 'Pending group chat clarifications are restored after reconnecting, and Webhook subscriptions gain run status, task progress, group chat and workflow events (#3090, #3093)',

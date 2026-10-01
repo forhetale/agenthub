@@ -478,9 +478,9 @@ const inputSettingsOptions = computed<DropdownOption[]>(() => [
     key: 'pushEnabled',
     disabled: !chatStore.activeSessionId,
     icon: () => h('span', {
-      class: ['settings-check', { active: Boolean(chatStore.activeSession?.pushEnabled) }],
+      class: ['settings-check', { active: chatStore.activeSession?.pushEnabled !== false }],
       'aria-hidden': 'true',
-    }, chatStore.activeSession?.pushEnabled ? '✓' : ''),
+    }, chatStore.activeSession?.pushEnabled !== false ? '✓' : ''),
   },
 ])
 
@@ -544,7 +544,7 @@ async function handleInputSettingsSelect(key: string | number) {
   if (key === 'pushEnabled') {
     const sessionId = chatStore.activeSessionId
     if (!sessionId) return
-    const nextEnabled = !Boolean(chatStore.activeSession?.pushEnabled)
+    const nextEnabled = chatStore.activeSession?.pushEnabled === false
     if (nextEnabled) {
       try {
         const bark = await getBarkSettings()

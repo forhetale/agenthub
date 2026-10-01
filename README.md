@@ -28,7 +28,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/EKKOLearnAI/hermes-studio/releases/latest">Download Ekko Studio Desktop</a>
+  <a href="https://github.com/EKKOLearnAI/ekko-studio/releases/latest">Download Ekko Studio Desktop</a>
   ·
   <a href="https://ekkostudio.xyz/#/docs/getting-started">Documentation</a>
   ·
@@ -41,12 +41,12 @@
 
 <p align="center">
   <a href="https://www.npmjs.com/package/hermes-web-ui"><img src="https://img.shields.io/npm/v/hermes-web-ui?style=flat-square&color=blue" alt="npm version"/></a>
-  <a href="https://github.com/EKKOLearnAI/hermes-studio/blob/main/LICENSE"><img src="https://img.shields.io/npm/l/hermes-web-ui?style=flat-square" alt="license"/></a>
-  <a href="https://github.com/EKKOLearnAI/hermes-studio/stargazers"><img src="https://img.shields.io/github/stars/EKKOLearnAI/hermes-studio?style=flat-square" alt="stars"/></a>
+  <a href="https://github.com/EKKOLearnAI/ekko-studio/blob/main/LICENSE"><img src="https://img.shields.io/npm/l/hermes-web-ui?style=flat-square" alt="license"/></a>
+  <a href="https://github.com/EKKOLearnAI/ekko-studio/stargazers"><img src="https://img.shields.io/github/stars/EKKOLearnAI/ekko-studio?style=flat-square" alt="stars"/></a>
 </p>
 
 Ekko Studio was previously named Hermes Studio / Hermes Web UI. The GitHub
-repository remains `EKKOLearnAI/hermes-studio`, and the npm package and server CLI
+repository is now `EKKOLearnAI/ekko-studio`, and the npm package and server CLI
 remain `hermes-web-ui`; use these names in clone and installation commands.
 
 ## Screenshots
@@ -316,7 +316,7 @@ hermes-web-ui reset-default-login
 ### Desktop App (Recommended)
 
 Download the latest **Ekko Studio** desktop installer from
-[GitHub Releases](https://github.com/EKKOLearnAI/hermes-studio/releases/latest).
+[GitHub Releases](https://github.com/EKKOLearnAI/ekko-studio/releases/latest).
 
 Desktop builds are published for macOS, Windows, and Linux, with separate
 architecture assets where applicable. The desktop app bundles the Studio
@@ -347,7 +347,7 @@ surface focused on the current task.
 Desktop auto-updates read the latest feed from
 `https://download.ekkolearnai.com/latest` first. If that endpoint is
 unavailable, the updater falls back to
-`https://github.com/EKKOLearnAI/hermes-studio/releases/latest/download`.
+`https://github.com/EKKOLearnAI/ekko-studio/releases/latest/download`.
 
 ### npm
 
@@ -489,8 +489,8 @@ On startup the BFF server automatically:
 ## Development
 
 ```bash
-git clone https://github.com/EKKOLearnAI/hermes-studio.git
-cd hermes-studio
+git clone https://github.com/EKKOLearnAI/ekko-studio.git
+cd ekko-studio
 npm install
 npm run dev
 ```

@@ -151,7 +151,7 @@ describe('ChatInput focusComposer', () => {
 
   it('shows and toggles the per-session push setting', async () => {
     getBarkSettingsMock.mockResolvedValue({ pushReady: true })
-    const wrapper = mountForSession('session-push-setting')
+    const wrapper = mountForSession('session-push-setting', { pushEnabled: false })
     const option = wrapper.findAll('.dropdown-option').find(button => button.text() === 'chat.pushEnabled')
 
     expect(option).toBeTruthy()
@@ -164,7 +164,7 @@ describe('ChatInput focusComposer', () => {
   })
 
   it('does not enable push before Bark is configured', async () => {
-    const wrapper = mountForSession('session-push-unconfigured')
+    const wrapper = mountForSession('session-push-unconfigured', { pushEnabled: false })
     const option = wrapper.findAll('.dropdown-option').find(button => button.text() === 'chat.pushEnabled')
 
     await option!.trigger('click')
@@ -173,6 +173,19 @@ describe('ChatInput focusComposer', () => {
     expect(messageWarningMock).toHaveBeenCalledWith('chat.pushNotConfigured')
     expect(setSessionPushEnabledMock).not.toHaveBeenCalled()
     expect(useChatStore().activeSession?.pushEnabled).not.toBe(true)
+    wrapper.unmount()
+  })
+
+  it('treats a session without a saved preference as pushing by default', async () => {
+    const wrapper = mountForSession('session-push-default')
+    const option = wrapper.findAll('.dropdown-option').find(button => button.text() === 'chat.pushEnabled')
+
+    await option!.trigger('click')
+    await flushPromises()
+
+    expect(getBarkSettingsMock).not.toHaveBeenCalled()
+    expect(setSessionPushEnabledMock).toHaveBeenCalledWith('session-push-default', false)
+    expect(useChatStore().activeSession?.pushEnabled).toBe(false)
     wrapper.unmount()
   })
 
@@ -189,7 +202,7 @@ describe('ChatInput focusComposer', () => {
   })
   it('reuses the existing session switch when Bark is configured', async () => {
     getBarkSettingsMock.mockResolvedValueOnce({ pushReady: true })
-    const wrapper = mountForSession('session-bark-ready')
+    const wrapper = mountForSession('session-bark-ready', { pushEnabled: false })
     const option = wrapper.findAll('.dropdown-option').find(button => button.text() === 'chat.pushEnabled')
     await option!.trigger('click')
     await flushPromises()

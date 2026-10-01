@@ -1350,7 +1350,7 @@ export default {
     noProviders: 'Provider가 없습니다. 사용자 지정 Provider를 추가하여 시작하세요.',
     clearVisibleModels: '선택 지우기',
     generalTitle: '일반 모델',
-    combinationTitle: '모델 앙상블',
+    combinationTitle: '모델 앙상블 (Hermes)',
     fallbackTitle: '폴백',
     fallbackSubtitle: '기본 모델이 실패하면 Hermes가 대화를 잃지 않고 순서대로 시도합니다.',
     fallbackAdd: '폴백 추가',
@@ -1387,7 +1387,7 @@ export default {
     combinationNameInvalid: '이름에는 문자, 숫자, 밑줄, 하이픈, 점만 사용할 수 있습니다',
     combinationReferenceRequired: '참조 모델을 하나 이상 추가하세요',
     combinationAggregatorRequired: '집계 모델을 선택하세요',
-    auxiliaryTitle: '보조 모델',
+    auxiliaryTitle: '보조 모델 (Hermes)',
     modelRoutingTitle: '모델 역할 분담',
     modelRoutingSubtitle: '이 프로필의 위임 에이전트와 보조 작업에서 사용할 기본 모델을 설정합니다.',
     modelRoutingLoadFailed: '모델 역할 분담을 불러오지 못했습니다',
@@ -2913,6 +2913,10 @@ export default {
   },
 
   changelog: {
+    new_0_7_24_2: '새 세션에서 푸시 알림을 기본으로 켜고, 저장된 끄기 설정은 유지합니다 (#3133)',
+    new_0_7_24_4: 'Coding Agent가 Studio 프로필 컨텍스트와 압축 설정을 일관되게 사용하고 네이티브 압축 후 복구하도록 수정했습니다 (#3112, #3134)',
+    new_0_7_24_5: '기록을 지운 뒤의 그룹 채팅 복구와 아바타 표시를 개선하고, 첨부 메시지의 생성된 제목을 유지합니다 (#3107, #3132)',
+    new_0_7_24_8: '패키지 식별자, MCP 네임스페이스와 Studio 안내 제어를 포함한 DSH 매니페스트 및 Coding Agent 통합을 수정했습니다 (#3103, #3109, #3116)',
     new_0_7_23_2: 'Coding Agent 확인 질문과 저장 가능한 그룹 채팅 작업 카드를 추가하고 작업 계획을 각 대화 턴의 끝에 고정했습니다 (#3080, #3085)',
     new_0_7_23_3: '고정한 세션을 기기 간에 동기화하고 최근 세션 위에 표시합니다 (#3091)',
     new_0_7_23_4: '다시 연결하면 그룹 채팅에서 답변을 기다리는 확인 질문을 복원하고, Webhook 구독에 실행 상태·작업 진행·그룹 채팅·워크플로 이벤트를 추가했습니다 (#3090, #3093)',

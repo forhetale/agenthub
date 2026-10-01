@@ -2246,6 +2246,7 @@ export class WorkflowManager extends EventEmitter<WorkflowManagerEvents> {
       const snapshot = workflowRunSnapshotGraph(workflow.nodes, workflow.edges, executionPreflight.compiled)
       run = createWorkflowRun({
         workflow_id: workflow.id,
+        user_id: input.user?.id ?? null,
         profile,
         workspace: workflow.workspace,
         start_node_ids: executionPreflight.schedulerStartNodeIds,

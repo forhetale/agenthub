@@ -1883,7 +1883,7 @@ export default {
     showAllModels: '显示全部模型',
     clearVisibleModels: '取消全选',
     generalTitle: '通用模型',
-    auxiliaryTitle: '辅助模型',
+    auxiliaryTitle: '辅助模型（Hermes）',
     modelRoutingTitle: '模型分工',
     modelRoutingSubtitle: '为当前 Profile 配置子代理和辅助任务使用的默认模型。',
     modelRoutingLoadFailed: '加载模型分工失败',
@@ -1898,7 +1898,7 @@ export default {
     delegationSaved: '子代理模型已保存',
     delegationSaveFailed: '保存子代理模型失败',
     auxiliarySubtitle: '为压缩、视觉、审批、MCP 和后台维护等辅助任务单独指定模型。',
-    combinationTitle: '组合模型',
+    combinationTitle: '组合模型（Hermes）',
     fallbackTitle: '备用模型',
     fallbackSubtitle: '主模型失败时，Hermes 会按顺序尝试这些模型，且不丢失对话上下文。',
     fallbackAdd: '添加备用',
@@ -3373,6 +3373,10 @@ export default {
 
   // 更新日志
   changelog: {
+    new_0_7_24_2: '新会话默认开启推送，同时保留已保存的关闭设置 (#3133)',
+    new_0_7_24_4: 'Coding Agent 现在会统一使用 Studio 配置文件上下文和压缩设置，并支持原生压缩后的恢复 (#3112、#3134)',
+    new_0_7_24_5: '改进清空历史后的群聊恢复与头像显示，并保留附件消息的生成标题 (#3107、#3132)',
+    new_0_7_24_8: '修复 DSH 清单和 Coding Agent 集成，包括包标识、MCP 命名空间和 Studio 指引控制 (#3103、#3109、#3116)',
     new_0_7_23_2: '新增 Coding Agent 澄清交互与群聊任务卡，任务计划可保存恢复，并固定显示在每轮消息末尾 (#3080, #3085)',
     new_0_7_23_3: '会话置顶改为跨设备同步，置顶会话优先显示 (#3091)',
     new_0_7_23_4: '重新连接后恢复群聊中待回答的澄清提问，Webhook 订阅新增运行状态、任务进度、群聊和工作流事件 (#3090, #3093)',

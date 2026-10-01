@@ -98,7 +98,7 @@ export const SESSIONS_SCHEMA: Record<string, string> = {
   last_active: 'INTEGER NOT NULL',
   is_archived: 'INTEGER NOT NULL DEFAULT 0',
   is_pinned: 'INTEGER NOT NULL DEFAULT 0',
-  push_enabled: 'INTEGER NOT NULL DEFAULT 0',
+  push_enabled: 'INTEGER NOT NULL DEFAULT 1',
   workspace: 'TEXT',
   category_id: 'INTEGER',
   history_revision: 'INTEGER NOT NULL DEFAULT 0',
@@ -285,6 +285,7 @@ export const WORKFLOW_RUNS_TABLE = 'workflow_runs'
 export const WORKFLOW_RUNS_SCHEMA: Record<string, string> = {
   id: 'TEXT PRIMARY KEY',
   workflow_id: 'TEXT NOT NULL',
+  user_id: 'INTEGER',
   profile: "TEXT NOT NULL DEFAULT 'default'",
   workspace: 'TEXT',
   start_node_ids_json: "TEXT NOT NULL DEFAULT '[]'",

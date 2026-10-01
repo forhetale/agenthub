@@ -61,6 +61,8 @@ vi.mock('../../packages/server/src/modules/hermes/services/bridge/manager', () =
 }))
 
 vi.mock('../../packages/server/src/modules/studio/public/chat-agent-runtime', () => ({
+  getChatCodingAgentMcpServers: vi.fn(() => ({ 'ekko-studio-interaction': { command: 'studio' }, 'ekko-studio-use': { command: 'studio' } })),
+  resolveChatEkkoMcpServers: vi.fn(() => ({ 'ekko-studio-use': { command: 'studio' } })),
   createPrimaryAgentBridge: vi.fn(() => bridgeMock),
   getPrimaryAgentBridgeManager: vi.fn(() => ({
     start: startBridgeMock,
@@ -100,6 +102,7 @@ vi.mock('../../packages/server/src/modules/studio/repositories/session-store', (
 }))
 
 vi.mock('../../packages/server/src/modules/studio/public/profile-config', () => ({
+  readConfigYamlForProfile: vi.fn(async () => ({ mcp_servers: { 'ekko-studio-interaction': { command: 'studio' }, 'ekko-studio-use': { command: 'studio' } } })),
   getActiveProfileName: vi.fn(() => 'default'),
   getProfileDir: vi.fn(() => '/tmp/hermes-default'),
   listProfileNamesFromDisk: vi.fn(() => ['default', 'research']),
@@ -1078,4 +1081,38 @@ describe('ChatRunSocket MCP task plan lifecycle', () => {
     expect(emitted.filter(item => item.event === 'plan.updated').map(item => item.payload.execution_state)).toEqual(['running', interrupted ? 'interrupted' : 'ended'])
     expect(() => server.updateTaskPlan(contextId, 'default', input)).toThrow('expired')
   })
+})
+
+describe('MCP-aware run guidance', () => {
+  it.each(['cli', 'workflow', 'group_chat'])('omits Hermes task contexts when MCPs are disabled on %s', async source => {
+    const { readConfigYamlForProfile } = await import('../../packages/server/src/modules/studio/public/profile-config')
+    vi.mocked(readConfigYamlForProfile).mockResolvedValueOnce({ mcp_servers: { 'ekko-studio-interaction': { enabled: false } } })
+    ensureReadyMock.mockResolvedValue({ reachable: true, status: 'ready' })
+    handleBridgeRunMock.mockReset()
+    const { ChatRunSocket } = await import('../../packages/server/src/modules/studio/sockets/chat-run')
+    const { io, socket } = makeServerHarness()
+    const server = new ChatRunSocket(io as any)
+    await (server as any).handleRun(socket, { session_id: 'session-1', source, input: 'Plan this work' }, 'research')
+    const data = (handleBridgeRunMock.mock.calls as any)[0][2]
+    expect(data.task_plan_context_id).toBeUndefined()
+    expect(data.instructions).not.toContain('ekko_studio_')
+    expect(readConfigYamlForProfile).toHaveBeenLastCalledWith('research')
+  })
+
+  it.each(['coding_agent', 'workflow', 'group_chat'])('does not create Coding Agent interaction contexts without the MCP on %s', async source => {
+    const { getChatCodingAgentMcpServers } = await import('../../packages/server/src/modules/studio/public/chat-agent-runtime')
+    vi.mocked(getChatCodingAgentMcpServers).mockReturnValueOnce({})
+    handleCodingAgentRunMock.mockReset()
+    const { ChatRunSocket } = await import('../../packages/server/src/modules/studio/sockets/chat-run')
+    const { io, socket } = makeServerHarness()
+    const server = new ChatRunSocket(io as any)
+    await (server as any).handleRun(socket, { session_id: 'session-1', source, coding_agent_id: 'codex', input: 'Plan work' }, 'research')
+    const data = (handleCodingAgentRunMock.mock.calls as any)[0][2]
+    expect(data.task_plan_context_id).toBeUndefined()
+    expect(data.interaction_context_id).toBeUndefined()
+    expect(data.instructions || '').not.toContain('ekko_studio_')
+    expect(getChatCodingAgentMcpServers).toHaveBeenLastCalledWith('codex', 'research')
+  })
+
+
 })

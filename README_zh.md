@@ -21,7 +21,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/EKKOLearnAI/hermes-studio/releases/latest">下载 Ekko Studio 桌面版</a>
+  <a href="https://github.com/EKKOLearnAI/ekko-studio/releases/latest">下载 Ekko Studio 桌面版</a>
   ·
   <a href="https://ekkostudio.xyz/#/docs/getting-started">使用文档</a>
   ·
@@ -34,13 +34,13 @@
 
 <p align="center">
   <a href="https://www.npmjs.com/package/hermes-web-ui"><img src="https://img.shields.io/npm/v/hermes-web-ui?style=flat-square&color=blue" alt="npm 版本"/></a>
-  <a href="https://github.com/EKKOLearnAI/hermes-studio/blob/main/LICENSE"><img src="https://img.shields.io/npm/l/hermes-web-ui?style=flat-square" alt="许可证"/></a>
-  <a href="https://github.com/EKKOLearnAI/hermes-studio/stargazers"><img src="https://img.shields.io/github/stars/EKKOLearnAI/hermes-studio?style=flat-square" alt="Star"/></a>
+  <a href="https://github.com/EKKOLearnAI/ekko-studio/blob/main/LICENSE"><img src="https://img.shields.io/npm/l/hermes-web-ui?style=flat-square" alt="许可证"/></a>
+  <a href="https://github.com/EKKOLearnAI/ekko-studio/stargazers"><img src="https://img.shields.io/github/stars/EKKOLearnAI/ekko-studio?style=flat-square" alt="Star"/></a>
 </p>
 
-Ekko Studio 原名 Hermes Studio / Hermes Web UI。GitHub 仓库仍为
-`EKKOLearnAI/hermes-studio`，npm 包名和服务端 CLI 仍为 `hermes-web-ui`；
-克隆和安装时请继续使用这些名称。
+Ekko Studio 原名 Hermes Studio / Hermes Web UI。GitHub 仓库现为
+`EKKOLearnAI/ekko-studio`，npm 包名和服务端 CLI 仍为 `hermes-web-ui`；
+克隆和安装时请使用这些名称。
 
 ## 界面预览
 
@@ -306,7 +306,7 @@ hermes-web-ui reset-default-login
 
 ### 桌面应用（推荐）
 
-从 [GitHub Releases](https://github.com/EKKOLearnAI/hermes-studio/releases/latest)
+从 [GitHub Releases](https://github.com/EKKOLearnAI/ekko-studio/releases/latest)
 下载最新的 **Ekko Studio** 桌面安装包。
 
 桌面版会发布 macOS、Windows 和 Linux 构建；适用时会区分不同 CPU 架构。
@@ -334,7 +334,7 @@ hermes-web-ui reset-default-login
 
 桌面自动更新会优先读取 `https://download.ekkolearnai.com/latest`。
 如果该端点不可用，更新器会回退到
-`https://github.com/EKKOLearnAI/hermes-studio/releases/latest/download`。
+`https://github.com/EKKOLearnAI/ekko-studio/releases/latest/download`。
 
 ### npm 安装
 
@@ -473,8 +473,8 @@ Studio 启动后端聊天能力时，会优先使用包含 `run_agent.py` 的源
 ## 开发
 
 ```bash
-git clone https://github.com/EKKOLearnAI/hermes-studio.git
-cd hermes-studio
+git clone https://github.com/EKKOLearnAI/ekko-studio.git
+cd ekko-studio
 npm install
 npm run dev
 ```

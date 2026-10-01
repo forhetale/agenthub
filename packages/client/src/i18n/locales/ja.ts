@@ -1350,7 +1350,7 @@ export default {
     noProviders: 'プロバイダーがありません。カスタムプロバイダーを追加して始めましょう。',
     clearVisibleModels: '選択をクリア',
     generalTitle: '一般モデル',
-    combinationTitle: 'モデルアンサンブル',
+    combinationTitle: 'モデルアンサンブル（Hermes）',
     fallbackTitle: 'フォールバック',
     fallbackSubtitle: 'メインモデルが失敗した場合、Hermes は会話を失わずにこれらを順に試します。',
     fallbackAdd: 'フォールバックを追加',
@@ -1387,7 +1387,7 @@ export default {
     combinationNameInvalid: '名前に使用できるのは英字、数字、アンダースコア、ハイフン、ドットのみです',
     combinationReferenceRequired: '少なくとも 1 つの参照モデルを追加してください',
     combinationAggregatorRequired: '集約モデルを選択してください',
-    auxiliaryTitle: '補助モデル',
+    auxiliaryTitle: '補助モデル（Hermes）',
     modelRoutingTitle: 'モデルの役割分担',
     modelRoutingSubtitle: 'このプロファイルの委任エージェントと補助タスクで使うデフォルトモデルを設定します。',
     modelRoutingLoadFailed: 'モデルの役割分担を読み込めませんでした',
@@ -2913,6 +2913,10 @@ export default {
   },
 
   changelog: {
+    new_0_7_24_2: '新しいセッションでプッシュ通知を既定で有効にし、保存済みのオフ設定は維持 (#3133)',
+    new_0_7_24_4: 'Coding Agent が Studio のプロファイルコンテキストと圧縮設定を一貫して使用し、ネイティブ圧縮後の復旧にも対応 (#3112, #3134)',
+    new_0_7_24_5: '履歴消去後のグループチャット復旧とアバター表示を改善し、添付ファイル付きメッセージの生成タイトルを保持 (#3107, #3132)',
+    new_0_7_24_8: 'パッケージ識別子、MCP 名前空間、Studio ガイダンス制御を含む DSH マニフェストと Coding Agent 連携を修正 (#3103, #3109, #3116)',
     new_0_7_23_2: 'Coding Agent の確認質問と保存可能なグループチャットのタスクカードを追加し、タスク計画を各ターンの末尾に固定 (#3080, #3085)',
     new_0_7_23_3: 'セッションのピン留めをデバイス間で同期し、最近のセッションより上に表示 (#3091)',
     new_0_7_23_4: '再接続後にグループチャットの未回答の確認質問を復元し、Webhook 購読に実行状態・タスク進捗・グループチャット・ワークフローのイベントを追加 (#3090, #3093)',

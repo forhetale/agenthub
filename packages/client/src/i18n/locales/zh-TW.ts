@@ -1821,7 +1821,7 @@ export default {
     showAllModels: '顯示全部模型',
     clearVisibleModels: '取消全選',
     generalTitle: '通用模型',
-    combinationTitle: '組合模型',
+    combinationTitle: '組合模型（Hermes）',
     fallbackTitle: '備援模型',
     fallbackSubtitle: '主模型失敗時，Hermes 會依序嘗試這些模型，且不會遺失對話。',
     fallbackAdd: '新增備援',
@@ -1858,7 +1858,7 @@ export default {
     combinationNameInvalid: '名稱只能包含字母、數字、底線、短橫線和點',
     combinationReferenceRequired: '至少新增一個參考模型',
     combinationAggregatorRequired: '請選擇彙總模型',
-    auxiliaryTitle: '輔助模型',
+    auxiliaryTitle: '輔助模型（Hermes）',
     modelRoutingTitle: '模型分工',
     modelRoutingSubtitle: '為目前 Profile 設定子代理與輔助任務使用的預設模型。',
     modelRoutingLoadFailed: '載入模型分工失敗',
@@ -3276,6 +3276,10 @@ export default {
 
   // 更新日誌
   changelog: {
+    new_0_7_24_2: '新工作階段預設開啟推播，同時保留已儲存的關閉設定 (#3133)',
+    new_0_7_24_4: 'Coding Agent 現在會一致使用 Studio 設定檔內容與壓縮設定，並支援原生壓縮後復原 (#3112, #3134)',
+    new_0_7_24_5: '改善清除歷史後的群組聊天復原與頭像顯示，並保留附件訊息產生的標題 (#3107, #3132)',
+    new_0_7_24_8: '修正 DSH 資訊清單與 Coding Agent 整合，包括套件識別、MCP 命名空間及 Studio 指引控制 (#3103, #3109, #3116)',
     new_0_7_23_2: '新增 Coding Agent 釐清互動與群聊任務卡，任務計畫可儲存還原，並固定顯示於每輪訊息末尾 (#3080, #3085)',
     new_0_7_23_3: '置頂對話改為跨裝置同步，並優先顯示置頂對話 (#3091)',
     new_0_7_23_4: '重新連線後還原群聊中待回答的釐清提問，Webhook 訂閱新增執行狀態、任務進度、群聊與工作流程事件 (#3090, #3093)',
