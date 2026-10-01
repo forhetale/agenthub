@@ -62,7 +62,6 @@ const tagMappings = {
   'modules/hermes/routes/minimax-auth.ts': { name: 'MiniMax Auth', description: 'MiniMax OAuth' },
   'modules/hermes/routes/config.ts': { name: 'Config', description: 'Configuration management' },
   'modules/studio/routes/files.ts': { name: 'Studio Files', description: 'Studio profile file browser and editor' },
-  'modules/studio/routes/app-upload.ts': { name: 'Studio Files', description: 'Studio App chunked uploads' },
   'modules/studio/routes/download.ts': { name: 'Studio Files', description: 'Studio file download' },
   'modules/hermes/routes/mcp.ts': { name: 'MCP', description: 'MCP server and tool management' },
   'modules/hermes/routes/runtime-versions.ts': { name: 'Runtime Versions', description: 'Runtime and Web UI version management' },
@@ -91,9 +90,6 @@ const tagMappings = {
   'modules/studio/routes/update.ts': { name: 'Update', description: 'Studio self-update management' },
   'modules/studio/routes/upload.ts': { name: 'Studio Files', description: 'Studio runtime file upload' },
   'modules/studio/routes/auth.ts': { name: 'Auth', description: 'Authentication management' },
-  'modules/studio/routes/app-connections.ts': { name: 'App Connections', description: 'Mobile App authorization and connection management' },
-  'modules/studio/routes/app-relay.ts': { name: 'App Relay', description: 'Mobile App cloud relay route and connection management' },
-  'modules/studio/routes/devices.ts': { name: 'Devices', description: 'Device pairing and LAN peer operations' },
   'modules/studio/routes/theme.ts': { name: 'Theme', description: 'Per-user appearance settings and background image' },
   'modules/studio/routes/announcements.ts': { name: 'Announcements', description: 'Published Studio desktop announcements, newest first' },
   'modules/studio/routes/api-docs.ts': { name: 'API Docs', description: 'OpenAPI route catalog' },
@@ -1126,46 +1122,6 @@ openapi.paths['/api/studio/chat-run/runs'] = {
       '409': { description: 'Run requires approval or clarification' },
       '500': { description: 'Run failed' },
       '504': { description: 'Run timed out' },
-    },
-  },
-}
-
-openapi.paths['/api/studio/mobile-calendar/request'] = {
-  post: {
-    tags: ['Chat Run'],
-    summary: 'Request one-time mobile calendar or reminder access',
-    description: 'Requests a user-confirmed calendar/reminder operation from the App for the exact authenticated direct-chat session. Single-item delete requires exact id, title and occurrence time with fresh App confirmation. Background, workflow, group-chat, and delegated use are not supported.',
-    operationId: 'requestMobileCalendar',
-    security: [{ BearerAuth: [] }],
-    requestBody: {
-      required: true,
-      content: {
-        'application/json': {
-          schema: {
-            type: 'object',
-            required: ['session_id', 'capability', 'action', 'purpose'],
-            properties: {
-              session_id: { type: 'string' },
-              capability: { type: 'string', enum: ['calendar', 'reminder'] },
-              action: { type: 'string', enum: ['list', 'create', 'update', 'complete', 'delete'] },
-              purpose: { type: 'string', maxLength: 240 },
-              start_ms: { type: 'number' },
-              end_ms: { type: 'number' },
-              include_completed: { type: 'boolean' },
-              limit: { type: 'integer', minimum: 1, maximum: 100 },
-              item: { type: 'object', additionalProperties: true },
-              timeout_ms: { type: 'integer', minimum: 3000, maximum: 300000, default: 300000 },
-            },
-          },
-        },
-      },
-    },
-    responses: {
-      '200': { description: 'Confirmed App result, denial, or sanitized device error' },
-      '400': { $ref: '#/components/responses/BadRequest' },
-      '401': { $ref: '#/components/responses/Unauthorized' },
-      '404': { $ref: '#/components/responses/NotFound' },
-      '503': { description: 'Chat run service unavailable' },
     },
   },
 }
