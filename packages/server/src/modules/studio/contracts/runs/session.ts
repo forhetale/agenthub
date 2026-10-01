@@ -59,8 +59,6 @@ export interface SessionMessage {
 }
 
 export interface QueuedRun {
-  /** Internal admission check, never serialized or supplied by the client. */
-  authorize?: () => Promise<void>
   /** Captured at admission, independent of whichever socket drains the queue. */
   pushTargetId?: string
   queue_id: string
