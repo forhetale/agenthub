@@ -1,6 +1,6 @@
 import { businessEvents } from '../services/webhooks/business-events'
 import { ensureBusinessConsumers } from '../services/webhooks/business-consumers'
-import { authorizeSessionShare, authorizeShareFile } from '../services/session-shares/access'
+import { authorizeSessionShare } from '../services/session-shares/access'
 import { sessionShareService } from '../services/session-shares/service'
 import { getSessionTaskPlans } from '../services/task-plans'
 import {
@@ -818,11 +818,6 @@ async function resolveSessionWorkspacePath(
   if (!session) throw Object.assign(new Error('Session not found'), { code: 'not_found', status: 404 })
   if (denySessionAccess(ctx, session)) throw Object.assign(new Error('Forbidden'), { code: 'forbidden', status: 403, handled: true })
   const workspace = String(session.workspace || '').trim()
-  const shareAccess = ctx.state?.sessionShare
-  if (shareAccess && typeof relativePathValue === 'string' && isAbsoluteWorkspacePath(relativePathValue)) {
-    const fullPath = await authorizeShareFile(shareAccess, ctx.state.sessionShareFileAction || 'workspaceRead', relativePathValue)
-    return { session, workspace, relativePath: relativePathValue, fullPath }
-  }
   if (!workspace) throw Object.assign(new Error('Session workspace not found'), { code: 'workspace_not_found', status: 404 })
   const path = normalizeSessionWorkspaceRelativePath(workspace, session.profile, relativePathValue, options)
   const resolved = await resolveWorkspacePath(workspace, path, {
@@ -831,7 +826,8 @@ async function resolveSessionWorkspacePath(
     allowEmpty: options.allowEmpty,
     missingWorkspaceMessage: 'Session workspace not found',
   })
-  if (shareAccess) await authorizeShareFile(shareAccess, ctx.state.sessionShareFileAction || 'workspaceRead', resolved.fullPath)
+  const shareAccess = ctx.state?.sessionShare
+  if (shareAccess) await sessionShareService.authorizePath(shareAccess.token, shareAccess.actor, ctx.state.sessionShareFileAction || 'workspaceRead', resolved.fullPath)
   return { session, ...resolved }
 }
 
