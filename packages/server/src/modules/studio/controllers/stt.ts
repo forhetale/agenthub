@@ -1,6 +1,4 @@
 import type { Context } from 'koa'
-import { SessionShareError } from '../contracts/session-shares'
-import { authorizeSessionShare } from '../services/session-shares/access'
 import { mkdir, writeFile } from 'fs/promises'
 import { join } from 'path'
 import {
@@ -610,15 +608,7 @@ export async function transcribe(ctx: Context) {
 
   let provider: StoredSttProvider
   try {
-    if (ctx.state?.sessionShare) {
-      authorizeSessionShare(ctx.state.sessionShare, 'voice', ctx.params.id)
-      if (Object.keys(parsed.fields).length || parsed.files.length !== 1 || parsed.files[0].fieldName !== 'audio') {
-        throw new SessionShareError('share_invalid_request', 400)
-      }
-      provider = assertStoredSttProvider(getActiveSttProvider(requestedProfile(ctx)) || '')
-    } else {
-      provider = resolveStoredProvider(parsed.fields)
-    }
+    provider = resolveStoredProvider(parsed.fields)
   } catch (error) {
     if (handleSettingsError(ctx, error)) return
     throw error
@@ -675,10 +665,6 @@ export async function transcribe(ctx: Context) {
     }
 
     if (error instanceof SttNoSpeechDetectedError) {
-      if (ctx.state?.sessionShare) {
-        ctx.body = { text: '', provider, model: '', durationMs: 0 }
-        return
-      }
       ctx.status = 400
       ctx.body = { error: error.message, code: 'no_speech_detected' }
       return
