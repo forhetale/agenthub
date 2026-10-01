@@ -2,16 +2,34 @@ import { logger } from '../../public/logging'
 import { getSession, type HermesSessionRow } from '../../repositories/session-store'
 import { barkService } from './bark'
 import { normalizeNotificationLocale, type NotificationLocale } from './locale'
+import { notificationPreview } from './notification-preview'
 
 export type SessionPushEvent = 'run.completed' | 'approval.requested' | 'clarify.requested'
 export type SessionPushAgent = 'bridge' | 'ekko' | 'claude-code' | 'codex' | 'pi' | 'grok' | 'opencode' | 'dsh' | 'cursor'
 
+export interface SessionPushDetails {
+  /** Final reply text of a completed run; read only when the user enabled content previews. */
+  completionText?: () => string
+}
+
 interface SessionPushDependencies {
   readSession: (sessionId: string) => HermesSessionRow | null
   barkReady: (userId: number) => boolean
-  sendBark: (userId: number, content: string, shouldSend: () => boolean) => Promise<unknown>
+  sendBark: (userId: number, content: string, shouldSend: () => boolean, title?: string) => Promise<unknown>
   readLocale: (userId: number) => NotificationLocale
+  readContentPreview: (userId: number) => boolean
   now: () => number
+}
+
+/** Chats a user starts follow their Bark preference; sessions the system creates stay quiet. */
+export function defaultSessionPushEnabled(userId: unknown): boolean {
+  const id = Number(userId)
+  if (!Number.isSafeInteger(id) || id <= 0) return false
+  try {
+    return barkService.read(id)?.defaultSessionPush !== false
+  } catch {
+    return true
+  }
 }
 
 const SUPPORTED_EVENTS = new Set<SessionPushEvent>([
@@ -138,8 +156,9 @@ export class SessionPushNotifier {
     this.dependencies = {
       readSession: getSession,
       barkReady: userId => barkService.ready(userId),
-      sendBark: (userId, content, shouldSend) => barkService.send(userId, content, shouldSend),
+      sendBark: (userId, content, shouldSend, title) => barkService.send(userId, content, shouldSend, title),
       readLocale: userId => normalizeNotificationLocale(barkService.read(userId)?.locale),
+      readContentPreview: userId => barkService.read(userId)?.contentPreview === true,
       now: Date.now,
       ...dependencies,
     }
@@ -150,6 +169,7 @@ export class SessionPushNotifier {
     event: string,
     rawPayload: unknown,
     agent?: SessionPushAgent,
+    details: SessionPushDetails = {},
   ): Promise<number> {
     if (!isSessionPushEvent(event)) return 0
     const payload = rawPayload && typeof rawPayload === 'object'
@@ -171,7 +191,15 @@ export class SessionPushNotifier {
     this.recent.set(dedupeKey, now)
 
     try {
-      const content = formatSessionPushContent(agent || session.agent, event, this.dependencies.readLocale(userId))
+      let content = formatSessionPushContent(agent || session.agent, event, this.dependencies.readLocale(userId))
+      let title: string | undefined
+      if (this.dependencies.readContentPreview(userId)) {
+        // Only the session title and the run's final reply; approvals and questions keep status text.
+        const completion = event === 'run.completed'
+        const previewed = notificationPreview({ title: session.title, content: completion ? this.completionText(details) : '' }, completion)
+        if (previewed.title) title = previewed.title
+        if (previewed.body) content = previewed.body
+      }
       const latest = this.dependencies.readSession(sessionId)
       if (!latest || latest.push_enabled !== 1 || Number(latest.user_id) !== userId) {
         this.recent.delete(dedupeKey)
@@ -180,13 +208,21 @@ export class SessionPushNotifier {
       await this.dependencies.sendBark(userId, content, () => {
         const current = this.dependencies.readSession(sessionId)
         return current?.push_enabled === 1 && Number(current.user_id) === userId
-      })
+      }, title)
       return 1
     } catch {
       this.recent.delete(dedupeKey)
       // Transport errors can contain credentials; log identifiers only.
       logger.warn({ sessionId, userId, event }, '[session-push] failed to send Bark notification')
       return 0
+    }
+  }
+
+  private completionText(details: SessionPushDetails): string {
+    try {
+      return details.completionText?.() || ''
+    } catch {
+      return ''
     }
   }
 }
@@ -198,6 +234,7 @@ export async function notifySessionPush(
   event: string,
   payload: unknown,
   agent?: SessionPushAgent,
+  details?: SessionPushDetails,
 ): Promise<number> {
-  return singleton.notify(sessionId, event, payload, agent)
+  return singleton.notify(sessionId, event, payload, agent, details)
 }

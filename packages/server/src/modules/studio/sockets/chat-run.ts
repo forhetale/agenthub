@@ -7,6 +7,7 @@ import { TaskPlanRuns, taskPlanRunInstruction } from '../services/task-plan-runs
 import { runMcpCredentials } from '../services/auth/run-mcp-credentials'
 import { saveTaskPlan } from '../repositories/task-plan-store'
 import { getSessionTaskPlans } from '../services/task-plans'
+import { defaultSessionPushEnabled } from '../public/notifications'
 /**
  * ChatRunSocket — Socket.IO namespace /chat-run.
  *
@@ -479,6 +480,10 @@ export class ChatRunSocket {
       }
       if (data.category_id !== undefined) {
         data.category_id = resolveSessionCategoryId(data.category_id)
+      }
+      // A chat the user starts without choosing follows their Bark default; system-created sessions stay quiet.
+      if (data.push_enabled === undefined && data.session_id && !getSession(data.session_id)) {
+        data.push_enabled = defaultSessionPushEnabled((socket.data.user as AuthenticatedUser | undefined)?.id)
       }
       if (data.session_id) {
         const state = getOrCreateSession(this.sessionMap, data.session_id)

@@ -15754,6 +15754,21 @@
                       "default": false,
                       "description": "Enabling private targets or HTTP requires super_admin."
                     },
+                    "locale": {
+                      "type": "string",
+                      "default": "zh",
+                      "description": "Language of the notification text."
+                    },
+                    "defaultSessionPush": {
+                      "type": "boolean",
+                      "default": true,
+                      "description": "Chats this user starts push by default; each chat can still opt out."
+                    },
+                    "contentPreview": {
+                      "type": "boolean",
+                      "default": false,
+                      "description": "Opt-in: notifications show the chat title and, for completed runs, a short summary of the final reply."
+                    },
                     "hasKey": {
                       "type": "boolean"
                     },
@@ -15947,6 +15962,21 @@
                     "default": false,
                     "description": "Enabling private targets or HTTP requires super_admin."
                   },
+                  "locale": {
+                    "type": "string",
+                    "default": "zh",
+                    "description": "Language of the notification text."
+                  },
+                  "defaultSessionPush": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Chats this user starts push by default; each chat can still opt out."
+                  },
+                  "contentPreview": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Opt-in: notifications show the chat title and, for completed runs, a short summary of the final reply."
+                  },
                   "deviceKey": {
                     "type": "string",
                     "writeOnly": true,
@@ -15988,6 +16018,21 @@
                       "type": "boolean",
                       "default": false,
                       "description": "Enabling private targets or HTTP requires super_admin."
+                    },
+                    "locale": {
+                      "type": "string",
+                      "default": "zh",
+                      "description": "Language of the notification text."
+                    },
+                    "defaultSessionPush": {
+                      "type": "boolean",
+                      "default": true,
+                      "description": "Chats this user starts push by default; each chat can still opt out."
+                    },
+                    "contentPreview": {
+                      "type": "boolean",
+                      "default": false,
+                      "description": "Opt-in: notifications show the chat title and, for completed runs, a short summary of the final reply."
                     },
                     "hasKey": {
                       "type": "boolean"
@@ -16182,6 +16227,21 @@
                       "type": "boolean",
                       "default": false,
                       "description": "Enabling private targets or HTTP requires super_admin."
+                    },
+                    "locale": {
+                      "type": "string",
+                      "default": "zh",
+                      "description": "Language of the notification text."
+                    },
+                    "defaultSessionPush": {
+                      "type": "boolean",
+                      "default": true,
+                      "description": "Chats this user starts push by default; each chat can still opt out."
+                    },
+                    "contentPreview": {
+                      "type": "boolean",
+                      "default": false,
+                      "description": "Opt-in: notifications show the chat title and, for completed runs, a short summary of the final reply."
                     },
                     "hasKey": {
                       "type": "boolean"

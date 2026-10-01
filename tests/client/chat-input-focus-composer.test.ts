@@ -179,6 +179,8 @@ describe('ChatInput focusComposer', () => {
   it('treats a session without a saved preference as pushing by default', async () => {
     const wrapper = mountForSession('session-push-default')
     const option = wrapper.findAll('.dropdown-option').find(button => button.text() === 'chat.pushEnabled')
+    await flushPromises()
+    getBarkSettingsMock.mockClear()
 
     await option!.trigger('click')
     await flushPromises()
@@ -192,6 +194,8 @@ describe('ChatInput focusComposer', () => {
   it('allows push to be disabled without checking the Bark configuration', async () => {
     const wrapper = mountForSession('session-push-disable', { pushEnabled: true })
     const option = wrapper.findAll('.dropdown-option').find(button => button.text() === 'chat.pushEnabled')
+    await flushPromises()
+    getBarkSettingsMock.mockClear()
 
     await option!.trigger('click')
     await flushPromises()
@@ -200,9 +204,24 @@ describe('ChatInput focusComposer', () => {
     expect(setSessionPushEnabledMock).toHaveBeenCalledWith('session-push-disable', false)
     wrapper.unmount()
   })
+  it('follows the user default for chats without a saved choice', async () => {
+    getBarkSettingsMock.mockResolvedValue({ pushReady: true, defaultSessionPush: false })
+    const wrapper = mountForSession('session-default-off')
+    await flushPromises()
+    const option = wrapper.findAll('.dropdown-option').find(button => button.text() === 'chat.pushEnabled')
+
+    await option!.trigger('click')
+    await flushPromises()
+
+    expect(setSessionPushEnabledMock).toHaveBeenCalledWith('session-default-off', true)
+    expect(useChatStore().activeSession?.pushEnabled).toBe(true)
+    wrapper.unmount()
+  })
+
   it('reuses the existing session switch when Bark is configured', async () => {
-    getBarkSettingsMock.mockResolvedValueOnce({ pushReady: true })
     const wrapper = mountForSession('session-bark-ready', { pushEnabled: false })
+    await flushPromises()
+    getBarkSettingsMock.mockResolvedValueOnce({ pushReady: true })
     const option = wrapper.findAll('.dropdown-option').find(button => button.text() === 'chat.pushEnabled')
     await option!.trigger('click')
     await flushPromises()

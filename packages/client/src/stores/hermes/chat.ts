@@ -1,5 +1,6 @@
 import { mergeTaskPlanMessages, type TaskPlanSnapshot } from '@/utils/task-plan'
 import { migrateLegacySessionPins } from '@/utils/legacy-session-pins'
+import { getBarkSettings } from '@/api/studio/bark'
 import { startRunViaSocket, resumeSession, registerSessionHandlers, unregisterSessionHandlers, getChatRunSocket, respondToolApproval, onPeerUserMessage, onSessionCommand, onSessionTitleUpdated, onSessionWorkspaceUpdated, onSessionSettingsUpdated, respondClarify, type ChatRunTransport, type RunEvent, type ResumeSessionPayload, type StartRunRequest, type ContentBlock as ContentBlockImport } from '@/api/studio/chat'
 import { archiveSession as archiveSessionApi, deleteSession as deleteSessionApi, fetchSessionMessagesPage, fetchSessions, fetchWorkspaceRunChangeFile, setSessionModel, setSessionPushEnabled as persistSessionPushEnabled, setSessionReasoningEffort as persistSessionReasoningEffort, type HermesMessage, type SessionSummary, type WorkspaceRunChangeFileDetail, type WorkspaceRunChangeSummary } from '@/api/studio/sessions'
 import { getActiveProfileName } from '@/api/client'
@@ -1500,6 +1501,19 @@ export const useChatStore = defineStore('chat', () => {
   const reasoningEffortWriteChains = new Map<string, Promise<boolean>>()
   const reasoningEffortWriteTargets = new Map<string, string | undefined>()
   const reasoningEffortConfirmedValues = new Map<string, string | undefined>()
+  // Chats without a saved push choice follow the user's Bark default (on unless turned off).
+  const defaultSessionPush = ref(true)
+  let defaultSessionPushLoad: Promise<void> | null = null
+  function loadDefaultSessionPush(force = false): Promise<void> {
+    if (defaultSessionPushLoad && !force) return defaultSessionPushLoad
+    defaultSessionPushLoad = getBarkSettings()
+      .then(settings => { defaultSessionPush.value = settings.defaultSessionPush !== false })
+      .catch(() => { defaultSessionPushLoad = null })
+    return defaultSessionPushLoad
+  }
+  function setDefaultSessionPush(enabled: boolean) {
+    defaultSessionPush.value = enabled
+  }
   const pushEnabledWriteChains = new Map<string, Promise<boolean>>()
   const pushEnabledWriteTargets = new Map<string, boolean>()
   const pushEnabledConfirmedValues = new Map<string, boolean>()
@@ -3793,7 +3807,8 @@ export const useChatStore = defineStore('chat', () => {
         reasoning_effort: isCodingAgentExecution && codingAgentMode === 'global'
           ? undefined
           : activeSession.value?.reasoningEffort || undefined,
-        push_enabled: activeSession.value?.pushEnabled !== false,
+        // Omitted until the user picks a value, so the server applies their default to new chats.
+        push_enabled: activeSession.value?.pushEnabled,
       }
       if (shouldSendInitialSessionConfig && activeSession.value) {
         activeSession.value.messageCount = Math.max(activeSession.value.messageCount || 0, 1)
@@ -5472,7 +5487,7 @@ export const useChatStore = defineStore('chat', () => {
     const session = target || activeTarget
     if (!session) return false
 
-    const previousEnabled = session.pushEnabled !== false
+    const previousEnabled = session.pushEnabled ?? defaultSessionPush.value
     if (target) target.pushEnabled = enabled
     if (activeTarget) activeTarget.pushEnabled = enabled
     if (session.isLocalOnly) return true
@@ -5587,6 +5602,9 @@ export const useChatStore = defineStore('chat', () => {
     loadWorkspaceRunChangeFile,
     setSessionReasoningEffort,
     setSessionPushEnabled,
+    defaultSessionPush,
+    loadDefaultSessionPush,
+    setDefaultSessionPush,
     setRuntimeMode,
   }
 })

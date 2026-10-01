@@ -1261,6 +1261,9 @@ const barkConfigProperties = {
   sound: { type: 'string', maxLength: 80 },
   studioUrl: { type: 'string', description: 'Optional phone-reachable Studio HTTP(S) address; empty string omits the link.' },
   allowPrivateNetwork: { type: 'boolean', default: false, description: 'Enabling private targets or HTTP requires super_admin.' },
+  locale: { type: 'string', default: 'zh', description: 'Language of the notification text.' },
+  defaultSessionPush: { type: 'boolean', default: true, description: 'Chats this user starts push by default; each chat can still opt out.' },
+  contentPreview: { type: 'boolean', default: false, description: 'Opt-in: notifications show the chat title and, for completed runs, a short summary of the final reply.' },
 }
 const barkPublicSchema = { type: 'object', properties: {
   ...barkConfigProperties, hasKey: { type: 'boolean' }, configured: { type: 'boolean' }, pushReady: { type: 'boolean' },

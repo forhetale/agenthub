@@ -23,13 +23,16 @@ describe('session push setting store', () => {
     vi.resetModules()
   })
 
-  it('defaults new sessions to pushed and persists explicit changes', async () => {
+  // Chats a user starts pass their Bark default explicitly; system-created sessions stay quiet.
+  it('keeps sessions quiet unless their creator enabled push, and persists explicit changes', async () => {
     const { createSession, getSession, setSessionPushEnabled } = await import(
       '../../packages/server/src/modules/studio/repositories/session-store'
     )
 
     createSession({ id: 'session-1' })
-    expect(getSession('session-1')?.push_enabled).toBe(1)
+    expect(getSession('session-1')?.push_enabled).toBe(0)
+    createSession({ id: 'user-chat', push_enabled: true })
+    expect(getSession('user-chat')?.push_enabled).toBe(1)
 
     expect(setSessionPushEnabled('session-1', true)).toBe(true)
     expect(getSession('session-1')?.push_enabled).toBe(1)
@@ -48,7 +51,9 @@ describe('session push setting store', () => {
     expect(reloaded.getSession('disabled-false')?.push_enabled).toBe(0)
     expect(reloaded.getSession('disabled-zero')?.push_enabled).toBe(0)
     reloaded.createSession({ id: 'new-after-upgrade' })
-    expect(reloaded.getSession('new-after-upgrade')?.push_enabled).toBe(1)
+    expect(reloaded.getSession('new-after-upgrade')?.push_enabled).toBe(0)
+    reloaded.createSession({ id: 'enabled-after-upgrade', push_enabled: 1 })
+    expect(reloaded.getSession('enabled-after-upgrade')?.push_enabled).toBe(1)
   })
 
 })

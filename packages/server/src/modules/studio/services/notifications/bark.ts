@@ -16,15 +16,25 @@ export interface BarkConfig {
   allowPrivateNetwork: boolean
   /** Language of the notification text; see NOTIFICATION_LOCALES in session-push. */
   locale: string
+  /** Whether chats this user starts push by default; each chat can still opt out. */
+  defaultSessionPush: boolean
+  /** Opt-in: show the session title and a short reply summary instead of status-only text. */
+  contentPreview: boolean
 }
 export class BarkError extends Error {
   constructor(public readonly code: string, public readonly status = 400) { super(code) }
 }
 interface SendResult { ok: boolean; code: string; at: string }
-export type BarkTransport = (config: BarkConfig, content: string) => Promise<void>
+export type BarkTransport = (config: BarkConfig, content: string, title?: string) => Promise<void>
 const DEFAULT_SERVER = 'https://api.day.app'
 const DEFAULT_LOCALE = 'zh'
+const DEFAULT_TITLE = 'TATin Studio'
+// Configs saved before these switches existed keep the defaults.
+const PREFERENCE_DEFAULTS = { defaultSessionPush: true, contentPreview: false }
 
+function flag(value: unknown, fallback: boolean): boolean {
+  return typeof value === 'boolean' ? value : fallback
+}
 function shortText(value: unknown, max: number): string {
   if (value === undefined) return ''
   if (typeof value !== 'string' || value.length > max) throw new BarkError('invalid_config')
@@ -50,10 +60,14 @@ export function normalizeBarkConfig(input: Record<string, unknown>, previous?: B
   if (sound && !/^[a-zA-Z0-9_.-]+$/.test(sound)) throw new BarkError('invalid_config')
   const locale = shortText(input.locale, 16) || previous?.locale || 'zh'
   if (!NOTIFICATION_LOCALES.includes(locale as typeof NOTIFICATION_LOCALES[number])) throw new BarkError('invalid_config')
-  return { serverUrl: url.toString().replace(/\/+$/, ''), deviceKey, group: shortText(input.group, 120) || 'TATin Studio', sound, studioUrl, allowPrivateNetwork, locale }
+  return {
+    serverUrl: url.toString().replace(/\/+$/, ''), deviceKey, group: shortText(input.group, 120) || 'TATin Studio', sound, studioUrl, allowPrivateNetwork, locale,
+    defaultSessionPush: flag(input.defaultSessionPush, previous?.defaultSessionPush ?? PREFERENCE_DEFAULTS.defaultSessionPush),
+    contentPreview: flag(input.contentPreview, previous?.contentPreview ?? PREFERENCE_DEFAULTS.contentPreview),
+  }
 }
 
-export const postBark: BarkTransport = async (settings, content) => {
+export const postBark: BarkTransport = async (settings, content, title) => {
   let target
   let dnsTimer: ReturnType<typeof setTimeout> | undefined
   try {
@@ -64,7 +78,7 @@ export const postBark: BarkTransport = async (settings, content) => {
   } catch { throw new BarkError('unsafe_or_unreachable_server', 502) }
   finally { clearTimeout(dnsTimer) }
   const url = new URL(target.url)
-  const body = JSON.stringify({ device_key: settings.deviceKey, title: 'TATin Studio', body: content,
+  const body = JSON.stringify({ device_key: settings.deviceKey, title: title || DEFAULT_TITLE, body: content,
     group: settings.group, ...(settings.sound ? { sound: settings.sound } : {}),
     ...(settings.studioUrl ? { url: settings.studioUrl } : {}),
   })
@@ -125,13 +139,13 @@ export class BarkService {
       const decipher = createDecipheriv('aes-256-gcm', this.key(), Buffer.from(stored.iv, 'base64'))
       decipher.setAAD(Buffer.from(`bark:${userId}:v1`))
       decipher.setAuthTag(Buffer.from(stored.tag, 'base64'))
-      return JSON.parse(Buffer.concat([decipher.update(Buffer.from(stored.data, 'base64')), decipher.final()]).toString('utf8'))
+      return { ...PREFERENCE_DEFAULTS, ...JSON.parse(Buffer.concat([decipher.update(Buffer.from(stored.data, 'base64')), decipher.final()]).toString('utf8')) }
     } catch { throw new BarkError('storage_unavailable', 500) }
   }
   ready(userId: number): boolean { return Boolean(this.read(userId)) }
   get(userId: number) {
     const stored = this.read(userId)
-    const { deviceKey: _secret, ...safe } = stored || { serverUrl: DEFAULT_SERVER, group: 'TATin Studio', sound: '', studioUrl: '', allowPrivateNetwork: false, locale: DEFAULT_LOCALE, deviceKey: '' }
+    const { deviceKey: _secret, ...safe } = stored || { serverUrl: DEFAULT_SERVER, group: 'TATin Studio', sound: '', studioUrl: '', allowPrivateNetwork: false, locale: DEFAULT_LOCALE, deviceKey: '', ...PREFERENCE_DEFAULTS }
     return { ...safe, hasKey: Boolean(stored), configured: Boolean(stored), pushReady: Boolean(stored), lastResult: this.results.get(userId) || null }
   }
   save(userId: number, input: Record<string, unknown>) {
@@ -155,7 +169,7 @@ export class BarkService {
     this.results.delete(userId)
     return this.get(userId)
   }
-  async send(userId: number, content: string, shouldSend: () => boolean = () => true) {
+  async send(userId: number, content: string, shouldSend: () => boolean = () => true, title?: string) {
     if (!shouldSend()) throw new BarkError('config_changed', 409)
     const settings = this.read(userId)
     if (!settings) throw new BarkError('not_configured', 409)
@@ -165,13 +179,13 @@ export class BarkService {
     this.attempts.set(userId, [...recent, now])
     try {
       // Retry only explicit server overload; ambiguous network failures are not retried.
-      try { await this.transport(settings, content) }
+      try { await this.transport(settings, content, title) }
       catch (error) {
         if (!(error instanceof BarkError) || !['http_429', 'http_503'].includes(error.code)) throw error
         await new Promise(resolve => setTimeout(resolve, 1000))
         const current = this.read(userId)
         if (!shouldSend() || !current || JSON.stringify(current) !== JSON.stringify(settings)) throw new BarkError('config_changed', 409)
-        await this.transport(current, content)
+        await this.transport(current, content, title)
       }
       this.results.set(userId, { ok: true, code: 'accepted', at: new Date().toISOString() })
       return { ok: true, code: 'accepted' }

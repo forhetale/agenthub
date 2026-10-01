@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const doubles = vi.hoisted(() => ({ notifySessionPush: vi.fn(), enqueue: vi.fn() }))
-vi.mock('../../packages/server/src/modules/studio/public/notifications', () => ({ notifySessionPush: doubles.notifySessionPush }))
+const doubles = vi.hoisted(() => ({ notifySessionPush: vi.fn(), enqueue: vi.fn(), chatCompletionText: vi.fn(() => 'final reply') }))
+vi.mock('../../packages/server/src/modules/studio/public/notifications', () => ({
+  notifySessionPush: doubles.notifySessionPush,
+  chatCompletionText: doubles.chatCompletionText,
+}))
 vi.mock('../../packages/server/src/modules/studio/services/webhooks/dispatcher', () => ({
   getChatWebhookDispatcher: () => ({ enqueue: doubles.enqueue }),
 }))
@@ -43,7 +46,14 @@ describe('business event consumers', () => {
     const { businessEvents, ensureBusinessConsumers } = await load()
     ensureBusinessConsumers()
     expect(publish(businessEvents, type)).toBe(true)
-    expect(doubles.notifySessionPush).toHaveBeenCalledWith('s1', event, { preview: 'done' }, 'codex')
+    const details = event === 'run.completed' ? { completionText: expect.any(Function) } : {}
+    expect(doubles.notifySessionPush).toHaveBeenCalledWith('s1', event, { preview: 'done' }, 'codex', details)
+    // The reply is read lazily, only when a user opted into previews.
+    expect(doubles.chatCompletionText).not.toHaveBeenCalled()
+    if (event === 'run.completed') {
+      expect(doubles.notifySessionPush.mock.calls[0][4].completionText()).toBe('final reply')
+      expect(doubles.chatCompletionText).toHaveBeenCalledWith(expect.objectContaining({ type }))
+    }
   })
 
   it('does not push other chat events to Bark', async () => {

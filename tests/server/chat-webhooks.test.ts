@@ -284,6 +284,7 @@ describe('chat run webhooks', () => {
       'run.completed',
       { run_id: 'run-1', output: 'done' },
       'bridge',
+      { completionText: expect.any(Function) },
     )
     expect(notifySessionPush).toHaveBeenNthCalledWith(
       2,
@@ -291,6 +292,7 @@ describe('chat run webhooks', () => {
       'approval.requested',
       { approval_id: 'approval-1', command: 'npm test' },
       'bridge',
+      {},
     )
     expect(notifySessionPush).toHaveBeenNthCalledWith(
       3,
@@ -298,6 +300,7 @@ describe('chat run webhooks', () => {
       'clarify.requested',
       { clarify_id: 'clarify-1', question: 'Continue?' },
       'bridge',
+      {},
     )
     enqueue.mockRestore()
   })

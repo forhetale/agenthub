@@ -87,6 +87,13 @@ vi.mock('../../packages/server/src/modules/studio/public/runs/prompt', () => ({
   getSystemPrompt: vi.fn(() => 'system prompt'),
 }))
 
+const notificationMocks = vi.hoisted(() => ({
+  defaultSessionPushEnabled: vi.fn(() => true),
+  notifySessionPush: vi.fn(),
+  chatCompletionText: vi.fn(() => ''),
+}))
+vi.mock('../../packages/server/src/modules/studio/public/notifications', () => notificationMocks)
+
 vi.mock('../../packages/server/src/modules/studio/repositories/session-store', () => ({
   clearSessionMessages: sessionStoreMocks.clearSessionMessages,
   getSession: vi.fn(() => ({ id: 'session-1', profile: 'default', source: 'cli' })),
@@ -399,6 +406,47 @@ describe('ChatRunSocket queued bridge runs', () => {
         phase: 'waiting_for_tool_batch', guarantee: 'strict', requested_at: 123,
       },
     }))
+  })
+
+  it.each([
+    [true, true],
+    [false, false],
+  ])('applies the user push default %s to a chat that does not exist yet', async (userDefault, expected) => {
+    const { getSession } = await import('../../packages/server/src/modules/studio/repositories/session-store')
+    const original = vi.mocked(getSession).getMockImplementation()!
+    vi.mocked(getSession).mockImplementation(((id: string) => id === 'new-chat' ? null : original(id)) as any)
+    notificationMocks.defaultSessionPushEnabled.mockClear().mockReturnValue(userDefault)
+    try {
+      const { ChatRunSocket } = await import('../../packages/server/src/modules/studio/sockets/chat-run')
+      const { handlers, io, socket } = makeServerHarness()
+      socket.data.user = { id: 42, username: 'owner', role: 'user' }
+      const server = new ChatRunSocket(io as any)
+      ;(server as any).onConnection(socket)
+      sessionCommandMocks.parseSessionCommand.mockReturnValueOnce(null)
+
+      await handlers.get('run')?.({ session_id: 'new-chat', input: 'hello', source: 'cli', profile: 'default' })
+
+      await vi.waitFor(() => expect(handleBridgeRunMock).toHaveBeenCalled())
+      expect(handleBridgeRunMock.mock.calls.at(-1)![2]).toEqual(expect.objectContaining({ session_id: 'new-chat', push_enabled: expected }))
+      expect(notificationMocks.defaultSessionPushEnabled).toHaveBeenCalledWith(42)
+    } finally {
+      vi.mocked(getSession).mockImplementation(original)
+    }
+  })
+
+  it('keeps an explicit push choice and never applies the default to existing chats', async () => {
+    notificationMocks.defaultSessionPushEnabled.mockClear()
+    const { ChatRunSocket } = await import('../../packages/server/src/modules/studio/sockets/chat-run')
+    const { handlers, io, socket } = makeServerHarness()
+    const server = new ChatRunSocket(io as any)
+    ;(server as any).onConnection(socket)
+    sessionCommandMocks.parseSessionCommand.mockReturnValueOnce(null)
+
+    await handlers.get('run')?.({ session_id: 'session-1', input: 'hello again', source: 'cli', profile: 'default' })
+
+    await vi.waitFor(() => expect(handleBridgeRunMock).toHaveBeenCalled())
+    expect(handleBridgeRunMock.mock.calls.at(-1)![2].push_enabled).toBeUndefined()
+    expect(notificationMocks.defaultSessionPushEnabled).not.toHaveBeenCalled()
   })
 
   it('dispatches unknown slash bridge input through the normal bridge run path', async () => {

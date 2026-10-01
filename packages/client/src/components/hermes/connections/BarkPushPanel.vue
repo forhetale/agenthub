@@ -5,18 +5,22 @@ import { useI18n } from 'vue-i18n'
 import { languageOptions } from '@/i18n/language-options'
 import { getBarkSettings, saveBarkSettings, clearBarkSettings, testBarkSettings, type BarkSettings } from '@/api/studio/bark'
 import { isStoredSuperAdmin } from '@/api/client'
+import { useChatStore } from '@/stores/hermes/chat'
 const { t } = useI18n()
 const message = useMessage()
 const dialog = useDialog()
+const chatStore = useChatStore()
 const busy = ref(false)
 const loaded = ref(false)
 const settings = ref<BarkSettings | null>(null)
 const pushUrl = ref('')
-const form = reactive({ serverUrl: 'https://api.day.app', deviceKey: '', group: 'TATin Studio', sound: '', studioUrl: '', allowPrivateNetwork: false, locale: 'zh' })
+const form = reactive({ serverUrl: 'https://api.day.app', deviceKey: '', group: 'TATin Studio', sound: '', studioUrl: '', allowPrivateNetwork: false, locale: 'zh', defaultSessionPush: true, contentPreview: false })
 const languageChoices = languageOptions
 function apply(value: BarkSettings) {
   settings.value = value
-  Object.assign(form, { serverUrl: value.serverUrl, deviceKey: '', group: value.group, sound: value.sound, studioUrl: value.studioUrl, allowPrivateNetwork: value.allowPrivateNetwork, locale: value.locale || 'zh' })
+  Object.assign(form, { serverUrl: value.serverUrl, deviceKey: '', group: value.group, sound: value.sound, studioUrl: value.studioUrl, allowPrivateNetwork: value.allowPrivateNetwork, locale: value.locale || 'zh',
+    defaultSessionPush: value.defaultSessionPush !== false, contentPreview: value.contentPreview === true })
+  chatStore.setDefaultSessionPush(value.defaultSessionPush !== false)
   pushUrl.value = ''
   loaded.value = true
 }
@@ -71,6 +75,8 @@ onMounted(() => run(async () => apply(await getBarkSettings())))
       <NFormItem label="Device Key"><NInput v-model:value="form.deviceKey" type="password" show-password-on="click" autocomplete="new-password" :placeholder="t(settings?.hasKey ? 'bark.keepKey' : 'bark.enterKey')" /></NFormItem>
       <NFormItem :label="t('bark.group')"><NInput v-model:value="form.group" maxlength="120" /></NFormItem>
       <NFormItem :label="t('bark.language')"><NSpace vertical style="width:100%"><NSelect v-model:value="form.locale" :options="languageChoices" /><span class="private-hint">{{ t('bark.languageHint') }}</span></NSpace></NFormItem>
+      <NFormItem :label="t('bark.defaultSessionPush')"><NSwitch v-model:value="form.defaultSessionPush" /><span class="private-hint">{{ t('bark.defaultSessionPushHint') }}</span></NFormItem>
+      <NFormItem :label="t('bark.contentPreview')"><NSwitch v-model:value="form.contentPreview" /><span class="private-hint">{{ t('bark.contentPreviewHint') }}</span></NFormItem>
       <NFormItem :label="t('bark.sound')"><NInput v-model:value="form.sound" :placeholder="t('bark.soundHint')" /></NFormItem>
       <NFormItem :label="t('bark.studioUrl')"><NInput v-model:value="form.studioUrl" :placeholder="t('bark.studioUrlHint')" /></NFormItem>
       <NFormItem v-if="isStoredSuperAdmin()" :label="t('bark.privateNetwork')"><NSwitch v-model:value="form.allowPrivateNetwork" /><span class="private-hint">{{ t('bark.privateHint') }}</span></NFormItem>

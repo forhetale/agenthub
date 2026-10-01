@@ -23,6 +23,8 @@ import { extractRepresentativeVideoFrames, isVideoFile } from '@/utils/video-fra
 import ImagePreviewOverlay from './ImagePreviewOverlay.vue'
 
 const chatStore = useChatStore()
+const sessionPushEnabled = computed(() => chatStore.activeSession?.pushEnabled ?? chatStore.defaultSessionPush)
+onMounted(() => { void chatStore.loadDefaultSessionPush() })
 const appStore = useAppStore()
 const profilesStore = useProfilesStore()
 const settingsStore = useSettingsStore()
@@ -489,9 +491,9 @@ const inputSettingsOptions = computed<DropdownOption[]>(() => [
     key: 'pushEnabled',
     disabled: !chatStore.activeSessionId,
     icon: () => h('span', {
-      class: ['settings-check', { active: chatStore.activeSession?.pushEnabled !== false }],
+      class: ['settings-check', { active: sessionPushEnabled.value }],
       'aria-hidden': 'true',
-    }, chatStore.activeSession?.pushEnabled !== false ? '✓' : ''),
+    }, sessionPushEnabled.value ? '✓' : ''),
   },
 ])
 
@@ -555,7 +557,7 @@ async function handleInputSettingsSelect(key: string | number) {
   if (key === 'pushEnabled') {
     const sessionId = chatStore.activeSessionId
     if (!sessionId) return
-    const nextEnabled = chatStore.activeSession?.pushEnabled === false
+    const nextEnabled = !sessionPushEnabled.value
     if (nextEnabled) {
       try {
         const bark = await getBarkSettings()

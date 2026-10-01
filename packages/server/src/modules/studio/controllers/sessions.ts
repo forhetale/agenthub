@@ -1,3 +1,4 @@
+import { defaultSessionPushEnabled } from '../public/notifications'
 import { getUsagePricing, saveUsagePricing, validateUsagePricing } from '../services/usage/usage-pricing'
 import { emptyCostCoverage, addCostCoverage } from '../services/usage/usage-cost'
 import { applyHermesCostFallbacks } from '../services/usage/hermes-cost-fallback'
@@ -1506,7 +1507,7 @@ export async function setWorkspace(ctx: any) {
   const existing = getSession(id)
   if (denySessionAccess(ctx, existing)) return
   if (!existing) {
-    createSession({ id, profile: requestedProfile(ctx) || 'default', title: '' })
+    createSession({ id, profile: requestedProfile(ctx) || 'default', title: '', push_enabled: defaultSessionPushEnabled(ctx.state.user?.id) })
   }
   updateSession(id, { workspace: workspace || null } as any)
   ctx.body = { ok: true }
@@ -1581,7 +1582,7 @@ export async function setModel(ctx: any) {
     ? await ensureHermesRunWorkspace(profile, existing?.workspace)
     : undefined
   if (!existing) {
-    createSession({ id, profile, title: '', model: cleanModel, provider: cleanProvider, api_mode: cleanApiMode || '', reasoning_effort: '', workspace })
+    createSession({ id, profile, title: '', model: cleanModel, provider: cleanProvider, api_mode: cleanApiMode || '', reasoning_effort: '', workspace, push_enabled: defaultSessionPushEnabled(ctx.state.user?.id) })
   }
   const updates: Record<string, string> = { model: cleanModel, provider: cleanProvider, reasoning_effort: '' }
   if (cleanApiMode) updates.api_mode = cleanApiMode

@@ -206,6 +206,7 @@ describe('chat store per-session reasoning effort', () => {
     sessionsApi.setSessionPushEnabled.mockResolvedValue(false)
     const store = useChatStore()
     const session = makeSession('failed-push-session')
+    session.pushEnabled = false
     store.sessions = [session]
 
     await expect(store.setSessionPushEnabled(session.id, true)).resolves.toBe(false)

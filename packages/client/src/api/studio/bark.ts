@@ -7,6 +7,10 @@ export interface BarkSettings {
   allowPrivateNetwork: boolean
   /** Notification text language (see the server NOTIFICATION_LOCALES list). */
   locale: string
+  /** New chats push by default unless the user turned this off. */
+  defaultSessionPush: boolean
+  /** Opt-in: notifications include the session title and a reply summary. */
+  contentPreview: boolean
   hasKey: boolean
   configured: boolean
   pushReady: boolean
