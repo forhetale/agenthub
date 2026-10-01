@@ -60,9 +60,9 @@ export function createRunPushConsumer(send: typeof fetch = (...args) => fetch(..
           body: JSON.stringify({ schema_version: 1, event_id: event.id, event_type: kind,
             recipient: { platform: 'ios', app_id: registration.app_id,
               apns_environment: registration.apns_environment, apns_token: registration.apns_token },
-            // Preview is enabled by default; set 0 to keep notification content private.
+            // Explicit server opt-in; default retains the existing privacy boundary.
             // Custom content requires a gateway that honors notification title/body.
-            notification: process.env.STUDIO_PUSH_CONTENT_PREVIEW !== '0'
+            notification: process.env.STUDIO_PUSH_CONTENT_PREVIEW === '1'
               ? notificationPreview(event.type === 'chat.run.completed'
                 ? { ...('display' in envelope ? envelope.display as Record<string, unknown> : {}), content: currentOutput, preview: '' }
                 : 'display' in envelope ? envelope.display : undefined, kind === 'completion')
