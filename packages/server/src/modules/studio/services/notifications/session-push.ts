@@ -51,6 +51,7 @@ const AGENT_DISPLAY_NAMES: Record<string, string> = {
   pi: 'Pi',
   grok: 'Grok',
   opencode: 'OpenCode',
+  dsh: 'DeepSeek Harness',
   cursor: 'Cursor',
 }
 

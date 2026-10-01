@@ -47,6 +47,9 @@ describe('session push notifications', () => {
     expect(formatSessionPushContent('cursor', 'run.completed', 'zh')).toBe(
       'Cursor 有一条已完成消息，请到 TATin Studio 查看',
     )
+    expect(formatSessionPushContent('dsh', 'approval.requested', 'en')).toBe(
+      'DeepSeek Harness has a message awaiting authorization. Open TATin Studio to authorize it.',
+    )
   })
 
   it('falls back to Simplified Chinese for unknown notification locales', () => {
