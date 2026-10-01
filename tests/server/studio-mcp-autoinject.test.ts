@@ -157,6 +157,7 @@ describe('studio MCP autoinject', () => {
       'ekko-studio-api',
       'ekko-studio-browser',
       'ekko-studio-use',
+      'ekko-studio-plan',
     ])
     expect(result.command).toBe(process.execPath)
   })
@@ -341,7 +342,7 @@ describe('studio MCP autoinject', () => {
     expect(Object.keys(migrated.data.mcp_servers).some(name => name.startsWith('hermes-studio-'))).toBe(false)
     expect(migrated.data.mcp_servers['ekko-studio-api'].timeout).toBe(123)
     expect(migrated.data.mcp_servers.custom.command).toBe('user-command')
-    expect(Object.keys(migrated.data.mcp_servers)).toHaveLength(4)
+    expect(Object.keys(migrated.data.mcp_servers)).toHaveLength(5)
     const repeated = await updater(migrated.data)
     expect(repeated.result.status).toBe('unchanged')
     expect(repeated.write).toBe(false)
@@ -433,6 +434,7 @@ describe('studio MCP autoinject', () => {
       'custom',
       'ekko-studio-api',
       'ekko-studio-browser',
+      'ekko-studio-plan',
       'ekko-studio-use',
     ])
     expect((await updater(cleaned.data)).result.status).toBe('unchanged')

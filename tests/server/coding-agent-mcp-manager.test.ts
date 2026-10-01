@@ -82,7 +82,7 @@ describe('coding Agent MCP manager', () => {
     const listed = await listCodingAgentMcpServers('dsh')
     expect(listed.servers.find(server => server.name === 'docs')).toMatchObject({ raw_config: { enabled: true }, managed: false })
     const managed = listed.servers.filter(server => server.managed)
-    expect(managed).toHaveLength(3)
+    expect(managed).toHaveLength(4)
     for (const server of managed) expect(server.raw_config.env.ELECTRON_RUN_AS_NODE).toBe('1')
     const path = join(home, '.dsh', 'cordis.patch.yml')
     expect(readFileSync(path, 'utf8')).not.toContain('ekko-studio-api')
@@ -110,10 +110,12 @@ describe('coding Agent MCP manager', () => {
       'ekko-studio-api',
       'ekko-studio-browser',
       'ekko-studio-use',
+      'ekko-studio-plan',
     ]))
     expect(initial.servers.filter(server => server.managed).map(server => server.name)).toEqual([
       'ekko-studio-api',
       'ekko-studio-browser',
+      'ekko-studio-plan',
       'ekko-studio-use',
     ])
     expect(initial.servers.find(server => server.name === 'ekko-studio-api')).toMatchObject({

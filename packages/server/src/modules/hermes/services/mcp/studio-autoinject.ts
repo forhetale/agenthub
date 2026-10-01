@@ -12,6 +12,7 @@ const MANAGED_SERVERS: ReadonlyArray<{ name: string; toolset: string }> = [
   { name: 'ekko-studio-api', toolset: 'api' },
   { name: 'ekko-studio-browser', toolset: 'browser' },
   { name: 'ekko-studio-use', toolset: 'use' },
+  { name: 'ekko-studio-plan', toolset: 'plan' },
 ]
 // Retired entries such as `ekko-studio-devices` carry MANAGED_ENV_KEY, so the
 // managed-entry sweep in injectIntoProfile removes them from existing profiles.

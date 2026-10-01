@@ -22,6 +22,7 @@ const STUDIO_MANAGED_NAMES = new Set([
   'ekko-studio-api',
   'ekko-studio-browser',
   'ekko-studio-use',
+  'ekko-studio-plan',
 ])
 // Retired Studio toolsets are no longer injected, but stale copies are still
 // stripped whenever a persisted agent config is rewritten.
