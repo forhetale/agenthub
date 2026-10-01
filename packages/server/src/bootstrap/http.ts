@@ -548,7 +548,7 @@ export async function bootstrap() {
     close: () => kanbanEventsWebSocket.close(),
     forceClose: () => kanbanEventsWebSocket.forceClose(),
   })
-  console.log('[bootstrap] terminal + kanban + LAN peer websocket setup')
+  console.log('[bootstrap] terminal + kanban websocket setup')
 
   const loopbackBaseUrl = getLoopbackBaseUrl(server)
 

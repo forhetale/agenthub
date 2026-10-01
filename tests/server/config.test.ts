@@ -3,10 +3,8 @@ import { homedir } from 'os'
 import { join, resolve } from 'path'
 import {
   getCorsOrigins,
-  getLanAdvertiseUrl,
   getListenHost,
   getWebUiHome,
-  isAppEntitlementRequired,
   shouldCreateWebUiDataDir,
 } from '../../packages/server/src/modules/studio/public/config'
 
@@ -46,16 +44,5 @@ describe('server config', () => {
 
   it('uses CORS_ORIGINS when provided', () => {
     expect(getCorsOrigins({ CORS_ORIGINS: ' https://app.example, http://localhost:3000 ' })).toBe('https://app.example, http://localhost:3000')
-  })
-
-  it('normalizes the Docker LAN advertise origin', () => {
-    expect(getLanAdvertiseUrl({ HERMES_LAN_ADVERTISE_URL: ' 192.168.10.102:6060/path ' })).toBe('http://192.168.10.102:6060')
-    expect(getLanAdvertiseUrl({ HERMES_LAN_ADVERTISE_URL: 'file:///tmp/studio' })).toBe('')
-  })
-
-  it('enforces App entitlements by default and allows an explicit compatibility opt-out', () => {
-    expect(isAppEntitlementRequired({})).toBe(true)
-    expect(isAppEntitlementRequired({ HERMES_APP_ENTITLEMENT_REQUIRED: 'true' })).toBe(true)
-    expect(isAppEntitlementRequired({ HERMES_APP_ENTITLEMENT_REQUIRED: 'off' })).toBe(false)
   })
 })
