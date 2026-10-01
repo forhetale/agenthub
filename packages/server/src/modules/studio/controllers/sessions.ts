@@ -1,4 +1,6 @@
 import { defaultSessionPushEnabled } from '../public/notifications'
+import { withRunUsage } from '../public/usage'
+import { businessEvents } from '../services/webhooks/business-events'
 import { getUsagePricing, saveUsagePricing, validateUsagePricing } from '../services/usage/usage-pricing'
 import { emptyCostCoverage, addCostCoverage } from '../services/usage/usage-cost'
 import { applyHermesCostFallbacks } from '../services/usage/hermes-cost-fallback'
@@ -2185,7 +2187,7 @@ export async function getConversationMessagesPaginated(ctx: any) {
       input_tokens: session.input_tokens,
       output_tokens: session.output_tokens,
     },
-    messages: result.messages,
+    messages: withRunUsage(ctx.params.id, result.messages),
     taskPlans: getSessionTaskPlans(ctx.params.id, result.messages, offset === 0),
     workspaceRunChanges: listWorkspaceRunChangesForAssistantMessages(ctx.params.id, assistantMessageIds),
     total: result.total,
