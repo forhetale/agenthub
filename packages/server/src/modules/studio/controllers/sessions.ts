@@ -1759,11 +1759,25 @@ export async function usageStats(ctx: any) {
   }
 }
 
+// Pricing tables are per profile; a request that names no profile falls back to the
+// server's active one, so check access the same way as other profile-scoped writes.
+function usagePricingProfile(ctx: any): string | null {
+  const profile = requestedProfile(ctx) || getActiveProfileName()
+  if (canAccessProfile(ctx, profile)) return profile
+  ctx.status = 403
+  ctx.body = { error: `Profile "${profile || 'default'}" is not available for this user` }
+  return null
+}
+
 export async function usagePricing(ctx: any) {
-  ctx.body = { rates: getUsagePricing(requestedProfile(ctx) || getActiveProfileName()) }
+  const profile = usagePricingProfile(ctx)
+  if (profile === null) return
+  ctx.body = { rates: getUsagePricing(profile) }
 }
 
 export async function updateUsagePricing(ctx: any) {
+  const profile = usagePricingProfile(ctx)
+  if (profile === null) return
   let rates
   try {
     rates = validateUsagePricing(ctx.request.body?.rates)
@@ -1772,7 +1786,7 @@ export async function updateUsagePricing(ctx: any) {
     ctx.body = { error: (err as Error).message }
     return
   }
-  saveUsagePricing(requestedProfile(ctx) || getActiveProfileName(), rates)
+  saveUsagePricing(profile, rates)
   ctx.body = { rates }
 }
 

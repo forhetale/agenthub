@@ -53,6 +53,17 @@ const codingAgentRunManagerMock = vi.hoisted(() => ({
   stop: vi.fn(),
 }))
 const invalidateCodingAgentSessionRuntimeMock = vi.hoisted(() => vi.fn())
+const usagePricingMocks = vi.hoisted(() => ({
+  get: vi.fn(),
+  save: vi.fn(),
+  validate: vi.fn((rates: unknown) => rates),
+}))
+
+vi.mock('../../packages/server/src/modules/studio/services/usage/usage-pricing', () => ({
+  getUsagePricing: usagePricingMocks.get,
+  saveUsagePricing: usagePricingMocks.save,
+  validateUsagePricing: usagePricingMocks.validate,
+}))
 
 vi.mock('../../packages/server/src/modules/hermes/services/history/conversations-db', () => ({
   listConversationSummariesFromDb: listConversationSummariesFromDbMock,
@@ -2470,6 +2481,52 @@ describe('session conversations controller', () => {
 
       expect(localGetSessionDetailMock).toHaveBeenCalledWith('cli-123')
       expect(JSON.parse(ctx.body)).toMatchObject({ id: 'cli-123' })
+    })
+  })
+
+  describe('usage pricing', () => {
+    const rates = [{ provider: 'openai', model: 'gpt-x', input: 1, output: 2 }]
+
+    beforeEach(() => {
+      usagePricingMocks.get.mockReset()
+      usagePricingMocks.get.mockReturnValue(rates)
+      usagePricingMocks.save.mockReset()
+    })
+
+    it('refuses to read or replace the active profile pricing for a user without access to it', async () => {
+      listUserProfilesMock.mockReturnValue([{ profile_name: 'alice' }])
+      const mod = await import('../../packages/server/src/modules/studio/controllers/sessions')
+      const user = { id: 2, role: 'admin' }
+
+      const readCtx: any = { query: {}, state: { user }, body: null }
+      await mod.usagePricing(readCtx)
+      expect(readCtx.status).toBe(403)
+      expect(usagePricingMocks.get).not.toHaveBeenCalled()
+
+      const writeCtx: any = { query: {}, request: { body: { rates } }, state: { user }, body: null }
+      await mod.updateUsagePricing(writeCtx)
+      expect(writeCtx.status).toBe(403)
+      expect(writeCtx.body.error).toContain('default')
+      expect(usagePricingMocks.save).not.toHaveBeenCalled()
+    })
+
+    it('reads and saves pricing for a profile the user can access, and any profile for a super admin', async () => {
+      listUserProfilesMock.mockReturnValue([{ profile_name: 'alice' }])
+      const mod = await import('../../packages/server/src/modules/studio/controllers/sessions')
+
+      const readCtx: any = { query: {}, state: { user: { id: 2, role: 'admin' }, profile: { name: 'alice' } }, body: null }
+      await mod.usagePricing(readCtx)
+      expect(readCtx.body).toEqual({ rates })
+      expect(usagePricingMocks.get).toHaveBeenCalledWith('alice')
+
+      const writeCtx: any = { query: {}, request: { body: { rates } }, state: { user: { id: 2, role: 'admin' }, profile: { name: 'alice' } }, body: null }
+      await mod.updateUsagePricing(writeCtx)
+      expect(writeCtx.status).toBeUndefined()
+      expect(usagePricingMocks.save).toHaveBeenCalledWith('alice', rates)
+
+      const superCtx: any = { query: {}, request: { body: { rates } }, state: { user: { id: 1, role: 'super_admin' } }, body: null }
+      await mod.updateUsagePricing(superCtx)
+      expect(usagePricingMocks.save).toHaveBeenLastCalledWith('default', rates)
     })
   })
 })
