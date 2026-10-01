@@ -3,8 +3,8 @@
 > 本版本移除了全部上游付费/商业入口（手机 App 下载与购买页、付费权益提示、硬件购买入口），
 > 会话通知改用自建 **Bark** 推送通道。
 > **TATin Studio** 是基于
-> [Ekko Studio（Hermes Studio）](https://github.com/EKKOLearnAI/hermes-studio) **v0.7.21**
-> 的源码级定制版（`0.7.21-tatin.5`）：新增按用户隔离的 **Bark 消息推送通道**，产品显示名改为 TATin Studio，并移除本分支不需要的上游功能：App 下载页、小方盒（MCU 语音）、App 互联/中继、局域网设备、Studio 社交渠道消息，以及「消息推送」页除 Bark 面板以外的全部标签。
+> [Ekko Studio（Hermes Studio）](https://github.com/EKKOLearnAI/ekko-studio) **v0.7.26**
+> 的源码级定制版（`0.7.26-tatin.1`）：新增按用户隔离的 **Bark 消息推送通道**，产品显示名改为 TATin Studio，并移除本分支不需要的上游功能：App 下载页、小方盒（MCU 语音）、App 互联/中继、局域网设备、Studio 社交渠道消息，以及「消息推送」页除 Bark 面板以外的全部标签。
 > 改动清单、安全设计与构建说明见 [CUSTOMIZATION.md](./CUSTOMIZATION.md)。
 > 请从本源码构建安装；`hermes-web-ui` npm 包仍为上游版本。以下其余内容为上游产品文档。
 

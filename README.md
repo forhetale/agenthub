@@ -4,8 +4,8 @@
 > pages, paid-access upsells, hardware purchase entries) and session notifications are
 > delivered by a self-hosted **Bark** push channel.
 > **TATin Studio** is a source-level customization of
-> [Ekko Studio / Hermes Studio](https://github.com/EKKOLearnAI/hermes-studio) **v0.7.21**,
-> published as `0.7.21-tatin.5`. It adds a per-user **Bark push-notification channel**,
+> [Ekko Studio / Hermes Studio](https://github.com/EKKOLearnAI/ekko-studio) **v0.7.26**,
+> published as `0.7.26-tatin.1`. It adds a per-user **Bark push-notification channel**,
 > rebrands the user-visible product name to TATin Studio, and trims upstream surfaces the
 > fork does not use: the App download hub, the Little Box (MCU voice) feature, the App
 > connections/relay and LAN device stacks, the Studio social-channel senders, and every
