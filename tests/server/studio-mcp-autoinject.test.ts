@@ -344,7 +344,13 @@ describe('studio MCP autoinject', () => {
     const server = migrated.data.mcp_servers['ekko-studio-interaction']
     expect(server.enabled).toBe(enabled)
     if (enabled) expect(server.env.HERMES_MCP_USER_CLARIFICATION).toBe('0')
-    expect(Object.keys(migrated.data.mcp_servers)).toHaveLength(5)
+    // The fork retired the devices toolset, so only four managed servers remain.
+    expect(Object.keys(migrated.data.mcp_servers).sort()).toEqual([
+      'ekko-studio-api',
+      'ekko-studio-browser',
+      'ekko-studio-interaction',
+      'ekko-studio-use',
+    ])
   })
 
   it.each([false, true])('migrates Hermes split names without duplicates (new names already present: %s)', async (coexisting) => {
