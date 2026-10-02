@@ -29,6 +29,8 @@ import { compactCodexThread } from './codex-compact'
 import { updateManagedPromptFileSync } from '../prompt-file'
 import { grokSessionExists, startGrokTurnProcess } from '../grok/turn-process'
 import { applyGrokStreamEvent } from '../grok/event-adapter'
+import { applyAntigravityStreamEvent } from '../antigravity/event-adapter'
+import { startAntigravityTurnProcess } from '../antigravity/turn-process'
 import { CURSOR_COMPACT_UNSUPPORTED, startCursorTurnProcess } from '../cursor/turn-process'
 import { applyCursorStreamEvent } from '../cursor/event-adapter'
 import { isolatedCodingAgentChildEnv } from './child-env'
@@ -339,25 +341,27 @@ function truncateCodingAgentToolOutputEvent(event: CanonicalResponsesEvent): Can
 }
 
 function isPrintAgent(agentId: string): boolean {
-  return agentId === 'claude-code' || agentId === 'codex' || agentId === 'pi' || agentId === 'grok' || agentId === 'cursor' || (agentId === 'opencode' || agentId === 'dsh')
+  return agentId === 'claude-code' || agentId === 'codex' || agentId === 'pi' || agentId === 'grok' || agentId === 'antigravity' || agentId === 'cursor' || (agentId === 'opencode' || agentId === 'dsh')
 }
 
-function persistedCodingAgent(agentId: string): 'claude' | 'codex' | 'pi' | 'grok' | 'opencode' | 'dsh' | 'cursor' {
+function persistedCodingAgent(agentId: string): 'claude' | 'codex' | 'pi' | 'grok' | 'opencode' | 'dsh' | 'cursor' | 'antigravity' {
   if (agentId === 'codex') return 'codex'
   if (agentId === 'pi') return 'pi'
   if (agentId === 'grok') return 'grok'
   if (agentId === 'dsh') return 'dsh'
   if (agentId === 'opencode') return 'opencode'
+  if (agentId === 'antigravity') return 'antigravity'
   if (agentId === 'cursor') return 'cursor'
   return 'claude'
 }
 
-export function usageCodingAgent(agentId: string): 'claude_code' | 'codex' | 'pi' | 'grok' | 'opencode' | 'dsh' | 'cursor' {
+export function usageCodingAgent(agentId: string): 'claude_code' | 'codex' | 'pi' | 'grok' | 'opencode' | 'dsh' | 'cursor' | 'antigravity' {
   if (agentId === 'codex') return 'codex'
   if (agentId === 'pi') return 'pi'
   if (agentId === 'grok') return 'grok'
   if (agentId === 'dsh') return 'dsh'
   if (agentId === 'opencode') return 'opencode'
+  if (agentId === 'antigravity') return 'antigravity'
   if (agentId === 'cursor') return 'cursor'
   return 'claude_code'
 }
@@ -515,6 +519,7 @@ function piAssistantMessageText(message: any): string {
 }
 
 function codingAgentDisplayName(agentId: string): string {
+  if (agentId === 'antigravity') return 'Antigravity'
   if (agentId === 'cursor') return 'Cursor'
   if (agentId === 'codex') return 'Codex'
   if (agentId === 'pi') return 'Pi'
@@ -774,6 +779,8 @@ export class CodingAgentRunManager {
               ? 'OpenCode'
             : launch.agentId === 'dsh'
               ? 'DeepSeek Harness'
+            : launch.agentId === 'antigravity'
+              ? 'Antigravity'
             : launch.agentId === 'cursor'
               ? 'Cursor'
             : 'Claude Code'
@@ -857,6 +864,7 @@ export class CodingAgentRunManager {
     const text = String(input || '').trim()
     const images = Array.isArray(options.images) ? options.images : []
     if (!text && images.length === 0) throw new Error('Input is required')
+    if (run.launch.agentId === 'antigravity' && images.length) throw Object.assign(new Error('Antigravity CLI image input is not supported; send a file path as text instead'), { status: 400 })
     // Keep native metadata separate from launch configuration: global CLIs can
     // choose a different model each turn, including during a resumed session.
     if (!childIsRunning(run.currentChild) || (run.launch.agentId === 'pi' && !run.turnActive)) {
@@ -890,6 +898,10 @@ export class CodingAgentRunManager {
     }
     if (run.launch.agentId === 'grok') {
       this.startGrokPrintTurn(run, text, systemPrompt, images)
+      return { runId: run.id, messageId }
+    }
+    if (run.launch.agentId === 'antigravity') {
+      this.startAntigravityPrintTurn(run, text, systemPrompt, images)
       return { runId: run.id, messageId }
     }
     if (run.launch.agentId === 'cursor') {
@@ -927,7 +939,7 @@ export class CodingAgentRunManager {
         ? run.turnActive === true
         : childIsRunning(run.currentChild) || run.turnActive === true,
       agentId: run.launch.agentId,
-      model: run.launch.agentId === 'cursor' ? run.nativeUsage?.model || '' : run.launch.model,
+      model: (run.launch.agentId === 'cursor' || (run.launch.agentId === 'antigravity' && run.launch.mode === 'global')) ? run.nativeUsage?.model || '' : run.launch.model,
       provider: run.launch.provider,
       workspaceDir: run.launch.workspaceDir,
       nativeSessionId: String(run.launch.agentNativeSessionId || '').trim(),
@@ -1192,7 +1204,7 @@ export class CodingAgentRunManager {
       // for transport and usage accounting only.
       return
     }
-    if ((run.launch.agentId === 'opencode' || run.launch.agentId === 'dsh') && !run.acceptingPrintEvent) {
+    if ((run.launch.agentId === 'opencode' || run.launch.agentId === 'dsh' || run.launch.agentId === 'antigravity') && !run.acceptingPrintEvent) {
       // Native JSON/ACP stdout is the authoritative turn stream. A single
       // turn can contain several provider requests, so treating each
       // proxy response.completed event as the turn boundary duplicates output
@@ -1392,7 +1404,7 @@ export class CodingAgentRunManager {
       ? (usage.contextInputTokens || 0) + (usage.contextOutputTokens || 0)
       : undefined
     // Cursor's result usage aggregates a turn, not the current context window.
-    if (run.launch.agentId !== 'cursor' && contextTokens != null && contextTokens > 0) {
+    if (run.launch.agentId !== 'cursor' && run.launch.agentId !== 'antigravity' && contextTokens != null && contextTokens > 0) {
       updateContextTokenUsage(run.launch.sessionId, run.state, emitUsage, contextTokens, usage)
     }
   }
@@ -2752,6 +2764,136 @@ export class CodingAgentRunManager {
     }
   }
 
+  private failAntigravityTurn(run: ManagedCodingAgentRun, message: string, usage?: unknown) {
+    if (run.printCompleted) return
+    const safeMessage = sanitizeCodingAgentTerminalOutput(message)
+    const guidance = /authentication|not logged|log in/i.test(safeMessage)
+      ? `${safeMessage}\nAntigravity CLI authentication is unavailable to this Studio runtime. Complete agy login on the Studio host; if already logged in, verify native credential access from the isolated runtime.`
+      : safeMessage
+    // Persist visible failure text before the failed terminal event. Otherwise
+    // refresh leaves an empty assistant row with only a zero-token usage card.
+    this.appendCodexText(run, `Error: ${guidance}`, true)
+    this.failCodexExecTurn(run, guidance, usage)
+  }
+
+  private startAntigravityPrintTurn(
+    run: ManagedCodingAgentRun,
+    input: string,
+    systemPrompt = '',
+    images: CodingAgentImageInput[] = [],
+  ) {
+    if (childIsRunning(run.currentChild)) throw new Error('Antigravity is still processing the previous input')
+
+    const responseId = `resp_${Date.now()}`
+    run.printResponseId = responseId
+    run.printMessageId = `msg_${responseId}`
+    run.printTextStarted = false
+    run.printText = ''
+    run.printCompleted = false
+    run.responseStartEmitted = false
+    run.terminalEventHandled = false
+    run.codexToolBlocks = new Map()
+    run.codexPendingUsage = undefined
+    run.codexPendingError = undefined
+    run.currentChildStderr = ''
+    run.runMarker = undefined
+    run.memoryExportStarted = false
+
+    this.handleClaudePrintResponseEvent(run, {
+      type: 'response.created',
+      data: {
+        type: 'response.created',
+        response: { id: responseId, object: 'response', status: 'in_progress', model: run.launch.model, output: [] },
+      },
+    })
+    if (run.launch.promptFile) updateManagedPromptFileSync(run.launch.promptFile, systemPrompt)
+
+    const workspaceDir = existsSync(run.launch.workspaceDir) ? run.launch.workspaceDir : homedir()
+    const nativeSessionId = String(run.launch.agentNativeSessionId || '')
+    const turnInput = systemPrompt.trim()
+      ? `${systemPrompt.trim()}\n\n${input}`
+      : input
+    const child = startAntigravityTurnProcess({
+      command: run.launch.command,
+      baseArgs: run.launch.args,
+      workspaceDir,
+      env: run.launch.mode === 'global'
+        ? { ...process.env, ...(run.launch.env || {}) }
+        : isolatedCodingAgentChildEnv(run.launch.env),
+      nativeSessionId,
+      resume: run.nativeResumeReady === true && Boolean(nativeSessionId),
+      input: turnInput,
+      images,
+      onEvent: (event) => {
+        this.touch(run)
+        applyAntigravityStreamEvent(event, {
+          text: value => this.appendCodexText(run, value, true),
+          thought: value => this.appendCodexReasoning(run, value),
+          toolStarted: value => this.handleCodexItemStarted(run, {
+            type: 'mcp_tool_call',
+            id: value.id,
+            tool: value.name,
+            arguments: value.input,
+          }),
+          toolCompleted: value => this.handleCodexItemCompleted(run, {
+            type: 'mcp_tool_call',
+            id: value.id,
+            output: value.output,
+            ...(value.failed ? { error: { message: this.codexToolOutput({ output: value.output }) } } : {}),
+          }),
+          usage: value => { run.codexPendingUsage = value },
+          session: (sessionId, model) => {
+            if (model?.trim()) {
+              run.nativeUsage ||= new NativeTurnUsage()
+              run.nativeUsage.model = model.trim()
+            }
+            this.recordNativeCliSessionId(run, sessionId)
+          },
+          complete: usage => {
+            if (!run.printCompleted) this.completeClaudePrintTurn(run, usage || run.codexPendingUsage)
+          },
+          error: (message, usage) => {
+            run.codexPendingUsage = usage || run.codexPendingUsage
+            this.failAntigravityTurn(run, message, run.codexPendingUsage)
+          },
+          status: message => this.emitTerminalStatus(run, message),
+        })
+      },
+      onStderr: (chunk) => {
+        this.touch(run)
+        const text = appendChildStderr(run, chunk)
+        if (/permission|denied|approval/i.test(text)) this.emitTerminalStatus(run, sanitizeCodingAgentTerminalOutput(text))
+        if (text) logger.debug({ runId: run.id, sessionId: run.launch.sessionId, text }, '[coding-agent-run] antigravity stderr')
+      },
+      onError: (err) => {
+        run.currentChild = undefined
+        logger.warn({ err, runId: run.id, sessionId: run.launch.sessionId }, '[coding-agent-run] antigravity failed to start')
+        if (!run.printCompleted) this.failAntigravityTurn(run, childProcessErrorMessage(err, run.launch.agentId))
+      },
+      onClose: (code) => {
+        if (run.currentChildKillTimer) clearTimeout(run.currentChildKillTimer)
+        run.currentChildKillTimer = undefined
+        run.currentChild = undefined
+        logger.info({ runId: run.id, sessionId: run.launch.sessionId, code }, '[coding-agent-run] antigravity exited')
+        if (run.stoppedByUser || run.exited) return
+        if (run.pendingChatCompletionEvent) {
+          void this.emitAndMarkPrintChatRunCompletedAfterUsage(run, run.pendingChatCompletionEvent, run.pendingChatCompletionPayload)
+          return
+        }
+        if (run.printCompleted) return
+        this.failAntigravityTurn(run, run.codexPendingError || (code === 0 ? 'Antigravity exited without a terminal result event' : exitErrorMessage('Antigravity', code, run.currentChildStderr)), run.codexPendingUsage)
+      },
+    })
+    run.currentChild = child
+    child.once('exit', () => {
+      // Tools can outlive the CLI (and keep its pipes open). On cancellation,
+      // reap the owned group even if the leader exited before the kill timer.
+      if ((run.exited || run.stoppedByUser) && process.platform !== 'win32' && child.pid) {
+        try { process.kill(-child.pid, 'SIGKILL') } catch {}
+      }
+    })
+  }
+
   private startCursorPrintTurn(
     run: ManagedCodingAgentRun,
     input: string,
@@ -2823,7 +2965,7 @@ export class CodingAgentRunManager {
               run.nativeUsage ||= new NativeTurnUsage()
               run.nativeUsage.model = model.trim()
             }
-            this.recordCursorNativeSessionId(run, sessionId)
+            this.recordNativeCliSessionId(run, sessionId)
           },
           complete: usage => {
             if (!run.printCompleted) this.completeClaudePrintTurn(run, usage || run.codexPendingUsage)
@@ -2870,14 +3012,14 @@ export class CodingAgentRunManager {
     })
   }
 
-  private recordCursorNativeSessionId(run: ManagedCodingAgentRun, nativeSessionId: string) {
+  private recordNativeCliSessionId(run: ManagedCodingAgentRun, nativeSessionId: string) {
     if (!nativeSessionId) return
     run.launch.agentNativeSessionId = nativeSessionId
     run.nativeResumeReady = true
     try {
       updateSession(run.launch.sessionId, { agent_native_session_id: nativeSessionId })
     } catch (err) {
-      logger.warn({ err, runId: run.id, sessionId: run.launch.sessionId }, '[coding-agent-run] failed to persist Cursor native session id')
+      logger.warn({ err, runId: run.id, sessionId: run.launch.sessionId }, '[coding-agent-run] failed to persist native CLI session id')
     }
   }
 

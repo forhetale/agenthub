@@ -33,7 +33,7 @@ export type ContentBlock = ContentBlockImport
 export const LIVE_CHAT_MESSAGE_PAGE_SIZE = 150
 export const LIVE_CHAT_MAX_LOADED_MESSAGES = 300
 const LEGACY_WORKSPACE_RUN_CHANGE_MESSAGE_PREFIX = 'workspace-run-change:'
-type ChatAgentId = 'hermes' | 'claude' | 'codex' | 'pi' | 'grok' | 'opencode' | 'dsh' | 'cursor' | 'ekko-agent'
+type ChatAgentId = 'hermes' | 'claude' | 'codex' | 'pi' | 'grok' | 'opencode' | 'dsh' | 'cursor' | 'antigravity' | 'ekko-agent'
 
 function agentToCodingAgentId(agent?: string): ChatCodingAgentId | undefined {
   if (agent === 'codex') return 'codex'
@@ -41,6 +41,7 @@ function agentToCodingAgentId(agent?: string): ChatCodingAgentId | undefined {
   if (agent === 'grok') return 'grok'
   if (agent === 'dsh') return 'dsh'
   if (agent === 'opencode') return 'opencode'
+  if (agent === 'antigravity') return 'antigravity'
   if (agent === 'cursor') return 'cursor'
   if (agent === 'claude') return 'claude-code'
   if (agent === 'ekko-agent') return 'ekko-agent'
@@ -53,6 +54,7 @@ function codingAgentIdToAgent(id?: ChatCodingAgentId): ChatAgentId | undefined {
   if (id === 'grok') return 'grok'
   if (id === 'dsh') return 'dsh'
   if (id === 'opencode') return 'opencode'
+  if (id === 'antigravity') return 'antigravity'
   if (id === 'cursor') return 'cursor'
   if (id === 'claude-code') return 'claude'
   if (id === 'ekko-agent') return 'ekko-agent'
@@ -449,7 +451,7 @@ export interface QueueInsertionState {
   generation: string
   runId?: string
   queueId: string
-  runtime: 'hermes' | 'ekko' | 'claude-code' | 'codex' | 'pi' | 'grok' | 'opencode' | 'dsh' | 'cursor'
+  runtime: 'hermes' | 'ekko' | 'claude-code' | 'codex' | 'pi' | 'grok' | 'opencode' | 'dsh' | 'cursor' | 'antigravity'
   phase: 'requesting' | 'waiting_for_tool_batch' | 'stopping_current_turn'
   guarantee: 'strict' | 'immediate'
   requestedAt: number
@@ -3211,7 +3213,7 @@ export const useChatStore = defineStore('chat', () => {
         || raw.runtime === 'grok'
         || raw.runtime === 'opencode'
         || raw.runtime === 'dsh'
-        || raw.runtime === 'cursor'
+        || (raw.runtime === 'cursor' || raw.runtime === 'antigravity')
         ? raw.runtime
         : 'hermes',
       phase,
@@ -3634,6 +3636,7 @@ export const useChatStore = defineStore('chat', () => {
     if (codingAgentId === 'opencode') {
       return { icon: '/coding-agents/opencode.png' }
     }
+    if (codingAgentId === 'antigravity') return { icon: '/coding-agents/antigravity.png' }
     if (codingAgentId === 'cursor') {
       return { icon: '/coding-agents/cursor-logo.png' }
     }

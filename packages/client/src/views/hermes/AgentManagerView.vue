@@ -88,6 +88,7 @@ const codingAgents: CodingAgentCard[] = [
     command: 'agent',
     packageName: 'cursor-agent',
   },
+  { id: 'antigravity', name: 'Antigravity', provider: 'Google', logo: '/coding-agents/antigravity.png', command: 'agy', packageName: '' },
 ]
 
 const updatePolicies = ref<Record<string, AgentUpdatePolicyState>>({})
@@ -124,9 +125,9 @@ const hermesRuntimeStatus = ref<RuntimeVersionStatus | null>(null)
 const aiHelpDrawerVisible = ref(false)
 const aiHelpPrompt = ref('')
 const legacyDataMigrationChecked = ref(false)
-const installing = ref<Record<CodingAgentId, boolean>>({ 'claude-code': false, codex: false, pi: false, grok: false, opencode: false, dsh: false, cursor: false })
-const deleting = ref<Record<CodingAgentId, boolean>>({ 'claude-code': false, codex: false, pi: false, grok: false, opencode: false, dsh: false, cursor: false })
-const checkingUpdate = ref<Record<CodingAgentId, boolean>>({ 'claude-code': false, codex: false, pi: false, grok: false, opencode: false, dsh: false, cursor: false })
+const installing = ref<Record<CodingAgentId, boolean>>({ 'claude-code': false, codex: false, pi: false, grok: false, opencode: false, dsh: false, cursor: false, antigravity: false })
+const deleting = ref<Record<CodingAgentId, boolean>>({ 'claude-code': false, codex: false, pi: false, grok: false, opencode: false, dsh: false, cursor: false, antigravity: false })
+const checkingUpdate = ref<Record<CodingAgentId, boolean>>({ 'claude-code': false, codex: false, pi: false, grok: false, opencode: false, dsh: false, cursor: false, antigravity: false })
 const updateInfo = ref<Record<CodingAgentId, CodingAgentUpdateResult | null>>({
   'claude-code': null,
   codex: null,
@@ -135,6 +136,7 @@ const updateInfo = ref<Record<CodingAgentId, CodingAgentUpdateResult | null>>({
   opencode: null,
   dsh: null,
   cursor: null,
+  antigravity: null,
 })
 
 const hermesStatus = computed(() => agentStatusSnapshot.value?.agents.find(agent => agent.id === 'hermes'))
@@ -275,7 +277,7 @@ async function loadCachedStatus() {
     loadError.value = errorMessage(error)
   } finally {
     loading.value = false
-    void checkExternalCursorInstallation()
+    void checkExternalCliInstallation()
   }
 }
 
@@ -283,28 +285,35 @@ let checkingExternalInstallation = false
 let managerMounted = false
 let externalInstallationRefreshPending = false
 
-async function checkExternalCursorInstallation() {
-  // Cursor is installed outside Studio. Returning from its guide or a terminal
+async function checkExternalCliInstallation(event?: Event) {
+  // Native CLIs are installed outside Studio. Returning from a guide or terminal
   // must probe the CLI again instead of reusing the startup inventory.
   if (!managerMounted || document.visibilityState === 'hidden') return
-  if (loading.value || installing.value.cursor || checkingExternalInstallation) {
+  if (loading.value || installing.value.cursor || installing.value.antigravity || checkingExternalInstallation) {
     externalInstallationRefreshPending = true
     return
   }
   externalInstallationRefreshPending = false
-  if (!toolStatus('cursor') || toolStatus('cursor')?.installed) return
+  const nativeTools = ['cursor', 'antigravity'] as const
+  const knownTools = nativeTools.filter(id => toolStatus(id))
+  // On entry only probe missing tools; on return also refresh installed versions.
+  if (!knownTools.length || (!event && knownTools.every(id => toolStatus(id)?.installed))) return
   checkingExternalInstallation = true
   try {
     const result = await fetchCodingAgentsStatus()
     if (managerMounted) {
-      tools.value = result.tools
+      // An older server or partial inventory may omit an Agent. Preserve its
+      // cached status instead of turning an installed tool into Not installed.
+      const detected = new Map(result.tools.map(tool => [tool.id, tool]))
+      tools.value = tools.value.map(tool => detected.get(tool.id) || tool)
+      for (const tool of result.tools) if (!tools.value.some(existing => existing.id === tool.id)) tools.value.push(tool)
       loadError.value = ''
     }
   } catch (error) {
     if (managerMounted) loadError.value = errorMessage(error)
   } finally {
     checkingExternalInstallation = false
-    if (externalInstallationRefreshPending) void checkExternalCursorInstallation()
+    if (externalInstallationRefreshPending) void checkExternalCliInstallation()
   }
 }
 
@@ -327,7 +336,7 @@ async function refreshAll() {
   }
   if (errors.length) loadError.value = errors.join('\n')
   loading.value = false
-  if (externalInstallationRefreshPending) void checkExternalCursorInstallation()
+  if (externalInstallationRefreshPending) void checkExternalCliInstallation()
 }
 
 async function openHermesCliDetails() {
@@ -395,14 +404,14 @@ async function maybePromptLegacyWindowsDataMigration() {
 async function handleInstall(id: CodingAgentId) {
   installing.value[id] = true
   try {
-    if (id === 'cursor' && typeof window !== 'undefined') {
-      window.open('https://cursor.com/install', '_blank', 'noopener,noreferrer')
+    if ((id === 'cursor' || id === 'antigravity') && typeof window !== 'undefined') {
+      window.open(id === 'antigravity' ? 'https://antigravity.google/docs/cli/install' : 'https://cursor.com/install', '_blank', 'noopener,noreferrer')
     }
     const result = await installCodingAgent(id)
     tools.value = result.tools
     if (result.updateState) updatePolicies.value[id] = result.updateState
-    if (id === 'cursor' && !result.success) {
-      message.info(t('agentManager.cursorDescription'))
+    if ((id === 'cursor' || id === 'antigravity') && !result.success) {
+      message.info(t(id === 'antigravity' ? 'agentManager.antigravityDescription' : 'agentManager.cursorDescription'))
       return
     }
     if (!result.success) throw new Error(result.message || t('codingAgents.installFailed'))
@@ -412,7 +421,7 @@ async function handleInstall(id: CodingAgentId) {
     handleMutationError(id, 'install', error)
   } finally {
     installing.value[id] = false
-    if (externalInstallationRefreshPending) void checkExternalCursorInstallation()
+    if (externalInstallationRefreshPending) void checkExternalCliInstallation()
   }
 }
 
@@ -453,8 +462,8 @@ async function handleCheckUpdate(id: CodingAgentId) {
 
 onMounted(() => {
   managerMounted = true
-  window.addEventListener('focus', checkExternalCursorInstallation)
-  document.addEventListener('visibilitychange', checkExternalCursorInstallation)
+  window.addEventListener('focus', checkExternalCliInstallation)
+  document.addEventListener('visibilitychange', checkExternalCliInstallation)
   if (route.query.runtime === 'install') {
     runtimeManagerVisible.value = true
     const query = { ...route.query }
@@ -468,8 +477,8 @@ onMounted(() => {
 onUnmounted(() => {
   managerMounted = false
   externalInstallationRefreshPending = false
-  window.removeEventListener('focus', checkExternalCursorInstallation)
-  document.removeEventListener('visibilitychange', checkExternalCursorInstallation)
+  window.removeEventListener('focus', checkExternalCliInstallation)
+  document.removeEventListener('visibilitychange', checkExternalCliInstallation)
 })
 </script>
 
@@ -603,7 +612,7 @@ onUnmounted(() => {
                     <p v-if="toolStatus(agent.id)?.installed" class="agent-version">
                       {{ installedVersion(agent.id) }}
                     </p>
-                    <p v-else>{{ agent.id === 'cursor' ? t('agentManager.cursorDescription') : t('agentManager.codingAgentDescription') }}</p>
+                    <p v-else>{{ agent.id === 'antigravity' ? t('agentManager.antigravityDescription') : agent.id === 'cursor' ? t('agentManager.cursorDescription') : t('agentManager.codingAgentDescription') }}</p>
                   </div>
                 </div>
               </header>
@@ -628,10 +637,10 @@ onUnmounted(() => {
                   :loading="installing[agent.id]"
                   @click="handleInstall(agent.id)"
                 >
-                  {{ agent.id === 'cursor' ? t('codingAgents.cursorInstallGuide') : t('codingAgents.installNow') }}
+                  {{ (agent.id === 'cursor' || agent.id === 'antigravity') ? t('codingAgents.cursorInstallGuide') : t('codingAgents.installNow') }}
                 </NButton>
                 <NButton
-                  v-else-if="agent.id !== 'cursor' && availableUpdateVersion(agent.id)"
+                  v-else-if="(agent.id !== 'cursor' && agent.id !== 'antigravity') && availableUpdateVersion(agent.id)"
                   type="primary"
                   secondary
                   size="small"
@@ -641,7 +650,7 @@ onUnmounted(() => {
                   {{ t('agentManager.updateToVersion', { version: formatVersion(availableUpdateVersion(agent.id)) }) }}
                 </NButton>
                 <NButton
-                  v-if="agent.id !== 'cursor' && toolStatus(agent.id)?.installed && !availableUpdateVersion(agent.id)"
+                  v-if="(agent.id !== 'cursor' && agent.id !== 'antigravity') && toolStatus(agent.id)?.installed && !availableUpdateVersion(agent.id)"
                   secondary
                   size="small"
                   :loading="checkingUpdate[agent.id]"
@@ -652,7 +661,7 @@ onUnmounted(() => {
                 </NButton>
 
                 <NPopconfirm
-                  v-if="agent.id !== 'cursor' && toolStatus(agent.id)?.installed"
+                  v-if="(agent.id !== 'cursor' && agent.id !== 'antigravity') && toolStatus(agent.id)?.installed"
                   @positive-click="handleDelete(agent.id)"
                 >
                   <template #trigger>

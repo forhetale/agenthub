@@ -286,7 +286,7 @@ describe('Agent Manager page', () => {
     expect(wrapper.get('[data-testid="agent-card-codex"]').text()).toContain('agentManager.codingAgentDescription')
     expect(wrapper.get('[data-testid="agent-card-codex"]').text()).toContain('codingAgents.installNow')
     expect(wrapper.get('.coding-agent-grid').findAll('.agent-card').map(card => card.attributes('data-testid')))
-      .toEqual(['agent-card-ekko', 'agent-card-hermes', 'agent-card-claude-code', 'agent-card-codex', 'agent-card-pi', 'agent-card-grok', 'agent-card-opencode', 'agent-card-dsh', 'agent-card-cursor'])
+      .toEqual(['agent-card-ekko', 'agent-card-hermes', 'agent-card-claude-code', 'agent-card-codex', 'agent-card-pi', 'agent-card-grok', 'agent-card-opencode', 'agent-card-dsh', 'agent-card-cursor', 'agent-card-antigravity'])
     expect(wrapper.find('[data-testid="agent-settings-cursor"]').exists()).toBe(true)
     expect(wrapper.get('[data-testid="agent-settings-claude-code"]').exists()).toBe(true)
   })
@@ -466,9 +466,29 @@ describe('Agent Manager page', () => {
     expect(api.fetchAgentStatusSnapshot).toHaveBeenCalledTimes(2)
   })
 
-  it('keeps cached loading when Cursor is already installed', async () => {
+  it('automatically detects manually installed Antigravity and refreshes its version on focus', async () => {
+    const snapshot = agentStatusSnapshot()
+    snapshot.agents.push({ id: 'antigravity', installed: false, source: 'not-installed', path: '', version: '' })
+    api.fetchAgentStatusSnapshot.mockResolvedValue(snapshot)
+    api.fetchCodingAgentsStatus.mockResolvedValue({ tools: [claude, {
+      ...missing('antigravity', 'Antigravity', ''), installed: true, version: '1.2.14', path: '/test/agy',
+    }] })
+    const wrapper = mountPage()
+    await flushPromises()
+    expect(wrapper.get('[data-testid="agent-card-antigravity"]').text()).toContain('v1.2.14')
+    api.fetchCodingAgentsStatus.mockResolvedValue({ tools: [claude, {
+      ...missing('antigravity', 'Antigravity', ''), installed: true, version: '1.2.15', path: '/test/agy',
+    }] })
+    window.dispatchEvent(new Event('focus'))
+    await flushPromises()
+    expect(wrapper.get('[data-testid="agent-card-antigravity"]').text()).toContain('v1.2.15')
+    wrapper.unmount()
+  })
+
+  it('keeps cached loading when native CLIs are already installed', async () => {
     const snapshot = agentStatusSnapshot()
     snapshot.agents.push({ id: 'cursor', installed: true, source: 'user-cli', path: '/test/agent', version: '1.0.0' })
+    snapshot.agents.push({ id: 'antigravity', installed: true, source: 'user-cli', path: '/test/agy', version: '1.2.14' })
     api.fetchAgentStatusSnapshot.mockResolvedValue(snapshot)
     const wrapper = mountPage()
     await flushPromises()

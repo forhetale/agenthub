@@ -6,7 +6,7 @@ const KNOWN_CODING_AGENTS = new Set([
   'grok',
   'opencode',
   'dsh',
-  'cursor',
+  'cursor', 'antigravity',
 ])
 
 export function storedPriorAgentMode(value: unknown): 'scoped' | 'global' | undefined {

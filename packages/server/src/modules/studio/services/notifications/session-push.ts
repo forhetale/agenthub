@@ -5,7 +5,7 @@ import { normalizeNotificationLocale, type NotificationLocale } from './locale'
 import { notificationPreview } from './notification-preview'
 
 export type SessionPushEvent = 'run.completed' | 'approval.requested' | 'clarify.requested'
-export type SessionPushAgent = 'bridge' | 'ekko' | 'claude-code' | 'codex' | 'pi' | 'grok' | 'opencode' | 'dsh' | 'cursor'
+export type SessionPushAgent = 'bridge' | 'ekko' | 'claude-code' | 'codex' | 'pi' | 'grok' | 'opencode' | 'dsh' | 'cursor' | 'antigravity'
 
 export interface SessionPushDetails {
   /** Final reply text of a completed run; read only when the user enabled content previews. */
@@ -53,6 +53,7 @@ const AGENT_DISPLAY_NAMES: Record<string, string> = {
   opencode: 'OpenCode',
   dsh: 'DeepSeek Harness',
   cursor: 'Cursor',
+  antigravity: 'Antigravity',
 }
 
 const SESSION_PUSH_MESSAGES: Record<NotificationLocale, Record<SessionPushEvent, string>> = {
