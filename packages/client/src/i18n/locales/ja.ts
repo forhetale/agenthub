@@ -496,7 +496,6 @@ export default {
     chat: 'チャット',
     backToChat: '戻る',
     search: '検索',
-    apiRelay: 'APIリレー',
     history: '履歴',
     jobs: 'ジョブ',
     models: 'モデル',

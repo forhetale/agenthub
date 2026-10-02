@@ -410,7 +410,6 @@ export default {
     chat: 'Чат',
     backToChat: 'Назад',
     search: 'Поиск',
-    apiRelay: 'Ретранслятор API',
     history: 'История',
     jobs: 'Задачи',
     kanban: 'Канбан',

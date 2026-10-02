@@ -484,7 +484,6 @@ export default {
     chat: '对话',
     backToChat: '返回',
     search: '搜索',
-    apiRelay: '饲料',
     history: '历史',
     jobs: '任务',
     kanban: '看板',
