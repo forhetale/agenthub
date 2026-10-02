@@ -207,9 +207,7 @@ test('tints transparent app surfaces with the active theme background color', as
     await expect(page.locator(surface)).toHaveCSS('background-color', 'rgba(42, 42, 42, 0.82)')
     await expect(page.locator(surface)).toHaveCSS('backdrop-filter', 'blur(8px) saturate(1.1)')
     await expect(page.locator('.app-main--card')).toHaveCount(0)
-    if (route === '/hermes/connections') {
-      await expect(page.locator('.connections-tabs > .n-tabs-nav')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
-    }
+    // TATin's message push page is the Bark panel alone, without the upstream connection tabs.
   }
   expect(api.unexpectedRequests).toEqual([])
 })

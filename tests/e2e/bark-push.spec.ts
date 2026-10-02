@@ -64,7 +64,7 @@ test('Chinese navigation opens message push and fits a phone viewport', async ({
     hasKey: false, configured: false, pushReady: false, lastResult: null,
   } }))
   await page.goto('/#/hermes/chat')
-  await page.locator('.page-sidebar-tab').filter({ hasText: '消息推送' }).click()
+  await page.getByRole('link', { name: '消息推送', exact: true }).click()
   await expect(page.getByTestId('bark-panel')).toBeVisible()
   await expect(page.getByRole('heading', { name: '消息推送', exact: true })).toBeVisible()
   await expect(page.getByTestId('bark-panel').getByRole('button', { name: '保存配置', exact: true })).toBeEnabled()
