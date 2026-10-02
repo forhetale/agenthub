@@ -11,12 +11,14 @@ export function legacySessionPinsKey(profile: string): string {
   return `${LEGACY_PINS_KEY_PREFIX}${profile || 'default'}`
 }
 
-function legacySessionPinsKeys(): string[] {
+// Only profiles the signed-in user can open are migrated; other accounts' entries stay for them.
+function legacySessionPinsKeys(profiles: readonly string[]): string[] {
+  const allowed = new Set(profiles.map(profile => legacySessionPinsKey(profile)))
   const keys: string[] = []
   try {
     for (let index = 0; index < localStorage.length; index++) {
       const key = localStorage.key(index)
-      if (key?.startsWith(LEGACY_PINS_KEY_PREFIX)) keys.push(key)
+      if (key && allowed.has(key)) keys.push(key)
     }
   } catch {
     // Storage may be unavailable; there is nothing to migrate then.
@@ -25,8 +27,8 @@ function legacySessionPinsKeys(): string[] {
 }
 
 /** Synchronous check so session loads only wait for a migration when one is pending. */
-export function hasLegacySessionPins(): boolean {
-  return legacySessionPinsKeys().length > 0
+export function hasLegacySessionPins(profiles: readonly string[]): boolean {
+  return legacySessionPinsKeys(profiles).length > 0
 }
 
 function readLegacyPinIds(key: string): string[] {
@@ -48,15 +50,15 @@ function isTemporaryFailure(error: unknown): boolean {
 }
 
 /**
- * Pins the legacy browser pins on the server and returns how many succeeded.
- * A legacy entry is dropped once every pin in it either succeeded or was rejected by the
- * server (for example a deleted session); temporary failures keep it for the next load.
+ * Pins the legacy browser pins of the given profiles on the server and returns how many
+ * succeeded. Pins that succeeded or were rejected by the server (for example a deleted
+ * session) leave the entry; temporary failures stay in it for the next load.
  */
-export async function migrateLegacySessionPins(pinSession?: PinSession): Promise<number> {
+export async function migrateLegacySessionPins(profiles: readonly string[], pinSession?: PinSession): Promise<number> {
   const outcomes = new Map<string, 'pinned' | 'rejected' | 'retry'>()
   let migrated = 0
-  for (const key of legacySessionPinsKeys()) {
-    let retry = false
+  for (const key of legacySessionPinsKeys(profiles)) {
+    const retryIds: string[] = []
     for (const id of readLegacyPinIds(key)) {
       let outcome = outcomes.get(id)
       if (!outcome) {
@@ -70,11 +72,12 @@ export async function migrateLegacySessionPins(pinSession?: PinSession): Promise
         }
         outcomes.set(id, outcome)
       }
-      if (outcome === 'retry') retry = true
+      if (outcome === 'retry') retryIds.push(id)
     }
-    if (retry) continue
     try {
-      localStorage.removeItem(key)
+      // Keep only what still needs a retry, so a later unpin is never pinned again.
+      if (retryIds.length) localStorage.setItem(key, JSON.stringify(retryIds))
+      else localStorage.removeItem(key)
     } catch {
       // Storage may be unavailable; the next load retries the idempotent pins.
     }
