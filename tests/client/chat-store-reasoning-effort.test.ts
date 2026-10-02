@@ -202,6 +202,53 @@ describe('chat store per-session reasoning effort', () => {
     }))
   })
 
+  it('keeps a starting push choice when a resume reports a row another request pre-created', async () => {
+    chatApi.resumeSession.mockImplementation((sid: string, onResumed: (data: any) => void) => {
+      onResumed({ session_id: sid, messages: [], isWorking: false, events: [], workspace: '/w', model: '', provider: '', api_mode: '', reasoning_effort: '', push_enabled: true })
+      return {}
+    })
+    const store = useChatStore()
+    const session = makeSession('precreated-push-session')
+    session.isLocalOnly = true
+    session.workspace = '/w'
+    store.sessions = [session]
+    store.activeSessionId = session.id
+    store.activeSession = session
+
+    await store.setSessionPushEnabled(session.id, false)
+    await store.switchSession(session.id)
+
+    expect(session.pushEnabled).toBe(false)
+    expect(sessionsApi.setSessionPushEnabled).toHaveBeenCalledWith(session.id, false)
+    await store.sendMessage('first message')
+    expect(chatApi.startRunViaSocket.mock.calls.at(-1)?.[0]).toEqual(expect.objectContaining({ push_enabled: false }))
+  })
+
+  it('lets the server value through again once it matches the starting choice', async () => {
+    const pushed: Array<boolean> = []
+    chatApi.resumeSession.mockImplementation((sid: string, onResumed: (data: any) => void) => {
+      onResumed({ session_id: sid, messages: [], isWorking: false, events: [], workspace: '/w', model: '', provider: '', api_mode: '', reasoning_effort: '', push_enabled: pushed.shift() ?? false })
+      return {}
+    })
+    const store = useChatStore()
+    const session = makeSession('confirmed-push-session')
+    session.isLocalOnly = true
+    session.workspace = '/w'
+    store.sessions = [session]
+    store.activeSessionId = session.id
+    store.activeSession = session
+
+    await store.setSessionPushEnabled(session.id, false)
+    pushed.push(false, true)
+    await store.switchSession(session.id)
+    expect(session.pushEnabled).toBe(false)
+    expect(sessionsApi.setSessionPushEnabled).not.toHaveBeenCalled()
+
+    // Another device turned push on later; with the starting choice settled, it shows up.
+    await store.switchSession(session.id)
+    expect(session.pushEnabled).toBe(true)
+  })
+
   it('rolls back the push choice when persistence fails', async () => {
     sessionsApi.setSessionPushEnabled.mockResolvedValue(false)
     const store = useChatStore()

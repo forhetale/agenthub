@@ -1517,6 +1517,24 @@ export const useChatStore = defineStore('chat', () => {
   const pushEnabledWriteChains = new Map<string, Promise<boolean>>()
   const pushEnabledWriteTargets = new Map<string, boolean>()
   const pushEnabledConfirmedValues = new Map<string, boolean>()
+  // Push choices made in a chat before the server knew it. They survive refreshes until the
+  // server reports the same value; a row another request created first is updated to match.
+  const startingPushChoices = new Map<string, boolean>()
+
+  /** Whether a server-reported push flag may replace the one shown for this session. */
+  function acceptServerPushEnabled(sessionId: string, value: boolean | undefined): boolean {
+    const starting = startingPushChoices.get(sessionId)
+    if (starting !== undefined) {
+      if (value === undefined) return false
+      startingPushChoices.delete(sessionId)
+      if (starting !== value) {
+        void queuePushEnabledWrite(sessionId, starting, value)
+        return false
+      }
+    }
+    if (!pushEnabledWriteTargets.has(sessionId)) return true
+    return value !== undefined && pushEnabledWriteTargets.get(sessionId) === value
+  }
 
   function beginMessageLoad(sessionId: string, requestSequence: number) {
     const next = new Map(messageLoadRequests.value)
@@ -1896,7 +1914,7 @@ export const useChatStore = defineStore('chat', () => {
           existing.provider = fresh.provider
           existing.apiMode = fresh.apiMode || existing.apiMode
           existing.reasoningEffort = fresh.reasoningEffort
-          if (!pushEnabledWriteTargets.has(existing.id)) existing.pushEnabled = fresh.pushEnabled
+          if (acceptServerPushEnabled(existing.id, fresh.pushEnabled)) existing.pushEnabled = fresh.pushEnabled
           existing.messageCount = fresh.messageCount
           applySessionTokenUsage(existing, fresh)
           existing.workspace = fresh.workspace
@@ -1963,7 +1981,8 @@ export const useChatStore = defineStore('chat', () => {
       target.workspace = detail.session.workspace || target.workspace || null
       target.isPinned = Boolean(detail.session.is_pinned)
       target.categoryId = detail.session.category_id ?? null
-      if (!pushEnabledWriteTargets.has(sid)) target.pushEnabled = Boolean(detail.session.push_enabled)
+      const detailPushEnabled = Boolean(detail.session.push_enabled)
+      if (acceptServerPushEnabled(sid, detailPushEnabled)) target.pushEnabled = detailPushEnabled
       target.isLocalOnly = false
       target.parentSessionId = detail.session.parent_session_id || target.parentSessionId || null
       target.forkPointMessageId = (detail.session as any).fork_point_message_id != null ? String((detail.session as any).fork_point_message_id) : target.forkPointMessageId || null
@@ -3527,11 +3546,8 @@ export const useChatStore = defineStore('chat', () => {
           target.reasoningEffort = incomingEffort
         }
       }
-      if (typeof evt.push_enabled === 'boolean') {
-        const pendingEnabled = pushEnabledWriteTargets.get(sid)
-        if (!pushEnabledWriteTargets.has(sid) || pendingEnabled === evt.push_enabled) {
-          target.pushEnabled = evt.push_enabled
-        }
+      if (typeof evt.push_enabled === 'boolean' && acceptServerPushEnabled(sid, evt.push_enabled)) {
+        target.pushEnabled = evt.push_enabled
       }
     }
   }
@@ -5490,8 +5506,16 @@ export const useChatStore = defineStore('chat', () => {
     const previousEnabled = session.pushEnabled ?? defaultSessionPush.value
     if (target) target.pushEnabled = enabled
     if (activeTarget) activeTarget.pushEnabled = enabled
-    if (session.isLocalOnly) return true
+    if (session.isLocalOnly) {
+      // The first run carries it; until then refreshes must not replace it.
+      startingPushChoices.set(sessionId, enabled)
+      return true
+    }
+    startingPushChoices.delete(sessionId)
+    return queuePushEnabledWrite(sessionId, enabled, previousEnabled)
+  }
 
+  function queuePushEnabledWrite(sessionId: string, enabled: boolean, previousEnabled: boolean): Promise<boolean> {
     if (!pushEnabledWriteChains.has(sessionId)) {
       pushEnabledConfirmedValues.set(sessionId, previousEnabled)
     }
@@ -5504,8 +5528,9 @@ export const useChatStore = defineStore('chat', () => {
         if (ok) pushEnabledConfirmedValues.set(sessionId, enabled)
         if (!ok && pushEnabledWriteTargets.get(sessionId) === enabled) {
           const confirmedEnabled = pushEnabledConfirmedValues.get(sessionId) || false
-          if (target) target.pushEnabled = confirmedEnabled
-          if (activeTarget) activeTarget.pushEnabled = confirmedEnabled
+          for (const session of [sessions.value.find(s => s.id === sessionId), activeSession.value?.id === sessionId ? activeSession.value : null]) {
+            if (session) session.pushEnabled = confirmedEnabled
+          }
         }
         return ok
       })
