@@ -1800,11 +1800,15 @@ export const useChatStore = defineStore('chat', () => {
     const selectionSequence = activeSelectionSequence
     isLoadingSessions.value = true
     try {
-      const pinProfiles = useProfilesStore().profiles.map(item => item.name)
-      if (hasLegacySessionPins(pinProfiles)) await migrateLegacySessionPins(pinProfiles)
       const list = await fetchRuntimeSessions(profile)
       if (requestSequence !== loadSessionsRequestSequence) return
       const fresh = list.map(mapHermesSession)
+      const listedIds = fresh.map(session => session.id)
+      if (hasLegacySessionPins(listedIds)) {
+        const movedPins = await migrateLegacySessionPins(listedIds)
+        if (requestSequence !== loadSessionsRequestSequence) return
+        for (const session of fresh) if (movedPins.has(session.id)) session.isPinned = true
+      }
       const selectionChanged = selectionSequence !== activeSelectionSequence
       // Search can select a session outside the sidebar's first page. Keep
       // that selection when mounting its route, including title-only hits.
