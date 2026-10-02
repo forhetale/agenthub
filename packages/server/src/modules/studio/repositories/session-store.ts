@@ -290,6 +290,7 @@ export function createBranchedSession(data: {
   title?: string
   workspace?: string | null
   category_id?: number | null
+  push_enabled?: boolean | number
   ended_at: number
   last_active: number
   messages: Array<{
@@ -325,8 +326,8 @@ export function createBranchedSession(data: {
     ).run(data.ended_at, 'branched', data.parent_session_id)
 
     db.prepare(
-      `INSERT INTO ${SESSIONS_TABLE} (id, profile, source, agent, agent_mode, agent_preset, agent_session_id, agent_native_session_id, user_id, model, provider, api_mode, reasoning_effort, title, parent_session_id, started_at, last_active, workspace, category_id, message_count)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO ${SESSIONS_TABLE} (id, profile, source, agent, agent_mode, agent_preset, agent_session_id, agent_native_session_id, user_id, model, provider, api_mode, reasoning_effort, title, parent_session_id, started_at, last_active, workspace, category_id, push_enabled, message_count)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       data.id,
       data.profile || 'default',
@@ -347,6 +348,7 @@ export function createBranchedSession(data: {
       data.last_active,
       data.workspace || null,
       data.category_id ?? null,
+      data.push_enabled === true || data.push_enabled === 1 ? 1 : 0,
       data.messages.length,
     )
 

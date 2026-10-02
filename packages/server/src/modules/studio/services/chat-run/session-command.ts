@@ -1227,6 +1227,9 @@ function createBranchSession(parentSessionId: string, requestedTitle: string, ct
     parent_session_id: parentSessionId,
     workspace: parent.workspace || undefined,
     category_id: parent.category_id ?? null,
+    // A branch continues its parent's chat, so it keeps the owner and push setting.
+    user_id: parent.user_id,
+    push_enabled: parent.push_enabled,
     ended_at: nowSeconds,
     last_active: nowSeconds,
     messages: sourceMessages.map(message => ({

@@ -120,4 +120,27 @@ describe('createBranchedSession', () => {
       null,
     )
   })
+
+  it('stores the push setting a branch keeps from its parent', async () => {
+    const { createBranchedSession } = await import('../../packages/server/src/modules/studio/repositories/session-store')
+    const sessionInsert = (index: number) => mocks.prepare.mock.calls
+      .map(call => call[0] as string)
+      .filter(sql => sql.includes('INSERT INTO sessions'))[index]
+
+    for (const push_enabled of [1, 0, undefined]) {
+      createBranchedSession({
+        parent_session_id: 'parent-session',
+        id: `child-${push_enabled}`,
+        push_enabled,
+        ended_at: 123,
+        last_active: 123,
+        messages: [{ role: 'user', content: 'hello', timestamp: 100 }],
+      })
+    }
+
+    const columns = sessionInsert(0).match(/\(([^)]*)\)/)![1].split(',').map(column => column.trim())
+    const pushIndex = columns.indexOf('push_enabled')
+    expect(pushIndex).toBeGreaterThan(-1)
+    expect(mocks.insertSessionRun.mock.calls.map(call => call[pushIndex])).toEqual([1, 0, 0])
+  })
 })

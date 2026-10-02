@@ -282,6 +282,23 @@ describe('branch session command', () => {
     }))
   })
 
+  it.each([1, 0])('keeps the parent owner and push setting %s on the branch', async (pushEnabled) => {
+    const { handleSessionCommand, parseSessionCommand } = await import('../../packages/server/src/modules/studio/services/chat-run/session-command')
+    const { nsp, socket } = makeSocketHarness()
+    const sessionMap = new Map<string, any>([
+      ['session-1', { messages: [], isWorking: false, events: [], queue: [] }],
+    ])
+    getSessionMock.mockReturnValue(makeParentSession({ user_id: '42', push_enabled: pushEnabled }))
+
+    await handleSessionCommand('session-1', parseSessionCommand('/fork pushed')!, makeCtx(sessionMap, nsp, socket))
+
+    expect(createBranchedSessionMock).toHaveBeenCalledWith(expect.objectContaining({
+      parent_session_id: 'session-1',
+      user_id: '42',
+      push_enabled: pushEnabled,
+    }))
+  })
+
   it('preserves api_server source when forking non-bridge chat sessions', async () => {
     const { handleSessionCommand, parseSessionCommand } = await import('../../packages/server/src/modules/studio/services/chat-run/session-command')
     const { nsp, socket, namespaceEmit } = makeSocketHarness()
