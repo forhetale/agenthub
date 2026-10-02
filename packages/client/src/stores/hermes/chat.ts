@@ -1776,8 +1776,7 @@ export const useChatStore = defineStore('chat', () => {
     const selectionSequence = activeSelectionSequence
     isLoadingSessions.value = true
     try {
-      const pinProfile = profile || getActiveProfileName() || 'default'
-      if (hasLegacySessionPins(pinProfile)) await migrateLegacySessionPins(pinProfile)
+      if (hasLegacySessionPins()) await migrateLegacySessionPins()
       const list = await fetchRuntimeSessions(profile)
       if (requestSequence !== loadSessionsRequestSequence) return
       const fresh = list.map(mapHermesSession)
