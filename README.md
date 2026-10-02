@@ -24,7 +24,7 @@
   A local-first AI workspace for multi-agent chat, coding, and visual workflows.<br/>
   Available as a desktop app and self-hosted web console, with support for<br/>
   <a href="https://github.com/NousResearch/hermes-agent">Hermes Agent</a>, Ekko Agent, Claude Code, Codex, Pi, Grok, OpenCode, and DeepSeek Harness (DSH).<br/>
-  Bring conversations, group collaboration, voice, files, and devices together in one place.
+  Bring conversations, group collaboration, voice, and files together in one place.
 </p>
 
 <p align="center">
@@ -72,10 +72,10 @@ Browse installed skills, read their instructions, and enable them as needed.
 | Area | What Ekko Studio does |
 | --- | --- |
 | Multi-agent runtime | Runs Hermes, Ekko, Claude Code, Codex, Pi, Grok, OpenCode, and DeepSeek Harness (DSH) with streaming responses, tool traces, generated-file previews, persistent sessions, and standalone desktop chat windows. |
-| Studio workspace | Provides shared chats, group chat, global-agent runs, workflows, files, voice, media, devices, themes, logs, usage, and App connectivity across agent runtimes. |
+| Studio workspace | Provides shared chats, group chat, global-agent runs, workflows, files, voice, media, themes, logs, usage, and Bark message push across agent runtimes. |
 | Agent control planes | Keeps Hermes profiles, providers, models, memory, skills, plugins, jobs, Kanban, channels, and runtime management in their owning agent module. |
 | Automation | Builds executable visual workflows and connects the supported runtimes through schedules, approval gates, group-chat rooms, platform channels, and MCP servers. |
-| Workspace tools | Provides a file browser, web terminal, Desktop Agent Browser, voice input/output, coding-agent runners, device discovery, Journey graph, and performance views. |
+| Workspace tools | Provides a file browser, web terminal, Desktop Agent Browser, voice input/output, coding-agent runners, Journey graph, and performance views. |
 | Distribution | Ships as a desktop app for Windows/macOS/Linux, an npm CLI package, and a Docker image. |
 
 ## Agent and Platform Boundaries
@@ -91,8 +91,8 @@ grouped into three agent families:
 
 Studio owns capabilities shared by those families: single chat, group chat,
 global-agent orchestration, workflows, webhooks, sessions, files and uploads,
-TTS/STT, media, pets, themes, devices, networking, logs, usage, authentication,
-and App connectivity. Studio-owned HTTP APIs use `/api/studio/*`; Hermes-owned
+TTS/STT, media, pets, themes, networking, logs, usage, authentication,
+and Bark message push. Studio-owned HTTP APIs use `/api/studio/*`; Hermes-owned
 control-plane APIs use `/api/hermes/*`. Already-released mobile App paths are
 handled by one centralized compatibility layer instead of duplicate legacy
 controllers.
@@ -246,8 +246,7 @@ Install DSH on the machine running the Studio backend through Agent Manager. Nat
 
 ### Admin & Runtime Management
 
-- Device and LAN peer views for local-network discovery and peer tooling
-- MCP manager for the managed `ekko-studio-*` servers, profile injection, and `api` / `browser` / `devices` / `use` toolsets
+- MCP manager for the managed `ekko-studio-*` servers, profile injection, and `api` / `browser` / `use` / `plan` toolsets
 - Runtime version and version-preview tooling for testing newer builds in isolation
 - Performance monitor views for super administrators
 
@@ -334,14 +333,14 @@ desktop app, bundled Hermes Agent CLI, and bundled server CLI do not conflict:
 | `ekko-studio cli ...` | Run the bundled Hermes Agent CLI |
 | `ekko-studio web ...` | Run the bundled `hermes-web-ui` command |
 | `ekko-studio -h` | Show wrapper help |
-| `ekko-studio-mcp [api\|browser\|devices\|use]` | Run one managed Studio MCP toolset |
+| `ekko-studio-mcp [api\|browser\|use\|plan]` | Run one managed Studio MCP toolset |
 
 The desktop command is `ekko-studio`; the previous managed `hermes-studio`
 command is removed when the new shim is installed. No compatibility alias is created.
 
 Use `ekko-studio cli -h` for Hermes Agent CLI help and
 `ekko-studio web -h` for server CLI help. `ekko-studio-mcp` defaults to the
-`api` toolset; choose `browser`, `devices`, or `use` to keep the exposed MCP
+`api` toolset; choose `browser`, `use`, or `plan` to keep the exposed MCP
 surface focused on the current task.
 
 Desktop auto-updates read the latest feed from
@@ -465,7 +464,7 @@ These variables configure Ekko Studio, its local Hermes runtime integration, and
 | `hermes-web-ui update` / `upgrade` | Update to the latest version and restart |
 | `hermes-web-ui version` / `-v` | Show the version |
 | `hermes-web-ui -h` | Show help |
-| `hermes-web-ui-mcp [api\|browser\|devices\|use]` | Run one managed Studio MCP toolset (same as `ekko-studio-mcp`) |
+| `hermes-web-ui-mcp [api\|browser\|use\|plan]` | Run one managed Studio MCP toolset (same as `ekko-studio-mcp`) |
 
 Add `--no-open` to `start` or `client` when no browser should open.
 
@@ -513,7 +512,7 @@ Browser / Desktop / App
 Koa bootstrap (composition only)
           │
           ├─ Studio platform ── chat, groups, global agent, workflows,
-          │                    sessions, files, voice, devices, webhooks
+          │                    sessions, files, voice, webhooks
           ├─ Hermes family ─── profiles, models, skills, memory, jobs,
           │                    Kanban, channels, terminal, Hermes bridge
           ├─ Ekko family ───── Ekko runtime and agent-owned services
