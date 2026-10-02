@@ -224,6 +224,65 @@ describe('chat store per-session reasoning effort', () => {
     expect(chatApi.startRunViaSocket.mock.calls.at(-1)?.[0]).toEqual(expect.objectContaining({ push_enabled: false }))
   })
 
+  it('lets another device change push once the first run has carried the starting choice', async () => {
+    const store = useChatStore()
+    const session = makeSession('cross-device-push-session')
+    session.isLocalOnly = true
+    store.sessions = [session]
+    store.activeSessionId = session.id
+    store.activeSession = session
+
+    await store.setSessionPushEnabled(session.id, false)
+    await store.sendMessage('first message')
+    const [payload, onEvent] = chatApi.startRunViaSocket.mock.calls.at(-1)!
+    expect(payload).toEqual(expect.objectContaining({ push_enabled: false }))
+
+    ;(onEvent as (evt: any) => void)({ event: 'session.settings.updated', session_id: session.id, push_enabled: true })
+    await Promise.resolve()
+
+    expect(sessionsApi.setSessionPushEnabled).not.toHaveBeenCalled()
+    expect(store.activeSession?.pushEnabled).toBe(true)
+  })
+
+  it('saves a push change made while the first run is in flight', async () => {
+    const store = useChatStore()
+    const session = makeSession('mid-run-push-session')
+    session.isLocalOnly = true
+    session.workspace = '/w'
+    store.sessions = [session]
+    store.activeSessionId = session.id
+    store.activeSession = session
+
+    await store.sendMessage('long first task')
+    await expect(store.setSessionPushEnabled(session.id, true)).resolves.toBe(true)
+
+    expect(sessionsApi.setSessionPushEnabled).toHaveBeenCalledWith(session.id, true)
+  })
+
+  it('keeps a starting push choice when a session reload replaces the chat with a pre-created row', async () => {
+    const store = useChatStore()
+    const session = makeSession('reloaded-push-session')
+    session.isLocalOnly = true
+    session.profile = 'default'
+    session.workspace = '/w'
+    store.sessions = [session]
+    store.activeSessionId = session.id
+    store.activeSession = session
+    await store.setSessionPushEnabled(session.id, false)
+    sessionsApi.fetchSessions.mockImplementation(async (source?: string) => source === 'global_agent' ? [] : [{
+      id: session.id, title: '', source: 'cli', model: '', started_at: 1, message_count: 0, push_enabled: 1, workspace: '/w', profile: 'default',
+    }])
+    chatApi.resumeSession.mockImplementation((sid: string, onResumed: (data: any) => void) => {
+      onResumed({ session_id: sid, messages: [], isWorking: false, events: [], workspace: '/w', model: '', provider: '', api_mode: '', reasoning_effort: '', push_enabled: true })
+      return {}
+    })
+
+    await store.loadSessions(null)
+
+    expect(store.sessions.find(item => item.id === session.id)?.pushEnabled).toBe(false)
+    expect(sessionsApi.setSessionPushEnabled).toHaveBeenCalledWith(session.id, false)
+  })
+
   it('lets the server value through again once it matches the starting choice', async () => {
     const pushed: Array<boolean> = []
     chatApi.resumeSession.mockImplementation((sid: string, onResumed: (data: any) => void) => {

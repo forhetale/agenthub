@@ -1536,6 +1536,12 @@ export const useChatStore = defineStore('chat', () => {
     return value !== undefined && pushEnabledWriteTargets.get(sessionId) === value
   }
 
+  /** Shows a server-reported push flag, or the local choice still on its way to the server. */
+  function applyServerPushEnabled(target: Session, value: boolean | undefined) {
+    if (acceptServerPushEnabled(target.id, value)) target.pushEnabled = value
+    else if (pushEnabledWriteTargets.has(target.id)) target.pushEnabled = pushEnabledWriteTargets.get(target.id)
+  }
+
   function beginMessageLoad(sessionId: string, requestSequence: number) {
     const next = new Map(messageLoadRequests.value)
     next.set(sessionId, requestSequence)
@@ -1819,6 +1825,7 @@ export const useChatStore = defineStore('chat', () => {
         if (prev?.messages?.length) s.messages = prev.messages
         if (prev?.contextTokens != null) s.contextTokens = prev.contextTokens
         if (!s.apiMode && prev?.apiMode) s.apiMode = prev.apiMode
+        applyServerPushEnabled(s, s.pushEnabled)
       }
       const freshIds = new Set(fresh.map(session => session.id))
       const localOnlySessions = sessions.value.filter(session =>
@@ -1915,7 +1922,7 @@ export const useChatStore = defineStore('chat', () => {
           existing.provider = fresh.provider
           existing.apiMode = fresh.apiMode || existing.apiMode
           existing.reasoningEffort = fresh.reasoningEffort
-          if (acceptServerPushEnabled(existing.id, fresh.pushEnabled)) existing.pushEnabled = fresh.pushEnabled
+          applyServerPushEnabled(existing, fresh.pushEnabled)
           existing.messageCount = fresh.messageCount
           applySessionTokenUsage(existing, fresh)
           existing.workspace = fresh.workspace
@@ -1982,8 +1989,7 @@ export const useChatStore = defineStore('chat', () => {
       target.workspace = detail.session.workspace || target.workspace || null
       target.isPinned = Boolean(detail.session.is_pinned)
       target.categoryId = detail.session.category_id ?? null
-      const detailPushEnabled = Boolean(detail.session.push_enabled)
-      if (acceptServerPushEnabled(sid, detailPushEnabled)) target.pushEnabled = detailPushEnabled
+      applyServerPushEnabled(target, Boolean(detail.session.push_enabled))
       target.isLocalOnly = false
       target.parentSessionId = detail.session.parent_session_id || target.parentSessionId || null
       target.forkPointMessageId = (detail.session as any).fork_point_message_id != null ? String((detail.session as any).fork_point_message_id) : target.forkPointMessageId || null
@@ -3547,9 +3553,7 @@ export const useChatStore = defineStore('chat', () => {
           target.reasoningEffort = incomingEffort
         }
       }
-      if (typeof evt.push_enabled === 'boolean' && acceptServerPushEnabled(sid, evt.push_enabled)) {
-        target.pushEnabled = evt.push_enabled
-      }
+      if (typeof evt.push_enabled === 'boolean') applyServerPushEnabled(target, evt.push_enabled)
     }
   }
 
@@ -3830,6 +3834,8 @@ export const useChatStore = defineStore('chat', () => {
       if (shouldSendInitialSessionConfig && activeSession.value) {
         activeSession.value.messageCount = Math.max(activeSession.value.messageCount || 0, 1)
       }
+      // The run now carries any starting push choice; later server values win again.
+      startingPushChoices.delete(sid)
 
       // Helper to clean up this session's stream state
       const cleanup = () => {
@@ -5507,7 +5513,7 @@ export const useChatStore = defineStore('chat', () => {
     const previousEnabled = session.pushEnabled ?? defaultSessionPush.value
     if (target) target.pushEnabled = enabled
     if (activeTarget) activeTarget.pushEnabled = enabled
-    if (session.isLocalOnly) {
+    if (session.isLocalOnly && !(session.messageCount && session.messageCount > 0)) {
       // The first run carries it; until then refreshes must not replace it.
       startingPushChoices.set(sessionId, enabled)
       return true
