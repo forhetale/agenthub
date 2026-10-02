@@ -5534,8 +5534,14 @@ export const useChatStore = defineStore('chat', () => {
       .then((ok) => {
         if (ok) pushEnabledConfirmedValues.set(sessionId, enabled)
         if (!ok && pushEnabledWriteTargets.get(sessionId) === enabled) {
+          const targets = [sessions.value.find(s => s.id === sessionId), activeSession.value?.id === sessionId ? activeSession.value : null]
+          if (targets.some(session => session?.isLocalOnly)) {
+            // A first run that failed before the server created the chat; the next run carries it.
+            startingPushChoices.set(sessionId, enabled)
+            return true
+          }
           const confirmedEnabled = pushEnabledConfirmedValues.get(sessionId) || false
-          for (const session of [sessions.value.find(s => s.id === sessionId), activeSession.value?.id === sessionId ? activeSession.value : null]) {
+          for (const session of targets) {
             if (session) session.pushEnabled = confirmedEnabled
           }
         }

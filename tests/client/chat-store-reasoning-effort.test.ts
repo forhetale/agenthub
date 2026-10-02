@@ -259,6 +259,27 @@ describe('chat store per-session reasoning effort', () => {
     expect(sessionsApi.setSessionPushEnabled).toHaveBeenCalledWith(session.id, true)
   })
 
+  it('keeps a push change for the retry when the first run failed before the server created the chat', async () => {
+    sessionsApi.setSessionPushEnabled.mockResolvedValue(false)
+    const store = useChatStore()
+    const session = makeSession('failed-first-run-session')
+    session.isLocalOnly = true
+    session.pushEnabled = true
+    store.sessions = [session]
+    store.activeSessionId = session.id
+    store.activeSession = session
+
+    await store.sendMessage('first try')
+    const onEvent = chatApi.startRunViaSocket.mock.calls.at(-1)![1] as (evt: any) => void
+    onEvent({ event: 'run.failed', session_id: session.id, error: 'Runtime unavailable' })
+    await Promise.resolve()
+
+    await expect(store.setSessionPushEnabled(session.id, false)).resolves.toBe(true)
+    expect(session.pushEnabled).toBe(false)
+    await store.sendMessage('second try')
+    expect(chatApi.startRunViaSocket.mock.calls.at(-1)?.[0]).toEqual(expect.objectContaining({ push_enabled: false }))
+  })
+
   it('keeps a starting push choice when a session reload replaces the chat with a pre-created row', async () => {
     const store = useChatStore()
     const session = makeSession('reloaded-push-session')
