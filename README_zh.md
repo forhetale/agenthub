@@ -21,35 +21,23 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/EKKOLearnAI/ekko-studio/releases/latest">下载 Ekko Studio 桌面版</a>
+  <a href="#快速开始">从源码构建</a>
   ·
-  <a href="https://ekkostudio.xyz/#/docs/getting-started">使用文档</a>
-  ·
-  <code>npm install -g hermes-web-ui && hermes-web-ui start</code>
+  <a href="./CUSTOMIZATION.md">本分支的改动</a>
 </p>
 
-<p align="center">
-  <img src="./docs/screenshots/overview/workspace.png" alt="Ekko Studio 工作区与示例对话" width="960"/>
-</p>
-
-<p align="center">
-  <a href="https://www.npmjs.com/package/hermes-web-ui"><img src="https://img.shields.io/npm/v/hermes-web-ui?style=flat-square&color=blue" alt="npm 版本"/></a>
-  <a href="https://github.com/EKKOLearnAI/ekko-studio/blob/main/LICENSE"><img src="https://img.shields.io/npm/l/hermes-web-ui?style=flat-square" alt="许可证"/></a>
-  <a href="https://github.com/EKKOLearnAI/ekko-studio/stargazers"><img src="https://img.shields.io/github/stars/EKKOLearnAI/ekko-studio?style=flat-square" alt="Star"/></a>
-</p>
-
-Ekko Studio 原名 Hermes Studio / Hermes Web UI。GitHub 仓库现为
-`EKKOLearnAI/ekko-studio`，npm 包名和服务端 CLI 仍为 `hermes-web-ui`；
-克隆和安装时请使用这些名称。
+Ekko Studio 原名 Hermes Studio / Hermes Web UI，上游仓库为
+`EKKOLearnAI/ekko-studio`。本分支位于 [forhetale/tatin-studio](https://github.com/forhetale/tatin-studio)，
+包名和服务端 CLI 仍为 `hermes-web-ui`。
 
 ## 界面预览
 
 以下为 Ekko Studio **v0.7.18** 的界面截图（2026-09-10）。聊天和工作流使用演示数据。
 
-| 可视化工作流 | Agent 管理 |
-| --- | --- |
-| [![可视化工作流：研究、编码与审核](./docs/screenshots/overview/workflow.png)](./docs/screenshots/overview/workflow.png) | [![统一管理七种 Agent 运行时](./docs/screenshots/overview/agent-manager.png)](./docs/screenshots/overview/agent-manager.png) |
-| 连接多个 Agent 节点，并设置人工审批。 | 在同一界面管理 Agent 安装、设置和更新。 |
+| Agent 管理 |
+| --- |
+| [![统一管理七种 Agent 运行时](./docs/screenshots/overview/agent-manager.png)](./docs/screenshots/overview/agent-manager.png) |
+| 在同一界面管理 Agent 安装、设置和更新。 |
 
 <details>
 <summary>查看技能管理界面</summary>
@@ -295,21 +283,26 @@ hermes-web-ui reset-default-login
 
 - Windows、macOS 和 Linux 原生 Electron 桌面壳
 - 内置 Studio 运行时，并自动启动本地服务
-- 桌面自动更新优先使用 Cloudflare 下载端点获取更新元数据和安装包
-- 如果 Cloudflare 更新源不可用，会回退到 GitHub Releases `latest` 资源
-- Windows 升级时会先尝试关闭已有 Ekko Studio 进程，再替换文件
+- TATin 定制版不会下载上游桌面更新；更新请从本源码重新构建
 
 ---
 
 ## 快速开始
 
-### 桌面应用（推荐）
+所有安装方式都从本仓库构建。上游发布的安装包、`hermes-web-ui` npm 包和上游 Docker 镜像都是不含本分支改动的上游原版。
 
-从 [GitHub Releases](https://github.com/EKKOLearnAI/ekko-studio/releases/latest)
-下载最新的 **Ekko Studio** 桌面安装包。
+### 桌面应用
 
-桌面版会发布 macOS、Windows 和 Linux 构建；适用时会区分不同 CPU 架构。
-桌面应用内置 Studio 运行时；在 Windows、macOS 和 Linux 上，Hermes Agent 数据统一保存到 `~/.hermes`。
+从源码构建桌面安装包（需要 Node.js 23 或更新版本）：
+
+```bash
+git clone https://github.com/forhetale/tatin-studio.git
+cd tatin-studio
+npm ci
+npm run build:desktop   # 或 build:desktop:mac、build:desktop:win、build:desktop:linux
+```
+
+安装包输出到 `packages/desktop/release`。桌面应用内置 Studio 运行时；在 Windows、macOS 和 Linux 上，Hermes Agent 数据统一保存到 `~/.hermes`。
 
 桌面壳自身的 Studio 状态会单独保存到 `~/.hermes-web-ui`，除非设置了
 `HERMES_WEB_UI_HOME`。
@@ -331,15 +324,16 @@ hermes-web-ui reset-default-login
 `ekko-studio web -h` 查看服务端 CLI 帮助。`ekko-studio-mcp` 默认暴露
 `api` 工具集；按任务选择 `browser`、`use` 或 `plan`，可以缩小 MCP 暴露面。
 
-桌面自动更新会优先读取 `https://download.ekkolearnai.com/latest`。
-如果该端点不可用，更新器会回退到
-`https://github.com/EKKOLearnAI/ekko-studio/releases/latest/download`。
+TATin 定制版不会自动更新：更新器拒绝定制版使用上游更新源。拉取本仓库并重新构建即可更新。
 
-### npm 安装
+### 从源码运行 Web 控制台
 
 ```bash
-npm install -g hermes-web-ui
-hermes-web-ui start
+git clone https://github.com/forhetale/tatin-studio.git
+cd tatin-studio
+npm ci
+npm run build
+node bin/hermes-web-ui.mjs start
 ```
 
 打开 **http://localhost:8648**
@@ -349,10 +343,7 @@ hermes-web-ui start
 单容器部署，内置 Hermes Agent 运行时：
 
 ```bash
-# 使用预构建镜像（推荐）
-WEBUI_IMAGE=ekkoye8888/hermes-web-ui docker compose up -d
-
-# 或从源码构建
+# 从本仓库源码构建镜像
 docker compose up -d --build
 
 docker compose logs -f hermes-webui
@@ -446,7 +437,7 @@ Studio 启动后端聊天能力时，会优先使用包含 `run_agent.py` 的源
 | `hermes-web-ui status` | 查看运行状态 |
 | `hermes-web-ui clear-login-locks [--restart]` | 清理持久登录锁，可选择重启 |
 | `hermes-web-ui reset-default-login` | 创建或重置默认管理员登录 |
-| `hermes-web-ui update` / `upgrade` | 更新到最新版本并重启 |
+| `hermes-web-ui update` / `upgrade` | TATin 定制版上会拒绝执行；请拉取本源码并重新构建 |
 | `hermes-web-ui version` / `-v` | 显示版本号 |
 | `hermes-web-ui -h` | 显示帮助信息 |
 | `hermes-web-ui-mcp [api\|browser\|use\|plan]` | 运行一个受管 Studio MCP 工具集（等同于 `ekko-studio-mcp`） |
@@ -455,7 +446,7 @@ Studio 启动后端聊天能力时，会优先使用包含 `run_agent.py` 的源
 
 `restart`、`update` 和 `upgrade` 默认会停止 Agent Bridge broker，避免重启或更新后的服务复用旧 Python bridge 进程。只有明确希望保留 broker 和正在运行的 bridge session 时，才在重启前设置 `HERMES_AGENT_BRIDGE_STOP_ON_SHUTDOWN=0`。
 
-`update` / `upgrade` 会先尝试执行 `npm cache clean --force`，再执行 `npm install -g hermes-web-ui@latest` 并重启。缓存清理是 best-effort；如果清理失败，只提示 warning，升级安装会继续执行。
+`update` / `upgrade` 会安装上游的 `hermes-web-ui@latest` npm 包，因此在 TATin 定制版上拒绝执行。更新方式：拉取本仓库，执行 `npm ci` 与 `npm run build`，再 `restart`。
 
 ### 自动配置
 
@@ -470,8 +461,8 @@ Studio 启动后端聊天能力时，会优先使用包含 `run_agent.py` 的源
 ## 开发
 
 ```bash
-git clone https://github.com/EKKOLearnAI/ekko-studio.git
-cd ekko-studio
+git clone https://github.com/forhetale/tatin-studio.git
+cd tatin-studio
 npm install
 npm run dev
 ```

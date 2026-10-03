@@ -28,35 +28,24 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/EKKOLearnAI/ekko-studio/releases/latest">Download Ekko Studio Desktop</a>
+  <a href="#quick-start">Build from source</a>
   ·
-  <a href="https://ekkostudio.xyz/#/docs/getting-started">Documentation</a>
-  ·
-  <code>npm install -g hermes-web-ui && hermes-web-ui start</code>
+  <a href="./CUSTOMIZATION.md">What this fork changes</a>
 </p>
 
-<p align="center">
-  <img src="./docs/screenshots/overview/workspace.png" alt="Ekko Studio workspace with an example conversation" width="960"/>
-</p>
-
-<p align="center">
-  <a href="https://www.npmjs.com/package/hermes-web-ui"><img src="https://img.shields.io/npm/v/hermes-web-ui?style=flat-square&color=blue" alt="npm version"/></a>
-  <a href="https://github.com/EKKOLearnAI/ekko-studio/blob/main/LICENSE"><img src="https://img.shields.io/npm/l/hermes-web-ui?style=flat-square" alt="license"/></a>
-  <a href="https://github.com/EKKOLearnAI/ekko-studio/stargazers"><img src="https://img.shields.io/github/stars/EKKOLearnAI/ekko-studio?style=flat-square" alt="stars"/></a>
-</p>
-
-Ekko Studio was previously named Hermes Studio / Hermes Web UI. The GitHub
-repository is now `EKKOLearnAI/ekko-studio`, and the npm package and server CLI
-remain `hermes-web-ui`; use these names in clone and installation commands.
+Ekko Studio was previously named Hermes Studio / Hermes Web UI; the upstream
+repository is `EKKOLearnAI/ekko-studio`. This fork lives at
+[forhetale/tatin-studio](https://github.com/forhetale/tatin-studio) and keeps the package and server CLI name
+`hermes-web-ui`.
 
 ## Screenshots
 
 Captured in Ekko Studio **v0.7.18** on 2026-09-10. Chat and workflow screens use demo data.
 
-| Visual workflows | Agent Manager |
-| --- | --- |
-| [![Visual workflow connecting research, coding, and review](./docs/screenshots/overview/workflow.png)](./docs/screenshots/overview/workflow.png) | [![Seven agent runtimes in Agent Manager](./docs/screenshots/overview/agent-manager.png)](./docs/screenshots/overview/agent-manager.png) |
-| Connect agent steps and add a human approval gate. | Manage agent installations, settings, and updates in one place. |
+| Agent Manager |
+| --- |
+| [![Seven agent runtimes in Agent Manager](./docs/screenshots/overview/agent-manager.png)](./docs/screenshots/overview/agent-manager.png) |
+| Manage agent installations, settings, and updates in one place. |
 
 <details>
 <summary>Explore the Skills interface</summary>
@@ -304,22 +293,30 @@ hermes-web-ui reset-default-login
 
 - Native Electron shell for Windows, macOS, and Linux
 - Bundles the Studio runtime and starts the local server automatically
-- Uses Cloudflare download endpoints for desktop auto-update metadata and assets first
-- Falls back to GitHub Releases `latest` assets if the Cloudflare update feed is unavailable
-- Windows upgrades attempt to close an existing Ekko Studio process before replacing files
+- TATin builds never download upstream desktop updates; rebuild from this source to update
 
 ---
 
 ## Quick Start
 
-### Desktop App (Recommended)
+All installs build from this repository. Upstream release installers, the
+`hermes-web-ui` npm package and upstream Docker images are the upstream product
+without this fork's changes.
 
-Download the latest **Ekko Studio** desktop installer from
-[GitHub Releases](https://github.com/EKKOLearnAI/ekko-studio/releases/latest).
+### Desktop App
 
-Desktop builds are published for macOS, Windows, and Linux, with separate
-architecture assets where applicable. The desktop app bundles the Studio
-runtime and stores Hermes Agent data in `~/.hermes` on Windows, macOS, and Linux.
+Build the desktop installer from source (Node.js 23 or newer):
+
+```bash
+git clone https://github.com/forhetale/tatin-studio.git
+cd tatin-studio
+npm ci
+npm run build:desktop   # or build:desktop:mac, build:desktop:win, build:desktop:linux
+```
+
+Installers are written to `packages/desktop/release`. The desktop app bundles
+the Studio runtime and stores Hermes Agent data in `~/.hermes` on Windows,
+macOS, and Linux.
 
 The desktop wrapper stores its own Studio state separately in
 `~/.hermes-web-ui` unless `HERMES_WEB_UI_HOME` is set.
@@ -343,16 +340,17 @@ Use `ekko-studio cli -h` for Hermes Agent CLI help and
 `api` toolset; choose `browser`, `use`, or `plan` to keep the exposed MCP
 surface focused on the current task.
 
-Desktop auto-updates read the latest feed from
-`https://download.ekkolearnai.com/latest` first. If that endpoint is
-unavailable, the updater falls back to
-`https://github.com/EKKOLearnAI/ekko-studio/releases/latest/download`.
+TATin builds do not auto-update: the updater refuses upstream feeds on custom
+builds. Pull this repository and rebuild to update.
 
-### npm
+### Web Console From Source
 
 ```bash
-npm install -g hermes-web-ui
-hermes-web-ui start
+git clone https://github.com/forhetale/tatin-studio.git
+cd tatin-studio
+npm ci
+npm run build
+node bin/hermes-web-ui.mjs start
 ```
 
 Open **http://localhost:8648**
@@ -362,10 +360,7 @@ Open **http://localhost:8648**
 Single-container deployment with integrated Hermes Agent:
 
 ```bash
-# Use pre-built image (Recommended)
-WEBUI_IMAGE=ekkoye8888/hermes-web-ui docker compose up -d
-
-# Or build from source
+# Build the image from this repository's source
 docker compose up -d --build
 
 docker compose logs -f hermes-webui
@@ -462,7 +457,7 @@ These variables configure Ekko Studio, its local Hermes runtime integration, and
 | `hermes-web-ui status` | Check if running |
 | `hermes-web-ui clear-login-locks [--restart]` | Clear persisted login locks, optionally restart |
 | `hermes-web-ui reset-default-login` | Create or reset the default administrator login |
-| `hermes-web-ui update` / `upgrade` | Update to the latest version and restart |
+| `hermes-web-ui update` / `upgrade` | Refused on TATin builds; pull and rebuild this source instead |
 | `hermes-web-ui version` / `-v` | Show the version |
 | `hermes-web-ui -h` | Show help |
 | `hermes-web-ui-mcp [api\|browser\|use\|plan]` | Run one managed Studio MCP toolset (same as `ekko-studio-mcp`) |
@@ -471,7 +466,7 @@ Add `--no-open` to `start` or `client` when no browser should open.
 
 `restart`, `update`, and `upgrade` stop the Agent Bridge broker by default so restarted or updated servers do not reuse stale Python bridge processes. Set `HERMES_AGENT_BRIDGE_STOP_ON_SHUTDOWN=0` before restarting only when you explicitly want to keep the bridge broker and running bridge sessions alive.
 
-`update` / `upgrade` first attempt `npm cache clean --force`, then run `npm install -g hermes-web-ui@latest` and restart. Cache cleanup is best-effort; if it fails, the updater continues with the install.
+`update` / `upgrade` would install the upstream `hermes-web-ui@latest` npm package, so they refuse to run on TATin builds. Update by pulling this repository, running `npm ci` and `npm run build`, then `restart`.
 
 ### Auto Configuration
 
@@ -486,8 +481,8 @@ On startup the BFF server automatically:
 ## Development
 
 ```bash
-git clone https://github.com/EKKOLearnAI/ekko-studio.git
-cd ekko-studio
+git clone https://github.com/forhetale/tatin-studio.git
+cd tatin-studio
 npm install
 npm run dev
 ```

@@ -1,10 +1,10 @@
 # Ekko Studio installation
 
-Use the installation form already chosen by the user. Desktop is the recommended end-user installation; npm, Docker, and source installs serve different deployment needs.
+Use the installation form already chosen by the user. This is TATin Studio, a fork of Ekko Studio: every installation form builds from the fork's source at `https://github.com/forhetale/tatin-studio`. Upstream release installers, the `hermes-web-ui` npm package and upstream Docker images are the upstream product without the fork's changes; never install them to set up or upgrade this Studio.
 
 ## Desktop application
 
-Install the latest platform and architecture-specific package from the Ekko Studio GitHub Releases page. The packaged app bundles the Studio server and can manage a Hermes Runtime separately.
+Build the platform installer from a checkout of the fork with `npm ci` and `npm run build:desktop` (or the `:mac`, `:win` and `:linux` variants); installers are written to `packages/desktop/release`. The packaged app bundles the Studio server and can manage a Hermes Runtime separately.
 
 Once a managed Runtime is ready, packaged Desktop installs managed command shims:
 
@@ -22,37 +22,34 @@ ekko-studio web version
 
 Refresh the Agents page after each installation change. Hermes shows either a user CLI, a managed Runtime, or not installed.
 
-Upgrade the packaged Desktop from its **Check for Updates** action. The updater checks the Cloudflare feed first and falls back to the GitHub latest-release feed. It downloads only after confirmation, then offers a restart to install. This upgrades the Desktop application; it is distinct from downloading a Hermes Runtime version or running `ekko-studio cli update`.
+The packaged Desktop does not update itself: its updater refuses upstream feeds on TATin builds. Upgrade by updating the checkout and building a new installer. This is distinct from downloading a Hermes Runtime version or running `ekko-studio cli update`.
 
-## npm installation
+## Web console from source
 
-Requirements: Node.js 23 or newer and a working npm global prefix.
+Requirements: Git, Node.js 23 or newer, and npm.
 
 ```bash
 node --version
 npm --version
-npm install -g hermes-web-ui
-hermes-web-ui version
-hermes-web-ui start --no-open
-hermes-web-ui status
+git clone https://github.com/forhetale/tatin-studio.git
+cd tatin-studio
+npm ci
+npm run build
+node bin/hermes-web-ui.mjs version
+node bin/hermes-web-ui.mjs start --no-open
+node bin/hermes-web-ui.mjs status
 ```
 
-The default address is `http://localhost:8648`. A successful installation must satisfy both `hermes-web-ui version` and `hermes-web-ui status` after startup.
+The default address is `http://localhost:8648`. A successful installation must satisfy both `version` and `status` after startup.
 
-Upgrade and restart with:
-
-```bash
-hermes-web-ui update --no-open
-```
-
-`upgrade` is an alias. The command performs a best-effort npm cache cleanup, installs `hermes-web-ui@latest` globally, locates the updated global CLI, and restarts on the previous or requested port.
+`hermes-web-ui update` and `upgrade` refuse to run on TATin builds because they would install the upstream npm package. Upgrade by updating the checkout, running `npm ci` and `npm run build` again, then restarting with `node bin/hermes-web-ui.mjs restart`.
 
 ## Docker Compose
 
-Use the repository's Compose file. The prebuilt image already contains an integrated Hermes Agent runtime.
+Use the repository's Compose file and build the image from the checkout. The image contains an integrated Hermes Agent runtime.
 
 ```bash
-WEBUI_IMAGE=ekkoye8888/hermes-web-ui docker compose up -d
+docker compose up -d --build
 docker compose ps
 docker compose logs -f hermes-webui
 ```
@@ -65,11 +62,10 @@ docker compose exec hermes-webui hermes --version
 
 Persistent data stays below `${HERMES_DATA_DIR}` (default `./hermes_data`), with Studio state below `${HERMES_DATA_DIR}/hermes-web-ui`. Recreating or upgrading the container must retain those mounts.
 
-To upgrade the prebuilt image, use the same `WEBUI_IMAGE` value for both operations:
+To upgrade, update the checkout and rebuild the image:
 
 ```bash
-WEBUI_IMAGE=ekkoye8888/hermes-web-ui docker compose pull
-WEBUI_IMAGE=ekkoye8888/hermes-web-ui docker compose up -d --force-recreate
+docker compose up -d --build --force-recreate
 docker compose ps
 ```
 
@@ -80,8 +76,8 @@ Do not use Desktop Runtime migration inside the container. Docker owns the runti
 Requirements: Git, Node.js 23 or newer, and npm.
 
 ```bash
-git clone https://github.com/EKKOLearnAI/ekko-studio.git
-cd ekko-studio
+git clone https://github.com/forhetale/tatin-studio.git
+cd tatin-studio
 npm install
 npm run dev
 ```

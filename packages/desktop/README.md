@@ -4,9 +4,10 @@ Electron desktop distribution for Ekko Studio.
 
 ## Install
 
-Download the latest macOS, Windows, or Linux installer for your CPU
-architecture from the project
-[GitHub Releases](https://github.com/EKKOLearnAI/ekko-studio/releases/latest).
+Build the installer from this repository's source (`npm run build:desktop`, or
+the `:mac`, `:win` and `:linux` variants, from the repository root). Upstream
+release installers are the upstream product without this fork's changes, and
+TATin builds never download upstream updates.
 
 The desktop app bundles the Web UI runtime and launches it locally from the
 native shell app.

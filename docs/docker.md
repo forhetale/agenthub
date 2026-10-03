@@ -4,27 +4,21 @@ This repository ships an environment-variable driven Docker Compose setup.
 
 ## Quick Start
 
-### Pull pre-built image (Recommended)
-
-```bash
-WEBUI_IMAGE=ekkoye8888/hermes-web-ui docker compose up -d
-docker compose logs -f hermes-webui
-```
-
-Open: `http://localhost:6060`
-
-### Build from source
+Build the image from this repository's source. Pre-built upstream images are the
+upstream product without this fork's changes.
 
 ```bash
 docker compose up -d --build
 docker compose logs -f hermes-webui
 ```
 
+Open: `http://localhost:6060`
+
 ## Services
 
 This compose file runs a single service:
 
-- `hermes-webui` — Web UI dashboard with integrated Hermes Agent runtime (pre-built image or built from source)
+- `hermes-webui` — Web UI dashboard with integrated Hermes Agent runtime (built from source)
 
 The Web UI container is built on the `nousresearch/hermes-agent` base image and uses the Hermes CLI / agent bridge runtime for chat execution. By default it performs startup gateway checks/autostart for profiles, but no Hermes gateway ports are exposed by this compose setup.
 
@@ -39,7 +33,7 @@ All key runtime settings are configured from compose variables.
 | `CORS_ORIGINS` | same host only | Comma- or space-separated cross-origin allowlist for HTTP, Socket.IO, and WebSocket requests. Set `*` only when you intentionally need legacy wildcard CORS. |
 | `HERMES_BIN` | `/opt/hermes/.venv/bin/hermes` | Path to Hermes CLI binary |
 | `HERMES_AGENT_IMAGE` | `nousresearch/hermes-agent:latest` | Hermes Agent base image (used only during build) |
-| `WEBUI_IMAGE` | `hermes-web-ui-local:latest` | Web UI image (set to `ekkoye8888/hermes-web-ui` to use pre-built) |
+| `WEBUI_IMAGE` | `hermes-web-ui-local:latest` | Tag for the locally built Web UI image |
 | `HERMES_DATA_DIR` | `./hermes_data` | Hermes runtime data directory |
 
 Override variables directly from shell:
@@ -51,7 +45,6 @@ PORT=16060 docker compose up -d
 Or create a `.env` file in the project root:
 
 ```
-WEBUI_IMAGE=ekkoye8888/hermes-web-ui
 PORT=6060
 ```
 

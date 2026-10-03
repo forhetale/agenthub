@@ -162,8 +162,8 @@ npm run test              # Vitest unit tests
 npm run test:e2e          # Playwright browser tests (mocked backend)
 ```
 
-Self-hosting, Docker, and desktop packaging follow the upstream documentation (README.md,
-`docs/docker.md`, Dockerfile).
+Self-hosting, Docker, and desktop packaging are described in README.md (Quick Start) and
+`docs/docker.md`; every install path builds from this repository.
 
 ### Maintenance notes
 

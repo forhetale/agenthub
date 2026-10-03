@@ -6,7 +6,7 @@
     "type": "git",
     "url": "https://github.com/EKKOLearnAI/ekko-studio.git"
   },
-  "homepage": "https://ekkostudio.xyz",
+  "homepage": "https://github.com/forhetale/tatin-studio",
   "license": "BSL-1.1",
   "engines": {
     "node": ">=23.0.0"
