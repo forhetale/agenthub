@@ -60,7 +60,10 @@ the upstream BSL-1.1 license remain unchanged except for the deltas described be
      endpoint (`GET /api/studio/announcements`) and the prompt are kept: set
      `HERMES_WEB_UI_ANNOUNCEMENTS_URL` to an HTTP(S) feed that answers
      `{ "ok": true, "platform": "desktop", "list": [...] }` (Studio appends `?locale=zh-CN|en`)
-     to show your own.
+     to show your own. Only the first entry shows, and only if it has a positive integer `id`
+     and `updateTime` and a non-empty plain-text `title` and `content`; `actionUrl` (HTTP(S) or
+     `null`) adds a "View details" button, and `dismissible: true` adds "Later" next to it. A
+     dismissed entry shows again once its `updateTime` grows.
 
 4. **Custom-build update protection.** On `-tatin.` builds every path that could replace this
    build with an upstream package is blocked, so an upstream install cannot silently overwrite
@@ -200,7 +203,7 @@ This fork keeps the license and all upstream copyright notices intact.
 
 4. **移除付费项**：售卖/推广上游商业产品的入口全部删除——手机 App 下载页及其"定价与购买"按钮、App 访问失败时的购买提示与付费权益文案、小方盒硬件购买入口、带 App 付费权益校验的 App 会话分享，以及支撑它们的 App 互联/中继链路。会话通知改用自建 **Bark** 推送通道（保留原有会话级"是否推送"开关）；上游社交渠道发送模块已删除，本版本不会向第三方社交账号投递消息。
    - 导航中的 **饲料 / API Relay** 入口（apikey.fan 推广注册链接）已删除。
-   - Studio 公告不再读取上游公告源（`api.ekkostudio.xyz`）；未配置自己的公告源时不会访问任何公告服务器，也不弹公告。接口（`GET /api/studio/announcements`）与弹窗保留备用：把 `HERMES_WEB_UI_ANNOUNCEMENTS_URL` 设为返回 `{ "ok": true, "platform": "desktop", "list": [...] }` 的 HTTP(S) 地址（Studio 会附加 `?locale=zh-CN|en`）即可显示自己的公告。
+   - Studio 公告不再读取上游公告源（`api.ekkostudio.xyz`）；未配置自己的公告源时不会访问任何公告服务器，也不弹公告。接口（`GET /api/studio/announcements`）与弹窗保留备用：把 `HERMES_WEB_UI_ANNOUNCEMENTS_URL` 设为返回 `{ "ok": true, "platform": "desktop", "list": [...] }` 的 HTTP(S) 地址（Studio 会附加 `?locale=zh-CN|en`）即可显示自己的公告。只显示 `list` 的第一条，且该条须带正整数 `id`、`updateTime` 与非空纯文本 `title`、`content`；`actionUrl`（HTTP(S) 或 `null`）会加一个「查看详情」按钮，`dismissible: true` 时旁边再加「稍后」。已关闭的公告在 `updateTime` 变大后会再次弹出。
 
 5. **测试与 OpenAPI**：Bark 相关 Vitest 覆盖（加密存储、用户隔离、脱敏语义、传输错误映射、会话推送、默认推送与内容预览）与设置面板的 Playwright 流程；`docs/openapi.json` 已重新生成并包含 Bark 接口。每条定制版升级保护都有对应 Vitest 用例；测试环境把 `__APP_VERSION__` 设为 `test`，因此保护相关用例通过 `vi.stubGlobal` 注入 `-tatin.` 版本。
 
