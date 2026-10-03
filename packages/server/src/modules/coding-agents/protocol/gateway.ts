@@ -1,5 +1,4 @@
 import { openCodeSessionHeaders } from '../../studio/public/opencode-session'
-import { openRouterAttributionHeaders } from '../../studio/public/openrouter-attribution'
 
 /** A provider request issued by a Coding Agent proxy. */
 export interface AgentGatewayRequest {
@@ -52,7 +51,6 @@ export class AgentRunGateway {
       method: 'POST',
       headers: {
         ...openCodeSessionHeaders(request.url, request.sessionId, request.provider),
-        ...openRouterAttributionHeaders(request.url, request.provider),
         ...(request.apiKey ? { Authorization: `Bearer ${request.apiKey}` } : {}),
         'Content-Type': 'application/json',
         ...request.headers,

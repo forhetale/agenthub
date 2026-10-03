@@ -418,9 +418,9 @@ Studio 启动后端聊天能力时，会优先使用包含 `run_agent.py` 的源
 | `HERMES_BRIDGE_TOOLSETS` | profile/默认值 | bridge 运行时的 toolset 覆盖。 |
 | `HERMES_BRIDGE_MAX_TURNS` | profile/默认值 | bridge 运行时的最大轮数覆盖。 |
 | `HERMES_BRIDGE_SUPPRESS_PLATFORM_HINT` | `cli` | 控制传给 Hermes Agent 的 bridge platform hint suppression。 |
-| `HERMES_OPENROUTER_APP_REFERER` | `https://ekkostudio.xyz` | bridge 运行发送给 OpenRouter 的 attribution referer。 |
-| `HERMES_OPENROUTER_APP_TITLE` | `Ekko Studio` | Bridge 运行发送给 OpenRouter 的 Attribution Title。 |
-| `HERMES_OPENROUTER_APP_CATEGORIES` | `cli-agent,personal-agent` | bridge 运行发送给 OpenRouter 的 attribution categories。 |
+| `HERMES_OPENROUTER_APP_REFERER` | 未设置 | 可选：bridge 运行发送给 OpenRouter 的 attribution referer。Studio 自身不发送任何归属信息。 |
+| `HERMES_OPENROUTER_APP_TITLE` | 未设置 | 可选：bridge 运行发送给 OpenRouter 的 attribution title。 |
+| `HERMES_OPENROUTER_APP_CATEGORIES` | 未设置 | 可选：bridge 运行发送给 OpenRouter 的 attribution categories。 |
 | `HERMES_WEB_UI_MANAGED_GATEWAY` | 默认开启 | 控制 Studio 托管 Hermes Gateway 进程；设为 `0`、`false`、`no` 或 `off` 时改用 `hermes gateway start`。 |
 | `HERMES_WEB_UI_DISABLE_GATEWAY_AUTOSTART` | 未设置 | 跳过启动时的 gateway 检查/自动启动；dashboard-only 部署中如果由其它服务管理 Hermes gateway，可设为 `1`、`true`、`yes` 或 `on`。 |
 | `HERMES_WEB_UI_DISABLE_SKILL_INJECTION` | 未设置 | 跳过启动时的内置 Skill 注入；如果内置 Skills 由 Studio 外部管理，可设为 `1`、`true`、`yes` 或 `on`。启用注入时，Studio 只更新自己此前安装的 Skills 或内容完全相同的既有内置副本；本地修改和用户拥有的同名 Skills 会跳过。 |

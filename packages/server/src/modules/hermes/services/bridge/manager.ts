@@ -4,7 +4,6 @@ import { createConnection, createServer } from 'net'
 import { isAbsolute, join, resolve } from 'path'
 import { logger } from '../../../studio/public/logging'
 import { config } from '../../../studio/public/config'
-import { OPENROUTER_APP_HEADERS } from '../../../studio/public/openrouter-attribution'
 import { resolveHermesInstallationEnvironment } from '../runtime/installation'
 import { detectHermesHome, getHermesBin } from '../runtime/path'
 import { AgentBridgeClient, DEFAULT_AGENT_BRIDGE_ENDPOINT } from './client'
@@ -18,11 +17,6 @@ const DEFAULT_AGENT_BRIDGE_RECOVERY_SIGKILL_WAIT_MS = 250
 const DEFAULT_AGENT_BRIDGE_SHUTDOWN_TIMEOUT_MS = 10_000
 const DEFAULT_AGENT_BRIDGE_FORCE_KILL_WAIT_MS = 2_000
 const FORCE_KILL_COMMAND_TIMEOUT_MS = 5_000
-const OPENROUTER_WEB_UI_ATTRIBUTION_ENV = {
-  HERMES_OPENROUTER_APP_REFERER: OPENROUTER_APP_HEADERS['HTTP-Referer'],
-  HERMES_OPENROUTER_APP_TITLE: OPENROUTER_APP_HEADERS['X-OpenRouter-Title'],
-  HERMES_OPENROUTER_APP_CATEGORIES: OPENROUTER_APP_HEADERS['X-OpenRouter-Categories'],
-} as const
 
 export interface AgentBridgeManagerOptions {
   endpoint?: string
@@ -107,9 +101,6 @@ export function buildAgentBridgeProcessEnv(endpoint: string, hermesHome: string 
       HERMES_WEBUI_STATE_DIR: config.appHome,
       ELECTRON_RUN_AS_NODE: '1',
     }),
-    HERMES_OPENROUTER_APP_REFERER: process.env.HERMES_OPENROUTER_APP_REFERER || OPENROUTER_WEB_UI_ATTRIBUTION_ENV.HERMES_OPENROUTER_APP_REFERER,
-    HERMES_OPENROUTER_APP_TITLE: process.env.HERMES_OPENROUTER_APP_TITLE || OPENROUTER_WEB_UI_ATTRIBUTION_ENV.HERMES_OPENROUTER_APP_TITLE,
-    HERMES_OPENROUTER_APP_CATEGORIES: process.env.HERMES_OPENROUTER_APP_CATEGORIES || OPENROUTER_WEB_UI_ATTRIBUTION_ENV.HERMES_OPENROUTER_APP_CATEGORIES,
     ...(agentRoot ? { HERMES_AGENT_ROOT: agentRoot } : {}),
   }
   delete env.ANTHROPIC_AUTH_TOKEN

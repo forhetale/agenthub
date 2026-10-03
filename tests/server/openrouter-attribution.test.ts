@@ -5,7 +5,7 @@ import { fetchProviderModels } from '../../packages/server/src/modules/studio/pu
 afterEach(() => vi.unstubAllGlobals())
 
 describe('Studio OpenRouter attribution', () => {
-  it('uses the same app identity for proxy completion, streaming, and model discovery', async () => {
+  it('sends no app attribution on proxy completion, streaming, or model discovery', async () => {
     const fetchMock = vi.fn(async (_url: string | URL, init?: RequestInit) => {
       if (init?.body && JSON.parse(String(init.body)).stream) {
         return new Response('data: [DONE]\n\n', { headers: { 'Content-Type': 'text/event-stream' } })
@@ -21,9 +21,9 @@ describe('Studio OpenRouter attribution', () => {
     expect(fetchMock).toHaveBeenCalledTimes(3)
     for (const [, init] of fetchMock.mock.calls) {
       const headers = new Headers(init?.headers)
-      expect(headers.get('X-OpenRouter-Title')).toBe('Ekko Studio')
-      expect(headers.get('HTTP-Referer')).toBe('https://ekkostudio.xyz')
-      expect(headers.get('X-OpenRouter-Categories')).toBe('cli-agent,personal-agent')
+      expect(headers.get('X-OpenRouter-Title')).toBeNull()
+      expect(headers.get('HTTP-Referer')).toBeNull()
+      expect(headers.get('X-OpenRouter-Categories')).toBeNull()
       expect(headers.get('authorization')).toBe('Bearer test-key')
     }
   })

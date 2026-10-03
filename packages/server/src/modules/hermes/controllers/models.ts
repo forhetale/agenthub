@@ -1,6 +1,5 @@
 import { openCodeSessionHeaders } from '../../studio/public/opencode-session'
 import { invalidateProviderRuntime } from '../../studio/public/provider-runtime'
-import { openRouterAttributionHeaders } from '../../studio/public/openrouter-attribution'
 import { readFile } from 'fs/promises'
 import { existsSync, readFileSync } from 'fs'
 import { join } from 'path'
@@ -971,7 +970,7 @@ export async function fetchProviderModelList(ctx: any) {
 
     const base = baseUrl.replace(/\/+$/, '')
     const modelsUrl = /\/v\d+\/?$/.test(base) ? `${base}/models` : `${base}/v1/models`
-    const headers: Record<string, string> = { ...openCodeSessionHeaders(modelsUrl), ...openRouterAttributionHeaders(modelsUrl, provider) }
+    const headers: Record<string, string> = { ...openCodeSessionHeaders(modelsUrl) }
     if (apiKey && provider !== OPENCODE_FREE_PROVIDER) headers.Authorization = `Bearer ${apiKey}`
 
     const res = await fetch(modelsUrl, {

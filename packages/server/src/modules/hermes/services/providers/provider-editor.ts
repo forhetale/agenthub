@@ -1,5 +1,4 @@
 import { openCodeSessionHeaders } from '../../../studio/public/opencode-session'
-import { openRouterAttributionHeaders } from '../../../studio/public/openrouter-attribution'
 import { createHash, randomBytes } from 'crypto'
 import { chmod } from 'fs/promises'
 import { join, resolve } from 'path'
@@ -437,7 +436,6 @@ export async function fetchProviderCatalogForTest(baseUrl: string, apiKey: strin
   let current = endpoint.url
   const headers: Record<string, string> = {
     ...openCodeSessionHeaders(current.toString()),
-    ...openRouterAttributionHeaders(current.toString()),
     Accept: 'application/json',
   }
   if (apiKey) {

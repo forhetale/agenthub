@@ -432,9 +432,9 @@ These variables configure Ekko Studio, its local Hermes runtime integration, and
 | `HERMES_BRIDGE_TOOLSETS` | profile/default | Toolset override for bridge runs. |
 | `HERMES_BRIDGE_MAX_TURNS` | profile/default | Maximum turn override for bridge runs. |
 | `HERMES_BRIDGE_SUPPRESS_PLATFORM_HINT` | `cli` | Controls bridge platform hint suppression passed to Hermes Agent. |
-| `HERMES_OPENROUTER_APP_REFERER` | `https://ekkostudio.xyz` | OpenRouter attribution referer sent by bridge runs. |
-| `HERMES_OPENROUTER_APP_TITLE` | `Ekko Studio` | OpenRouter attribution title sent by bridge runs. |
-| `HERMES_OPENROUTER_APP_CATEGORIES` | `cli-agent,personal-agent` | OpenRouter attribution categories sent by bridge runs. |
+| `HERMES_OPENROUTER_APP_REFERER` | unset | Optional OpenRouter attribution referer for bridge runs. Studio sends no attribution of its own. |
+| `HERMES_OPENROUTER_APP_TITLE` | unset | Optional OpenRouter attribution title for bridge runs. |
+| `HERMES_OPENROUTER_APP_CATEGORIES` | unset | Optional OpenRouter attribution categories for bridge runs. |
 | `HERMES_WEB_UI_MANAGED_GATEWAY` | enabled | Controls Studio-managed Hermes gateway process handling. Set `0`, `false`, `no`, or `off` to use `hermes gateway start` instead. |
 | `HERMES_WEB_UI_DISABLE_GATEWAY_AUTOSTART` | unset | Skip startup gateway checks/autostart. Set `1`, `true`, `yes`, or `on` for dashboard-only deployments where another service owns Hermes gateway lifecycle. |
 | `HERMES_WEB_UI_DISABLE_SKILL_INJECTION` | unset | Skip startup bundled skill injection. Set `1`, `true`, `yes`, or `on` when bundled skills are managed outside Studio. When injection is enabled, Studio updates only skills it previously installed or identical existing bundled copies; local edits and user-owned same-name skills are skipped. |

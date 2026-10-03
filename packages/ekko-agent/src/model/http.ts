@@ -1,7 +1,6 @@
 import { ModelProviderError, isRetryableStatus } from './errors'
 import { randomUUID } from 'node:crypto'
 import { openCodeSessionHeaders } from './opencode-session'
-import { openRouterAttributionHeaders } from './openrouter-attribution'
 import type { ModelProviderConfig, ModelRequest } from './types'
 
 const requestSessions = new WeakMap<ModelRequest, string>()
@@ -25,7 +24,6 @@ export function modelRequestHeaders(
 export function requestHeaders(config: ModelProviderConfig, defaults: Record<string, string> = {}): HeadersInit {
   const headers: Record<string, string> = {
     'content-type': 'application/json',
-    ...openRouterAttributionHeaders(config.baseUrl || '', config.id),
     ...defaults,
     ...config.headers,
   }
