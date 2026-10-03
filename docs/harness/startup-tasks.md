@@ -45,8 +45,9 @@ and timestamps. It contains no configuration contents or credentials.
 5. Add focused tests for the operation and run the startup-task runner tests,
    `npm run harness:check`, and `npm run build`.
 
-The initial registered task replaces old apikey domains in existing Hermes
-profiles. Completion is scoped to the Hermes root directory, not each profile.
-Once completed, later imports of old profiles into that same root are not
-rescanned. Changes that must run again need a new task ID or an explicit import
-upgrade step, rather than changing the implementation behind a completed ID.
+The registry is currently empty; retired IDs are listed in the registry comment
+and are never reused. Completion is recorded per scope, not per item inside it:
+a Hermes task scoped to the Hermes root directory is not rerun for profiles
+imported into that same root later. Changes that must run again need a new task
+ID or an explicit import upgrade step, rather than changing the implementation
+behind a completed ID.

@@ -69,7 +69,7 @@ After download, verify all of the following:
 
 There are three separate upgrades:
 
-- **Desktop application:** use Desktop **Check for Updates**.
+- **Desktop application:** TATin builds do not update themselves; update the fork checkout and rebuild the installer (see [studio.md](studio.md)).
 - **Managed Runtime package:** download a newer Runtime version in Version Management, let it validate and activate, then restart. Previous inactive versions remain available until explicitly deleted.
 - **Hermes Agent source inside Runtime 0.19.1 or newer:** fully exit Ekko Studio, then run `ekko-studio cli update`. This does not upgrade Desktop or Web UI.
 

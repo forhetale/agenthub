@@ -4,7 +4,7 @@ Use the installation form already chosen by the user. This is TATin Studio, a fo
 
 ## Desktop application
 
-Build the platform installer from a checkout of the fork with `npm ci` and `npm run build:desktop` (or the `:mac`, `:win` and `:linux` variants); installers are written to `packages/desktop/release`. The packaged app bundles the Studio server and can manage a Hermes Runtime separately.
+Build the installer on the target operating system and architecture by following the fork README (Quick Start → Desktop App), which runs the release workflow steps; installers are written to `packages/desktop/release`. The packaged app bundles the Studio server and can manage a Hermes Runtime separately.
 
 Once a managed Runtime is ready, packaged Desktop installs managed command shims:
 
@@ -42,7 +42,7 @@ node bin/hermes-web-ui.mjs status
 
 The default address is `http://localhost:8648`. A successful installation must satisfy both `version` and `status` after startup.
 
-`hermes-web-ui update` and `upgrade` refuse to run on TATin builds because they would install the upstream npm package. Upgrade by updating the checkout, running `npm ci` and `npm run build` again, then restarting with `node bin/hermes-web-ui.mjs restart`.
+`hermes-web-ui update` and `upgrade` refuse to run on TATin builds because they would install the upstream npm package. Upgrade by stopping the server with `node bin/hermes-web-ui.mjs stop`, updating the checkout, running `npm ci` and `npm run build` again, then starting it with `node bin/hermes-web-ui.mjs start --no-open`. On Windows `npm ci` fails while a running server holds native modules such as node-pty.
 
 ## Docker Compose
 

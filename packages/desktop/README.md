@@ -4,8 +4,9 @@ Electron desktop distribution for Ekko Studio.
 
 ## Install
 
-Build the installer from this repository's source (`npm run build:desktop`, or
-the `:mac`, `:win` and `:linux` variants, from the repository root). Upstream
+Build the installer from this repository's source on the target operating system
+and architecture, following the steps in the root README (Quick Start → Desktop
+App), which match the release workflow. Upstream
 release installers are the upstream product without this fork's changes, and
 TATin builds never download upstream updates.
 

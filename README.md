@@ -40,7 +40,7 @@ repository is `EKKOLearnAI/ekko-studio`. This fork lives at
 
 ## Screenshots
 
-Captured in Ekko Studio **v0.7.18** on 2026-09-10. Chat and workflow screens use demo data.
+Captured in Ekko Studio **v0.7.18** on 2026-09-10.
 
 | Agent Manager |
 | --- |
@@ -246,7 +246,7 @@ Install DSH on the machine running the Studio backend through Agent Manager. Nat
 - Default bootstrap credentials are `admin` / `123456`; users are prompted after login to change the default username and password
 - Super administrators can manage users and profile bindings; regular administrators can manage their own account details
 
-CLI maintenance commands:
+CLI maintenance commands (from a source checkout, run `node bin/hermes-web-ui.mjs` in place of `hermes-web-ui`; see [CLI Commands](#cli-commands)):
 
 ```bash
 # Delete persisted login IP lock records
@@ -305,18 +305,27 @@ without this fork's changes.
 
 ### Desktop App
 
-Build the desktop installer from source (Node.js 23 or newer):
+Build the desktop installer on the operating system and CPU architecture it is
+for (Node.js 23 or newer). These are the steps the release workflow runs:
 
 ```bash
 git clone https://github.com/forhetale/tatin-studio.git
 cd tatin-studio
-npm ci
-npm run build:desktop   # or build:desktop:mac, build:desktop:win, build:desktop:linux
+npm ci --ignore-scripts
+npm rebuild node-pty
+npm run build
+npm prune --omit=dev --no-audit --no-fund
+npm run verify:sharp-runtime
+npm ci --prefix packages/desktop --no-audit --no-fund
+npm --prefix packages/desktop run write:runtime-release
+# Windows: --win nsis --x64 | macOS: --mac dmg zip --arm64 (or --x64) | Linux: --linux AppImage deb --x64
+npm --prefix packages/desktop run dist -- --win nsis --x64 --publish never
 ```
 
-Installers are written to `packages/desktop/release`. The desktop app bundles
-the Studio runtime and stores Hermes Agent data in `~/.hermes` on Windows,
-macOS, and Linux.
+Installers are written to `packages/desktop/release` and are unsigned unless
+you configure signing. `npm prune` removes the build tools, so start again from
+`npm ci` for the next build. The desktop app bundles the Studio runtime and
+stores Hermes Agent data in `~/.hermes` on Windows, macOS, and Linux.
 
 The desktop wrapper stores its own Studio state separately in
 `~/.hermes-web-ui` unless `HERMES_WEB_UI_HOME` is set.
@@ -448,6 +457,10 @@ These variables configure Ekko Studio, its local Hermes runtime integration, and
 
 ### CLI Commands
 
+From a source checkout, run these in the repository as `node bin/hermes-web-ui.mjs <command>`
+(and `node bin/hermes-web-ui-mcp.mjs` for the MCP entry), or run `npm link` once to put
+`hermes-web-ui` on PATH. The desktop app exposes them as `ekko-studio web <command>`.
+
 | Command | Description |
 | --- | --- |
 | `hermes-web-ui start [port]` | Start in background; accepts a positional port or `--port <port>` |
@@ -466,7 +479,7 @@ Add `--no-open` to `start` or `client` when no browser should open.
 
 `restart`, `update`, and `upgrade` stop the Agent Bridge broker by default so restarted or updated servers do not reuse stale Python bridge processes. Set `HERMES_AGENT_BRIDGE_STOP_ON_SHUTDOWN=0` before restarting only when you explicitly want to keep the bridge broker and running bridge sessions alive.
 
-`update` / `upgrade` would install the upstream `hermes-web-ui@latest` npm package, so they refuse to run on TATin builds. Update by pulling this repository, running `npm ci` and `npm run build`, then `restart`.
+`update` / `upgrade` would install the upstream `hermes-web-ui@latest` npm package, so they refuse to run on TATin builds. To update, stop the server (`node bin/hermes-web-ui.mjs stop`), pull this repository, run `npm ci` and `npm run build`, then start it again. On Windows `npm ci` fails while a running server holds native modules such as node-pty.
 
 ### Auto Configuration
 

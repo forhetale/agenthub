@@ -32,7 +32,7 @@ Ekko Studio 原名 Hermes Studio / Hermes Web UI，上游仓库为
 
 ## 界面预览
 
-以下为 Ekko Studio **v0.7.18** 的界面截图（2026-09-10）。聊天和工作流使用演示数据。
+以下为 Ekko Studio **v0.7.18** 的界面截图（2026-09-10）。
 
 | Agent 管理 |
 | --- |
@@ -236,7 +236,7 @@ Hermes 控制面 API 使用 `/api/hermes/*`。已经发布的旧版移动 App �
 - 默认登录名/密码为 `admin` / `123456`；登录后会提示尽快修改默认账户和密码
 - 超级管理员可以管理用户和 Profile 绑定；普通管理员只能管理自己的账户信息
 
-CLI 维护命令：
+CLI 维护命令（从源码运行时，用 `node bin/hermes-web-ui.mjs` 代替 `hermes-web-ui`，见 [CLI 命令](#cli-命令)）：
 
 ```bash
 # 删除持久化的登录 IP 锁记录
@@ -293,16 +293,23 @@ hermes-web-ui reset-default-login
 
 ### 桌面应用
 
-从源码构建桌面安装包（需要 Node.js 23 或更新版本）：
+请在目标操作系统和 CPU 架构的机器上构建桌面安装包（需要 Node.js 23 或更新版本）。以下步骤与发布工作流一致：
 
 ```bash
 git clone https://github.com/forhetale/tatin-studio.git
 cd tatin-studio
-npm ci
-npm run build:desktop   # 或 build:desktop:mac、build:desktop:win、build:desktop:linux
+npm ci --ignore-scripts
+npm rebuild node-pty
+npm run build
+npm prune --omit=dev --no-audit --no-fund
+npm run verify:sharp-runtime
+npm ci --prefix packages/desktop --no-audit --no-fund
+npm --prefix packages/desktop run write:runtime-release
+# Windows：--win nsis --x64 | macOS：--mac dmg zip --arm64（或 --x64）| Linux：--linux AppImage deb --x64
+npm --prefix packages/desktop run dist -- --win nsis --x64 --publish never
 ```
 
-安装包输出到 `packages/desktop/release`。桌面应用内置 Studio 运行时；在 Windows、macOS 和 Linux 上，Hermes Agent 数据统一保存到 `~/.hermes`。
+安装包输出到 `packages/desktop/release`，未配置签名时为未签名安装包。`npm prune` 会移除构建工具，下次构建请从 `npm ci` 重新开始。桌面应用内置 Studio 运行时；在 Windows、macOS 和 Linux 上，Hermes Agent 数据统一保存到 `~/.hermes`。
 
 桌面壳自身的 Studio 状态会单独保存到 `~/.hermes-web-ui`，除非设置了
 `HERMES_WEB_UI_HOME`。
@@ -428,6 +435,8 @@ Studio 启动后端聊天能力时，会优先使用包含 `run_agent.py` 的源
 
 ### CLI 命令
 
+从源码运行时，在仓库目录中用 `node bin/hermes-web-ui.mjs <命令>` 执行（MCP 入口为 `node bin/hermes-web-ui-mcp.mjs`），或执行一次 `npm link` 把 `hermes-web-ui` 加入 PATH。桌面版通过 `ekko-studio web <命令>` 提供这些命令。
+
 | 命令 | 说明 |
 |---|---|
 | `hermes-web-ui start [port]` | 后台启动；支持位置端口或 `--port <port>` |
@@ -446,7 +455,7 @@ Studio 启动后端聊天能力时，会优先使用包含 `run_agent.py` 的源
 
 `restart`、`update` 和 `upgrade` 默认会停止 Agent Bridge broker，避免重启或更新后的服务复用旧 Python bridge 进程。只有明确希望保留 broker 和正在运行的 bridge session 时，才在重启前设置 `HERMES_AGENT_BRIDGE_STOP_ON_SHUTDOWN=0`。
 
-`update` / `upgrade` 会安装上游的 `hermes-web-ui@latest` npm 包，因此在 TATin 定制版上拒绝执行。更新方式：拉取本仓库，执行 `npm ci` 与 `npm run build`，再 `restart`。
+`update` / `upgrade` 会安装上游的 `hermes-web-ui@latest` npm 包，因此在 TATin 定制版上拒绝执行。更新方式：先停止服务（`node bin/hermes-web-ui.mjs stop`），拉取本仓库，执行 `npm ci` 与 `npm run build`，再重新启动。Windows 上服务运行时会占用 node-pty 等原生模块，此时执行 `npm ci` 会失败。
 
 ### 自动配置
 
