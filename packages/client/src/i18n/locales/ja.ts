@@ -1622,7 +1622,6 @@ export default {
     models: 'モデル一覧',
     manageVisibleModelsFor: '{name} の表示モデルを管理',
     manageVisibleModels: '表示モデルを管理',
-    getApiKey: 'API Key を取得',
     count: '個のモデル',
     aliasUseOriginal: '元の ID に戻す',
     aliasTitleFor: '{model} の表示名',

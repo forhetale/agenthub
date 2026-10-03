@@ -1622,7 +1622,6 @@ export default {
     models: '모델 목록',
     manageVisibleModelsFor: '{name} 표시 모델 관리',
     manageVisibleModels: '표시 모델 관리',
-    getApiKey: 'API Key 가져오기',
     count: '개 모델',
     aliasUseOriginal: '원본 ID로 복원',
     aliasTitleFor: '{model}의 표시 이름',
