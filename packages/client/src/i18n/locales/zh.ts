@@ -2075,7 +2075,7 @@ export default {
     auxiliaryDefault: '默认',
     auxiliaryCustomEndpoint: '自定义端点',
     auxiliaryProviderAuto: '自动',
-    auxiliaryProviderStudioDefault: 'Studio 默认',
+    auxiliaryProviderImageUnset: '未设置（沿用另一条图片路由）',
     auxiliaryProviderMain: '主模型',
     auxiliaryProviderPlaceholder: 'auto、main 或 provider key',
     auxiliaryDownloadShort: '下载',

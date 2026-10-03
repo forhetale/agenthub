@@ -2029,7 +2029,7 @@ export default {
     auxiliaryDefault: 'Default',
     auxiliaryCustomEndpoint: 'Custom endpoint',
     auxiliaryProviderAuto: 'Auto',
-    auxiliaryProviderStudioDefault: 'Studio default',
+    auxiliaryProviderImageUnset: 'Not set (uses the other image route)',
     auxiliaryProviderMain: 'Main model',
     auxiliaryProviderPlaceholder: 'auto, main, or provider key',
     auxiliaryDownloadShort: 'download',

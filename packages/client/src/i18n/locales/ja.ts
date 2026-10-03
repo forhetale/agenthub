@@ -1541,7 +1541,7 @@ export default {
     auxiliaryDefault: 'デフォルト',
     auxiliaryCustomEndpoint: 'カスタムエンドポイント',
     auxiliaryProviderAuto: '自動',
-    auxiliaryProviderStudioDefault: 'Studioデフォルト',
+    auxiliaryProviderImageUnset: '未設定（もう一方の画像ルートを使用）',
     auxiliaryProviderMain: 'メインモデル',
     auxiliaryProviderPlaceholder: 'auto、main、またはプロバイダーキー',
     auxiliaryDownloadShort: 'ダウンロード',

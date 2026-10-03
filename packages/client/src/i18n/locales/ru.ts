@@ -1853,7 +1853,7 @@ export default {
     auxiliaryDefault: 'По умолчанию',
     auxiliaryCustomEndpoint: 'Пользовательский endpoint',
     auxiliaryProviderAuto: 'Авто',
-    auxiliaryProviderStudioDefault: 'По умолчанию Studio',
+    auxiliaryProviderImageUnset: 'Не задано (используется другой маршрут изображений)',
     auxiliaryProviderMain: 'Основная модель',
     auxiliaryProviderPlaceholder: 'auto, main или ключ провайдера',
     auxiliaryDownloadShort: 'загрузка',

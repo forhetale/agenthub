@@ -296,7 +296,7 @@ describe('media controller', () => {
 
     expect(ctx.status).toBe(400)
     expect(ctx.body).toEqual({
-      error: 'No image provider is configured for profile "default": set auxiliary.image_generation.provider in config.yaml or pass a provider.',
+      error: 'No image provider is configured for profile "default": set auxiliary.image_generation.provider in config.yaml to a custom provider (auto and main do not name one), or pass a provider.',
       code: 'image_provider_not_configured',
     })
     expect(fetchMock).not.toHaveBeenCalled()

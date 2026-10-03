@@ -175,7 +175,7 @@ describe('AuxiliaryModelsPanel', () => {
     const providerSelect = wrapper.getComponent('[data-testid="auxiliary-provider"]')
     expect(providerSelect.props('value')).toBe('custom:studio-images')
     expect(providerSelect.props('options')).toEqual([
-      { label: 'models.auxiliaryProviderStudioDefault', value: 'auto' },
+      { label: 'models.auxiliaryProviderImageUnset', value: 'auto' },
       { label: 'Studio Images', value: 'custom:studio-images' },
     ])
 
@@ -207,7 +207,7 @@ describe('AuxiliaryModelsPanel', () => {
     expect(wrapper.getComponent('[data-testid="auxiliary-provider"]').props('value')).toBe('auto')
   })
 
-  it('labels an unconfigured Studio image route as the Studio default', async () => {
+  it('labels an unconfigured Studio image route as not set', async () => {
     apiMocks.fetchAuxiliaryModels.mockResolvedValueOnce({
       tasks: [{ key: 'image_generation', label: 'Image generation', default_timeout: 600 }],
       auxiliary: {},
@@ -216,6 +216,6 @@ describe('AuxiliaryModelsPanel', () => {
     const wrapper = mount(AuxiliaryModelsPanel)
     await flushPromises()
 
-    expect(wrapper.text()).toContain('models.auxiliaryProviderStudioDefault')
+    expect(wrapper.text()).toContain('models.auxiliaryProviderImageUnset')
   })
 })

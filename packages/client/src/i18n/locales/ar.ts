@@ -2075,7 +2075,7 @@ export default {
     auxiliaryDefault: 'افتراضي',
     auxiliaryCustomEndpoint: 'نقطة نهاية مخصصة',
     auxiliaryProviderAuto: 'تلقائي',
-    auxiliaryProviderStudioDefault: 'إعداد Studio الافتراضي',
+    auxiliaryProviderImageUnset: 'غير مضبوط (يستخدم مسار الصور الآخر)',
     auxiliaryProviderMain: 'النموذج الرئيسي',
     auxiliaryProviderPlaceholder: 'auto أو main أو مفتاح المزوّد',
     auxiliaryDownloadShort: 'تنزيل',

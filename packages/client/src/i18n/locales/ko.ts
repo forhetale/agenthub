@@ -1541,7 +1541,7 @@ export default {
     auxiliaryDefault: '기본값',
     auxiliaryCustomEndpoint: '사용자 지정 엔드포인트',
     auxiliaryProviderAuto: '자동',
-    auxiliaryProviderStudioDefault: 'Studio 기본값',
+    auxiliaryProviderImageUnset: '설정 안 됨 (다른 이미지 경로 사용)',
     auxiliaryProviderMain: '메인 모델',
     auxiliaryProviderPlaceholder: 'auto, main 또는 provider key',
     auxiliaryDownloadShort: '다운로드',

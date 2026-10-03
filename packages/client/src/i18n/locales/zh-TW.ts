@@ -2013,7 +2013,7 @@ export default {
     auxiliaryDefault: '預設',
     auxiliaryCustomEndpoint: '自訂端點',
     auxiliaryProviderAuto: '自動',
-    auxiliaryProviderStudioDefault: 'Studio 預設',
+    auxiliaryProviderImageUnset: '未設定（沿用另一條圖片路由）',
     auxiliaryProviderMain: '主模型',
     auxiliaryProviderPlaceholder: 'auto、main 或 provider key',
     auxiliaryDownloadShort: '下載',

@@ -112,7 +112,7 @@ const providerOptions = computed(() => {
   const seen = new Set<string>()
   const options = [{
     label: isEditingStudioImage.value
-      ? t('models.auxiliaryProviderStudioDefault')
+      ? t('models.auxiliaryProviderImageUnset')
       : t('models.auxiliaryProviderAuto'),
     value: 'auto',
   }]
@@ -174,7 +174,7 @@ function taskLabel(task: AuxiliaryModelTask): string {
 
 function configuredLabel(task: AuxiliaryModelTask, settings?: AuxiliaryModelSettings): string {
   const defaultProviderLabel = task.key === 'image_generation' || task.key === 'image_edit'
-    ? t('models.auxiliaryProviderStudioDefault')
+    ? t('models.auxiliaryProviderImageUnset')
     : t('models.auxiliaryProviderAuto')
   if (!settings || Object.keys(settings).length === 0) return defaultProviderLabel
   const provider = !settings.provider || settings.provider === 'auto'
