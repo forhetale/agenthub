@@ -8,7 +8,6 @@ import { PROVIDER_ENV_MAP } from '../../packages/server/src/modules/hermes/servi
 
 const OPENAI_CODEX_PROVIDER = 'openai-codex'
 const COPILOT_PROVIDER = 'copilot'
-const FUN_CODEX_PROVIDER = 'fun-codex'
 const LONGCAT_PROVIDER = 'longcat'
 const KIMI_CODING_PROVIDER = 'kimi-coding'
 const KIMI_CODING_CN_PROVIDER = 'kimi-coding-cn'
@@ -237,9 +236,12 @@ describe('provider presets', () => {
     expect(missingMappings).toEqual([])
   })
 
-  it('routes apikey.fan Codex through the Responses transport', () => {
-    const preset = SERVER_PROVIDER_PRESETS.find((candidate) => candidate.value === FUN_CODEX_PROVIDER)
-    expect(preset?.api_mode).toBe('codex_responses')
+  it('ships no built-in preset for the apikey.fan relay', () => {
+    const relayPresets = SERVER_PROVIDER_PRESETS
+      .filter(candidate => /apikey\.fan/i.test(candidate.base_url) || candidate.value.startsWith('fun-'))
+      .map(candidate => candidate.value)
+    expect(relayPresets).toEqual([])
+    expect(Object.keys(PROVIDER_ENV_MAP).filter(provider => provider.startsWith('fun-'))).toEqual([])
   })
 
   it('routes LongCat through the Responses transport', () => {

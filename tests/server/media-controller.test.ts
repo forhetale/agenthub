@@ -265,6 +265,43 @@ describe('media controller', () => {
     }
   })
 
+  it('asks for an image provider instead of falling back to a built-in relay', async () => {
+    vi.doMock('../../packages/server/src/modules/studio/public/profile-config', () => ({
+      getActiveProfileName: () => 'default',
+      getProfileDir: () => '/tmp/hermes-web-ui-test-profile',
+      listProfileNamesFromDisk: () => ['default'],
+    }))
+    vi.doMock('../../packages/server/src/modules/studio/public/media-profile-config', () => ({
+      readConfigYamlForProfile: vi.fn(async () => ({
+        custom_providers: [{ name: 'fun-codex', base_url: 'https://relay.example/v1', api_key: 'relay-key' }],
+      })),
+    }))
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    const { apiKeyImageGenerate } = await import('../../packages/server/src/modules/studio/controllers/media')
+    const ctx: any = {
+      state: { serverTokenAuth: true },
+      query: {},
+      request: { body: { mode: 'text', prompt: 'make an icon' } },
+      get: vi.fn(() => ''),
+      status: 200,
+      body: undefined,
+    }
+
+    try {
+      await apiKeyImageGenerate(ctx)
+    } finally {
+      vi.unstubAllGlobals()
+    }
+
+    expect(ctx.status).toBe(400)
+    expect(ctx.body).toEqual({
+      error: 'No image provider is configured for profile "default": set auxiliary.image_generation.provider in config.yaml or pass a provider.',
+      code: 'image_provider_not_configured',
+    })
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
   it('reports the configured provider when it cannot be resolved', async () => {
     vi.doMock('../../packages/server/src/modules/studio/public/profile-config', () => ({
       getActiveProfileName: () => 'default',

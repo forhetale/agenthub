@@ -29,7 +29,8 @@ and timestamps. It contains no configuration contents or credentials.
 ## Adding a task
 
 1. Append a task with a permanent, descriptive ID such as
-   `2026-09-12-hermes-apikey-domain-v1`. Do not rename or reuse an executed ID.
+   `2026-10-03-hermes-example-cleanup-v1`. Do not rename or reuse an executed
+   ID; retired IDs stay listed in the registry comment so they are not reused.
 2. Set `scope` to the data directory or another stable data identity. Use the
    Hermes root directory for Hermes operations and `config.appHome` for Studio
    operations. Changing data directories then creates a separate completion
