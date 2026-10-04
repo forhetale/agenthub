@@ -1960,11 +1960,21 @@ ${harness}
 os.environ.pop("HERMES_AGENT_BRIDGE_WORKER_TRANSPORT", None)
 os.environ.pop("HERMES_AGENT_BRIDGE_WORKER_PORT_BASE", None)
 
-default_endpoint = bridge._worker_endpoint("default", "ipc:///tmp/hermes-agent-bridge.sock")
-if os.name == "nt":
-    assert default_endpoint.startswith("tcp://127.0.0.1:")
-else:
-    assert default_endpoint.startswith("ipc://")
+import tempfile
+from unittest.mock import patch
+
+# Transport selection must not depend on the host's TMPDIR length. This is
+# endpoint calculation only; no files or sockets are created at the mock path.
+with patch.object(tempfile, "gettempdir", return_value="/mock-temp"):
+    default_endpoint = bridge._worker_endpoint("default", "ipc:///tmp/hermes-agent-bridge.sock")
+    if os.name == "nt":
+        assert default_endpoint.startswith("tcp://127.0.0.1:")
+    else:
+        assert default_endpoint.startswith("ipc://")
+
+with patch.object(tempfile, "gettempdir", return_value="/mock-temp/" + "nested-" * 30):
+    deep_endpoint = bridge._worker_endpoint("default", "ipc:///tmp/hermes-agent-bridge.sock")
+    assert deep_endpoint.startswith("tcp://127.0.0.1:")
 
 os.environ["HERMES_AGENT_BRIDGE_WORKER_TRANSPORT"] = "tcp"
 os.environ["HERMES_AGENT_BRIDGE_WORKER_PORT_BASE"] = "19650"

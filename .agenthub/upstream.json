@@ -1,0 +1,9 @@
+{
+  "upstream_repo": "EKKOLearnAI/ekko-studio",
+  "upstream_tag": "v0.7.29",
+  "upstream_commit": "2ad72723b618273ee1bb4d21416c48e5b7d31549",
+  "fork_repo": "forhetale/agenthub",
+  "agenthub_version": "0.7.29-agenthub.1",
+  "mode": "pr_only",
+  "approval_required_for": ["merge", "deploy"]
+}

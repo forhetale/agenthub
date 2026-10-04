@@ -145,6 +145,7 @@ To update AgentHub:
 
 ## Documentation
 
+- **PR-only Upstream Automation**: [docs/upstream-automation.md](./docs/upstream-automation.md). A maintainer-operated local Hermes schedule detects stable releases, curates changes in an isolated checkout, and opens tested PRs. Human approval is required for merge and deployment; this is not an automatic npm updater or a GitHub Actions deployment.
 - **Customization & Security**: [CUSTOMIZATION.md](./CUSTOMIZATION.md)
 - **v0.7.29 Upstream Sync Ledger**: [docs/upstream-sync-0.7.29.md](./docs/upstream-sync-0.7.29.md)
 - **Architecture**: [ARCHITECTURE.md](./ARCHITECTURE.md)

@@ -145,6 +145,7 @@ AgentHub 在服务端中间件、CLI 和桌面启动器中内置了定制版升�
 
 ## 关联文档
 
+- **仅 PR 的上游精选自动同步**：[docs/upstream-automation.md](./docs/upstream-automation.md)。由维护者本机的 Hermes 定时任务检测稳定版本，在隔离目录精选改动、测试并创建 PR；合并与部署都须人工确认，不是 npm 自动覆盖，也不是 GitHub Actions 自动部署。
 - **定制设计与安全规范**：[CUSTOMIZATION.md](./CUSTOMIZATION.md)
 - **v0.7.29 上游同步记录**：[docs/upstream-sync-0.7.29.md](./docs/upstream-sync-0.7.29.md)
 - **系统架构**：[ARCHITECTURE.md](./ARCHITECTURE.md)
