@@ -7,14 +7,14 @@ describe('PWA metadata', () => {
 
     expect(html).toContain('rel="manifest" href="/manifest.webmanifest"')
     expect(html).toContain('rel="apple-touch-icon" href="/logo.png"')
-    expect(html).toContain('name="apple-mobile-web-app-title" content="TATin Studio"')
+    expect(html).toContain('name="apple-mobile-web-app-title" content="AgentHub"')
   })
 
   it('ships a standalone web manifest with the Hermes icon', () => {
     const manifest = JSON.parse(readFileSync('packages/client/public/manifest.webmanifest', 'utf8'))
 
-    expect(manifest.name).toBe('TATin Studio')
-    expect(manifest.short_name).toBe('TATin Studio')
+    expect(manifest.name).toBe('AgentHub')
+    expect(manifest.short_name).toBe('AgentHub')
     expect(manifest.display).toBe('standalone')
     expect(manifest.start_url).toBe('/#/hermes/chat')
     expect(manifest.icons).toEqual(expect.arrayContaining([

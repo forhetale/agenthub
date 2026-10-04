@@ -37,6 +37,7 @@ async function loadUpdater(bundledWebUiVersion: string) {
       getAppPath: () => webuiRoot,
     },
     dialog: { showMessageBox },
+    autoUpdater: { on: vi.fn() },
   }))
   vi.doMock('electron-updater', () => ({ autoUpdater }))
   vi.doMock('../../packages/desktop/src/main/paths', () => ({ defaultWebuiDir: () => webuiRoot }))
@@ -56,7 +57,9 @@ describe('desktop updater custom-build guard', () => {
   })
 
   it('detects custom builds from the bundled Web UI package version', () => {
+    expect(isCustomBuildWebUi(createWebUiRoot(JSON.stringify({ version: '0.7.29-agenthub.1' })))).toBe(true)
     expect(isCustomBuildWebUi(createWebUiRoot(JSON.stringify({ version: '0.7.21-tatin.5' })))).toBe(true)
+    expect(isCustomBuildWebUi(createWebUiRoot(JSON.stringify({ version: '0.7.29' })))).toBe(false)
     expect(isCustomBuildWebUi(createWebUiRoot(JSON.stringify({ version: '0.7.21' })))).toBe(false)
     expect(isCustomBuildWebUi(createWebUiRoot('not json'))).toBe(false)
     expect(isCustomBuildWebUi(createWebUiRoot(null))).toBe(false)
@@ -65,6 +68,16 @@ describe('desktop updater custom-build guard', () => {
   })
 
   it('refuses to download or install upstream desktop updates on a custom build', async () => {
+    const { updater, autoUpdater } = await loadUpdater('0.7.29-agenthub.1')
+
+    expect(() => updater.downloadDesktopUpdate()).toThrow('Custom builds do not download upstream desktop updates')
+    await expect(updater.installDesktopUpdate()).resolves.toMatchObject({ status: updater.getDesktopUpdateState().status })
+
+    expect(autoUpdater.downloadUpdate).not.toHaveBeenCalled()
+    expect(autoUpdater.quitAndInstall).not.toHaveBeenCalled()
+  })
+
+  it('refuses to download or install upstream desktop updates on a legacy tatin custom build', async () => {
     const { updater, autoUpdater } = await loadUpdater('0.7.21-tatin.5')
 
     expect(() => updater.downloadDesktopUpdate()).toThrow('Custom builds do not download upstream desktop updates')
@@ -76,7 +89,7 @@ describe('desktop updater custom-build guard', () => {
 
   it('never contacts the upstream update feed from a custom build', async () => {
     vi.stubEnv('HERMES_DESKTOP_ENABLE_AUTO_UPDATE', '')
-    const { updater, autoUpdater, showMessageBox } = await loadUpdater('0.7.21-tatin.5')
+    const { updater, autoUpdater, showMessageBox } = await loadUpdater('0.7.29-agenthub.1')
 
     updater.initAutoUpdater()
     await updater.checkForDesktopUpdates(false)
@@ -88,7 +101,7 @@ describe('desktop updater custom-build guard', () => {
     expect(autoUpdater.autoInstallOnAppQuit).toBe(false)
     expect(showMessageBox).toHaveBeenCalledOnce()
     expect(showMessageBox).toHaveBeenCalledWith(expect.objectContaining({
-      message: expect.stringContaining('TATin Studio custom build does not install upstream updates'),
+      message: expect.stringContaining('AgentHub custom build does not install upstream updates'),
     }))
   })
 

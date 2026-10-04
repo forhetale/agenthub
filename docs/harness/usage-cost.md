@@ -63,7 +63,7 @@ selected context threshold. `cost_source` remains `estimated`, so existing
 Studio coverage and total-cost displays work without a new API contract.
 Catalog refreshes never reprice previously stored records.
 
-TATin Studio: set `HERMES_WEB_UI_DISABLE_MODEL_CATALOG_DOWNLOAD=1` to keep Studio from
+AgentHub: set `HERMES_WEB_UI_DISABLE_MODEL_CATALOG_DOWNLOAD=1` to keep Studio from
 downloading `https://models.dev/api.json` (offline or private installs). Without a
 Studio catalog copy, context limits fall back to Hermes Agent's own
 `models_dev_cache.json`; cost estimates then stay unavailable until a catalog exists.

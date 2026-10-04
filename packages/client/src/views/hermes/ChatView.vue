@@ -34,7 +34,7 @@ const contentMode = computed<ChatContentMode>(() => {
   if (route.name === 'hermes.models') return 'models'
   return 'chat'
 })
-const productTitle = 'TATin Studio'
+const productTitle = 'AgentHub'
 const initializing = ref(true)
 const routeLoading = ref(false)
 let routeLoadSequence = 0

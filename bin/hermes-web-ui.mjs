@@ -748,8 +748,8 @@ Options:
 }
 
 function doUpdate() {
-  if (VERSION.includes('-tatin.')) {
-    console.error('TATin Studio custom build: update from your custom source. An upstream npm reinstall would overwrite Bark and branding changes.')
+  if (VERSION.includes('-agenthub.') || VERSION.includes('-tatin.')) {
+    console.error('AgentHub custom build: update from your custom source. An upstream npm reinstall would overwrite Bark and branding changes.')
     process.exitCode = 1
     return
   }

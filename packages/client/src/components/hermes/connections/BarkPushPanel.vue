@@ -14,7 +14,7 @@ const busy = ref(false)
 const loaded = ref(false)
 const settings = ref<BarkSettings | null>(null)
 const pushUrl = ref('')
-const form = reactive({ serverUrl: 'https://api.day.app', deviceKey: '', group: 'TATin Studio', sound: '', studioUrl: '', allowPrivateNetwork: false, locale: 'zh', defaultSessionPush: true, contentPreview: false })
+const form = reactive({ serverUrl: 'https://api.day.app', deviceKey: '', group: 'AgentHub', sound: '', studioUrl: '', allowPrivateNetwork: false, locale: 'zh', defaultSessionPush: true, contentPreview: false })
 const languageChoices = languageOptions
 function apply(value: BarkSettings) {
   settings.value = value

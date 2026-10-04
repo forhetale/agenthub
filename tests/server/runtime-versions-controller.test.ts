@@ -52,7 +52,23 @@ describe('runtime versions controller custom-build guard', () => {
     vi.resetModules()
   })
 
-  it('refuses to download an upstream Web UI package on TATin custom builds', async () => {
+  it('refuses to download an upstream Web UI package on AgentHub custom builds', async () => {
+    vi.stubGlobal('__APP_VERSION__', '0.7.29-agenthub.1')
+    const { controller, mocks } = await loadRuntimeVersionsController()
+    const ctx = createCtx({ version: '0.7.22', source: 'github' })
+
+    await controller.downloadWebUi(ctx)
+
+    expect(ctx.status).toBe(409)
+    expect(ctx.body).toEqual({
+      success: false,
+      code: 'custom_build_protected',
+      message: expect.stringContaining('custom build'),
+    })
+    expect(mocks.startWebUiVersionDownload).not.toHaveBeenCalled()
+  })
+
+  it('refuses to download an upstream Web UI package on legacy TATin custom builds', async () => {
     vi.stubGlobal('__APP_VERSION__', '0.7.21-tatin.5')
     const { controller, mocks } = await loadRuntimeVersionsController()
     const ctx = createCtx({ version: '0.7.22', source: 'github' })
@@ -68,7 +84,23 @@ describe('runtime versions controller custom-build guard', () => {
     expect(mocks.startWebUiVersionDownload).not.toHaveBeenCalled()
   })
 
-  it('refuses to activate a downloaded Web UI on TATin custom builds', async () => {
+  it('refuses to activate a downloaded Web UI on AgentHub custom builds', async () => {
+    vi.stubGlobal('__APP_VERSION__', '0.7.29-agenthub.1')
+    const { controller, mocks } = await loadRuntimeVersionsController()
+    const ctx = createCtx({ version: '0.7.22' })
+
+    await controller.activateWebUi(ctx)
+
+    expect(ctx.status).toBe(409)
+    expect(ctx.body).toEqual({
+      success: false,
+      code: 'custom_build_protected',
+      message: expect.stringContaining('custom build'),
+    })
+    expect(mocks.activateDownloadedWebUiVersion).not.toHaveBeenCalled()
+  })
+
+  it('refuses to activate a downloaded Web UI on legacy TATin custom builds', async () => {
     vi.stubGlobal('__APP_VERSION__', '0.7.21-tatin.5')
     const { controller, mocks } = await loadRuntimeVersionsController()
     const ctx = createCtx({ version: '0.7.22' })
@@ -84,8 +116,8 @@ describe('runtime versions controller custom-build guard', () => {
     expect(mocks.activateDownloadedWebUiVersion).not.toHaveBeenCalled()
   })
 
-  it('keeps Hermes Agent runtime downloads and Web UI cleanup available on TATin custom builds', async () => {
-    vi.stubGlobal('__APP_VERSION__', '0.7.21-tatin.5')
+  it('keeps Hermes Agent runtime downloads and Web UI cleanup available on custom builds', async () => {
+    vi.stubGlobal('__APP_VERSION__', '0.7.29-agenthub.1')
     const { controller, mocks } = await loadRuntimeVersionsController()
 
     const downloadCtx = createCtx({ version: '0.20.6', source: 'cf' })

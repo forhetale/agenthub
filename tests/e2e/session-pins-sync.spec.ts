@@ -59,7 +59,7 @@ test('uses the session database flag for pins across devices', async ({ page, br
   }
 })
 
-// TATin Studio moves pins that pre-0.7.23 browsers kept in localStorage to the server once,
+// AgentHub moves pins that pre-0.7.23 browsers kept in localStorage to the server once,
 // whichever profile they were saved under.
 test('moves old browser pins to the server once', async ({ page }) => {
   const { session, recent } = makeSessions()

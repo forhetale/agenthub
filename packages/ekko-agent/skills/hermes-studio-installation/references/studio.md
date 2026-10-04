@@ -1,6 +1,6 @@
-# Ekko Studio installation
+# AgentHub installation
 
-Use the installation form already chosen by the user. This is TATin Studio, a fork of Ekko Studio: every installation form builds from the fork's source at `https://github.com/forhetale/tatin-studio`. Upstream release installers, the `hermes-web-ui` npm package and upstream Docker images are the upstream product without the fork's changes; never install them to set up or upgrade this Studio.
+Use the installation form already chosen by the user. This is AgentHub, a fork of Ekko Studio: every installation form builds from the fork's source at `https://github.com/forhetale/agenthub`. Upstream release installers, the `hermes-web-ui` npm package, and upstream Docker images are the upstream product without the fork's changes; never install them to set up or upgrade this Studio (running `npm install -g hermes-web-ui` will overwrite the custom fork).
 
 ## Desktop application
 
@@ -22,7 +22,7 @@ ekko-studio web version
 
 Refresh the Agents page after each installation change. Hermes shows either a user CLI, a managed Runtime, or not installed.
 
-The packaged Desktop does not update itself: its updater refuses upstream feeds on TATin builds. Upgrade by updating the checkout and building a new installer. This is distinct from downloading a Hermes Runtime version or running `ekko-studio cli update`.
+The packaged Desktop does not update itself: its updater refuses upstream feeds on AgentHub custom builds (blocked by `-agenthub.` and legacy `-tatin.` build guards). Upgrade by updating the checkout and building a new installer. This is distinct from downloading a Hermes Runtime version or running `ekko-studio cli update`.
 
 ## Web console from source
 
@@ -31,18 +31,19 @@ Requirements: Git, Node.js 23 or newer, and npm.
 ```bash
 node --version
 npm --version
-git clone https://github.com/forhetale/tatin-studio.git
-cd tatin-studio
-npm ci
+git clone https://github.com/forhetale/agenthub.git
+cd agenthub
+npm ci --ignore-scripts
+npm rebuild node-pty sharp sherpa-onnx-node
 npm run build
 node bin/hermes-web-ui.mjs version
-node bin/hermes-web-ui.mjs start --no-open
+node bin/hermes-web-ui.mjs start 8648 --no-open
 node bin/hermes-web-ui.mjs status
 ```
 
 The default address is `http://localhost:8648`. A successful installation must satisfy both `version` and `status` after startup.
 
-`hermes-web-ui update` and `upgrade` refuse to run on TATin builds because they would install the upstream npm package. Upgrade by stopping the server with `node bin/hermes-web-ui.mjs stop`, updating the checkout, running `npm ci` and `npm run build` again, then starting it with `node bin/hermes-web-ui.mjs start --no-open`. On Windows `npm ci` fails while a running server holds native modules such as node-pty.
+`hermes-web-ui update` and `upgrade` refuse to run on AgentHub custom builds (`-agenthub.` and legacy `-tatin.`) because they would install the upstream npm package. Upgrade by stopping the server with `node bin/hermes-web-ui.mjs stop`, updating the checkout, running `npm ci --ignore-scripts`, rebuilding native modules, running `npm run build` again, then starting it with `node bin/hermes-web-ui.mjs start 8648 --no-open`. On Windows `npm ci` fails while a running server holds native modules such as node-pty.
 
 ## Docker Compose
 
@@ -76,9 +77,10 @@ Do not use Desktop Runtime migration inside the container. Docker owns the runti
 Requirements: Git, Node.js 23 or newer, and npm.
 
 ```bash
-git clone https://github.com/forhetale/tatin-studio.git
-cd tatin-studio
-npm install
+git clone https://github.com/forhetale/agenthub.git
+cd agenthub
+npm ci --ignore-scripts
+npm rebuild node-pty sharp sherpa-onnx-node
 npm run dev
 ```
 

@@ -4,7 +4,7 @@ import { authenticate, mockHermesApi } from './fixtures'
 test('Bark configuration, masked key, saved-config test, clear, and reload', async ({ page }) => {
   await authenticate(page)
   await mockHermesApi(page)
-  let state = { serverUrl: 'https://api.day.app', group: 'TATin Studio', sound: '', studioUrl: '', allowPrivateNetwork: false, hasKey: false, configured: false, pushReady: false, lastResult: null as any }
+  let state = { serverUrl: 'https://api.day.app', group: 'AgentHub', sound: '', studioUrl: '', allowPrivateNetwork: false, hasKey: false, configured: false, pushReady: false, lastResult: null as any }
   let savedKey = ''; let testCount = 0
   await page.route('**/api/studio/notifications/bark**', async route => {
     const req = route.request()
@@ -23,7 +23,7 @@ test('Bark configuration, masked key, saved-config test, clear, and reload', asy
   await page.goto('/#/hermes/connections')
   const panel = page.getByTestId('bark-panel')
   await expect(panel).toBeVisible()
-  await expect(page).toHaveTitle(/TATin Studio/)
+  await expect(page).toHaveTitle(/AgentHub/)
   await expect(panel.getByRole('button', { name: 'Send test', exact: true })).toBeDisabled()
   await panel.getByPlaceholder('https://api.day.app/DEVICE_KEY — proxy prefixes: enter fields manually').fill('https://api.day.app/TEST_ONLY_KEY/hello/world')
   await panel.getByRole('button', { name: 'Parse URL', exact: true }).click()
@@ -60,7 +60,7 @@ test('Chinese navigation opens message push and fits a phone viewport', async ({
   await page.addInitScript(() => localStorage.setItem('hermes_locale', 'zh'))
   await mockHermesApi(page)
   await page.route('**/api/studio/notifications/bark', route => route.fulfill({ json: {
-    serverUrl: 'https://api.day.app', group: 'TATin Studio', sound: '', studioUrl: '', allowPrivateNetwork: false,
+    serverUrl: 'https://api.day.app', group: 'AgentHub', sound: '', studioUrl: '', allowPrivateNetwork: false,
     hasKey: false, configured: false, pushReady: false, lastResult: null,
   } }))
   await page.goto('/#/hermes/chat')

@@ -1,13 +1,13 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-// TATin Studio custom builds carry a `-tatin.` version in the bundled Web UI
+// AgentHub custom builds carry a `-agenthub.` or legacy `-tatin.` version in the bundled Web UI
 // package.json. The desktop package keeps the upstream version, so the bundled
 // Web UI is the source of truth for whether upstream updates would overwrite it.
 export function isCustomBuildWebUi(webuiRoot: string): boolean {
   try {
     const pkg = JSON.parse(readFileSync(join(webuiRoot, 'package.json'), 'utf-8')) as { version?: unknown }
-    return typeof pkg.version === 'string' && pkg.version.includes('-tatin.')
+    return typeof pkg.version === 'string' && (pkg.version.includes('-agenthub.') || pkg.version.includes('-tatin.'))
   } catch {
     return false
   }

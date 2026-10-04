@@ -137,8 +137,20 @@ describe('packaged desktop Web UI', () => {
   it('uses the electron-builder 26 desktop entry schema for deb packages', () => {
     const script = readFileSync(resolve('packages/desktop/scripts/electron-builder.mjs'), 'utf8')
 
-    expect(script).toContain('--config.linux.desktop.entry.Name=Ekko Studio')
-    expect(script).not.toContain('--config.linux.desktop.Name=Ekko Studio')
+    expect(script).toContain('--config.linux.desktop.entry.Name=AgentHub')
+    expect(script).not.toContain('--config.linux.desktop.Name=AgentHub')
+  })
+
+  it('brands installers as AgentHub while preserving legacy application identity', () => {
+    const config = readFileSync(resolve('packages/desktop/electron-builder.yml'), 'utf8')
+    const installer = readFileSync(resolve('packages/desktop/build/installer.nsh'), 'utf8')
+
+    expect(config).toContain('productName: AgentHub')
+    expect(config).toContain('appId: com.hermeswebui.studio')
+    expect(config).toContain('artifactName: "AgentHub-${version}-${arch}.${ext}"')
+    expect(installer).toContain('!insertmacro stopStudioExecutable "AgentHub.exe" agenthub')
+    expect(installer).toContain('!insertmacro stopStudioExecutable "Ekko Studio.exe" ekko')
+    expect(installer).toContain('!insertmacro stopStudioExecutable "Hermes Studio.exe" hermes')
   })
 
   it('accepts a package containing the server and target native dependencies', async () => {

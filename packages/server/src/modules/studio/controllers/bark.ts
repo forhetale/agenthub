@@ -21,5 +21,5 @@ export async function saveBark(ctx: Context) {
 }
 export async function clearBark(ctx: Context) { await handle(ctx, id => barkService.clear(id)) }
 export async function testBark(ctx: Context) {
-  await handle(ctx, id => barkService.send(id, 'TATin Studio · Bark test / 消息推送测试'))
+  await handle(ctx, id => barkService.send(id, 'AgentHub · Bark test / 消息推送测试'))
 }

@@ -2,7 +2,7 @@ import { posix, win32 } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { configureDesktopIdentity } from '../../packages/desktop/src/main/desktop-identity'
 
-describe('desktop identity across the Ekko Studio rename', () => {
+describe('desktop identity across the AgentHub rename', () => {
   it.each([
     { platform: 'macOS', paths: posix, appData: '/Users/test/Library/Application Support' },
     { platform: 'Windows', paths: win32, appData: 'C:\\Users\\test\\AppData\\Roaming' },
@@ -25,7 +25,7 @@ describe('desktop identity across the Ekko Studio rename', () => {
 
     configureDesktopIdentity(app)
 
-    expect(name).toBe('Ekko Studio')
+    expect(name).toBe('AgentHub')
     expect(app.getPath('userData')).toBe(oldProfile)
     configureDesktopIdentity(app)
     expect(app.getPath('userData')).toBe(oldProfile)

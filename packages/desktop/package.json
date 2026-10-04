@@ -1,8 +1,8 @@
 {
   "name": "hermes-studio",
-  "version": "0.7.26",
+  "version": "0.7.29",
   "description": "Ekko Studio desktop app for multi-agent chat, coding, and visual workflows, with bundled local runtimes.",
-  "homepage": "https://github.com/forhetale/tatin-studio",
+  "homepage": "https://github.com/forhetale/agenthub",
   "author": {
     "name": "Ekko Studio Contributors",
     "email": "noreply@hermes-studio.local"

@@ -11,9 +11,9 @@ metadata:
     - grok installation
 ---
 
-# Ekko Studio installation
+# AgentHub installation
 
-Handle installation and Runtime lifecycle work for Ekko Studio and every Agent shown on its Agents page.
+Handle installation and Runtime lifecycle work for AgentHub (Ekko Studio fork) and every Agent shown on its Agents page.
 
 ## Keep the boundary narrow
 
@@ -25,7 +25,7 @@ Handle installation and Runtime lifecycle work for Ekko Studio and every Agent s
 
 ## Load only the relevant reference
 
-- Read [references/studio.md](references/studio.md) for building, verifying, or upgrading the Desktop, web console, Docker, or source form of this Studio from the TATin Studio source.
+- Read [references/studio.md](references/studio.md) for building, verifying, or upgrading the Desktop, web console, Docker, or source form of this Studio from the AgentHub source.
 - Read [references/hermes-runtime.md](references/hermes-runtime.md) for Hermes CLI detection, managed Runtime downloads, validation, activation, upgrades, recovery, or storage migration.
 - Read [references/coding-agents.md](references/coding-agents.md) for Claude Code, Codex, Pi, or Grok installation, update checks, removal, PATH diagnosis, and success criteria.
 

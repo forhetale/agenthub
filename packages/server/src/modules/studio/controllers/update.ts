@@ -11,7 +11,7 @@ import {
 } from '../services/update/version-preview-manager'
 
 export async function handleUpdate(ctx: Context): Promise<void> {
-  if (rejectOnCustomBuild(ctx, 'TATin Studio: upstream updates would overwrite this custom build. Update from the maintained custom source or explicitly reinstall the upstream package.')) return
+  if (rejectOnCustomBuild(ctx, 'AgentHub: upstream updates would overwrite this custom build. Update from the maintained custom source or explicitly reinstall the upstream package.')) return
   await runStudioUpdate(ctx)
 }
 

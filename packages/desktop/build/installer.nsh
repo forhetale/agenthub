@@ -1,6 +1,6 @@
 !macro stopStudioExecutable EXE_NAME LABEL
   IfFileExists "$INSTDIR\${EXE_NAME}" 0 studioStopDone_${LABEL}
-    DetailPrint "Stopping Ekko Studio..."
+    DetailPrint "Stopping AgentHub..."
     nsExec::ExecToLog '"$INSTDIR\${EXE_NAME}" --quit'
     Pop $0
 
@@ -105,14 +105,15 @@
 !macroend
 
 !macro stopHermesStudioProcesses
-  ; Close either installed product name when upgrading across the rename.
+  ; Close the current and legacy installed product names across the rename.
+  !insertmacro stopStudioExecutable "AgentHub.exe" agenthub
   !insertmacro stopStudioExecutable "Ekko Studio.exe" ekko
   !insertmacro stopStudioExecutable "Hermes Studio.exe" hermes
 !macroend
 
 !macro repairHermesStudioUninstaller
   IfFileExists "$INSTDIR\${UNINSTALL_FILENAME}" 0 hermesStudioRepairDone
-    DetailPrint "Repairing Ekko Studio uninstaller..."
+    DetailPrint "Repairing AgentHub uninstaller..."
     SetOutPath "$INSTDIR"
     Delete "$INSTDIR\${UNINSTALL_FILENAME}.hermes-repair"
     ClearErrors

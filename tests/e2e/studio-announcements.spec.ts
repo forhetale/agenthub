@@ -5,7 +5,7 @@ test('only the latest Studio announcement is shown, including after reload and f
   await authenticate(page)
   const api = await mockHermesApi(page)
   await page.route('**/api/studio/notifications/bark', route => route.fulfill({ json: {
-    serverUrl: 'https://api.day.app', group: 'TATin Studio', sound: '', studioUrl: '', allowPrivateNetwork: false,
+    serverUrl: 'https://api.day.app', group: 'AgentHub', sound: '', studioUrl: '', allowPrivateNetwork: false,
     hasKey: false, configured: false, pushReady: false, lastResult: null,
   } }))
   const latest = { id: 3, updateTime: 100, title: 'Latest Studio news', content: 'A new Studio release is ready.\nEnjoy!', type: 'info', dismissible: true, actionUrl: null }
@@ -36,7 +36,7 @@ test('announcement errors do not block the Studio shell', async ({ page }) => {
   await authenticate(page)
   await mockHermesApi(page)
   await page.route('**/api/studio/notifications/bark', route => route.fulfill({ json: {
-    serverUrl: 'https://api.day.app', group: 'TATin Studio', sound: '', studioUrl: '', allowPrivateNetwork: false,
+    serverUrl: 'https://api.day.app', group: 'AgentHub', sound: '', studioUrl: '', allowPrivateNetwork: false,
     hasKey: false, configured: false, pushReady: false, lastResult: null,
   } }))
   await page.route('**/api/studio/announcements?*', route => route.fulfill({ status: 502, json: { ok: false } }))

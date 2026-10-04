@@ -11,16 +11,19 @@ function readRootPackageVersion(): string {
   return JSON.parse(readFileSync(resolve(process.cwd(), 'package.json'), 'utf-8')).version
 }
 
-describe('TATin custom-build detection', () => {
+describe('custom-build detection', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
   })
 
-  it('recognizes only -tatin. build versions as custom builds', () => {
+  it('recognizes both -agenthub. and legacy -tatin. build versions as custom builds', () => {
+    vi.stubGlobal('__APP_VERSION__', '0.7.29-agenthub.1')
+    expect(isTatinBuild()).toBe(true)
+
     vi.stubGlobal('__APP_VERSION__', '0.7.21-tatin.5')
     expect(isTatinBuild()).toBe(true)
 
-    vi.stubGlobal('__APP_VERSION__', '0.7.21')
+    vi.stubGlobal('__APP_VERSION__', '0.7.29')
     expect(isTatinBuild()).toBe(false)
   })
 
@@ -32,23 +35,31 @@ describe('TATin custom-build detection', () => {
 
   it('rejects with custom_build_protected only on custom builds', () => {
     const upstreamCtx = { status: 200, body: undefined as unknown }
-    vi.stubGlobal('__APP_VERSION__', '0.7.21')
+    vi.stubGlobal('__APP_VERSION__', '0.7.29')
     expect(rejectOnCustomBuild(upstreamCtx, 'blocked')).toBe(false)
     expect(upstreamCtx).toEqual({ status: 200, body: undefined })
 
     const customCtx = { status: 200, body: undefined as unknown }
-    vi.stubGlobal('__APP_VERSION__', '0.7.21-tatin.5')
+    vi.stubGlobal('__APP_VERSION__', '0.7.29-agenthub.1')
     expect(rejectOnCustomBuild(customCtx, 'blocked')).toBe(true)
     expect(customCtx).toEqual({
       status: 409,
       body: { success: false, code: CUSTOM_BUILD_PROTECTED_CODE, message: 'blocked' },
     })
+
+    const legacyCtx = { status: 200, body: undefined as unknown }
+    vi.stubGlobal('__APP_VERSION__', '0.7.26-tatin.1')
+    expect(rejectOnCustomBuild(legacyCtx, 'blocked')).toBe(true)
+    expect(legacyCtx).toEqual({
+      status: 409,
+      body: { success: false, code: CUSTOM_BUILD_PROTECTED_CODE, message: 'blocked' },
+    })
   })
 
-  it('ships a -tatin. release version so every update guard stays active', () => {
+  it('ships a custom release version so every update guard stays active', () => {
     // The server bundle, dev server, Vite client, CLI, and desktop updater all
     // derive the custom-build flag from the root package version.
-    expect(readRootPackageVersion()).toContain('-tatin.')
+    expect(readRootPackageVersion()).toMatch(/-(?:agenthub|tatin)\./)
     expect(readFileSync(resolve(process.cwd(), 'scripts/build-server.mjs'), 'utf-8'))
       .toContain('__APP_VERSION__: JSON.stringify(version)')
     expect(readFileSync(resolve(process.cwd(), 'vite.config.ts'), 'utf-8'))
@@ -77,7 +88,7 @@ describe('CLI update on a TATin custom build', () => {
     doUpdate()
 
     expect(process.exitCode).toBe(1)
-    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('TATin Studio custom build'))
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('AgentHub custom build'))
     expect(logSpy).not.toHaveBeenCalledWith(expect.stringContaining('Updating hermes-web-ui'))
     expect(execFileSync).not.toHaveBeenCalled()
     expect(execSync).not.toHaveBeenCalled()

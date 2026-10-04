@@ -8,7 +8,7 @@ Build the installer from this repository's source on the target operating system
 and architecture, following the steps in the root README (Quick Start → Desktop
 App), which match the release workflow. Upstream
 release installers are the upstream product without this fork's changes, and
-TATin builds never download upstream updates.
+AgentHub builds never download upstream updates.
 
 The desktop app bundles the Web UI runtime and launches it locally from the
 native shell app.

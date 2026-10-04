@@ -1,9 +1,9 @@
 {
   "openapi": "3.0.3",
   "info": {
-    "title": "TATin Studio API",
-    "description": "TATin Studio API — chat sessions, scheduled jobs, platform channels, model management, skills, memory, logs, file browser, group chat, and terminal.",
-    "version": "0.7.26-tatin.1"
+    "title": "AgentHub API",
+    "description": "AgentHub API — chat sessions, scheduled jobs, platform channels, model management, skills, memory, logs, file browser, group chat, and terminal.",
+    "version": "0.7.29-agenthub.1"
   },
   "servers": [
     {
@@ -15739,7 +15739,7 @@
                     "group": {
                       "type": "string",
                       "maxLength": 120,
-                      "default": "TATin Studio"
+                      "default": "AgentHub"
                     },
                     "sound": {
                       "type": "string",
@@ -15947,7 +15947,7 @@
                   "group": {
                     "type": "string",
                     "maxLength": 120,
-                    "default": "TATin Studio"
+                    "default": "AgentHub"
                   },
                   "sound": {
                     "type": "string",
@@ -16004,7 +16004,7 @@
                     "group": {
                       "type": "string",
                       "maxLength": 120,
-                      "default": "TATin Studio"
+                      "default": "AgentHub"
                     },
                     "sound": {
                       "type": "string",
@@ -16213,7 +16213,7 @@
                     "group": {
                       "type": "string",
                       "maxLength": 120,
-                      "default": "TATin Studio"
+                      "default": "AgentHub"
                     },
                     "sound": {
                       "type": "string",

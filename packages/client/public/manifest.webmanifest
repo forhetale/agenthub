@@ -1,7 +1,7 @@
 {
-  "name": "TATin Studio",
-  "short_name": "TATin Studio",
-  "description": "TATin Studio is a local-first AI workspace for multi-agent chat, coding, and visual workflows, available on desktop and the web.",
+  "name": "AgentHub",
+  "short_name": "AgentHub",
+  "description": "AgentHub is a local-first AI workspace for multi-agent chat, coding, and visual workflows, available on desktop and the web.",
   "start_url": "/#/hermes/chat",
   "scope": "/",
   "display": "standalone",

@@ -28,7 +28,7 @@ interface SendResult { ok: boolean; code: string; at: string }
 export type BarkTransport = (config: BarkConfig, content: string, title?: string) => Promise<void>
 const DEFAULT_SERVER = 'https://api.day.app'
 const DEFAULT_LOCALE = 'zh'
-const DEFAULT_TITLE = 'TATin Studio'
+const DEFAULT_TITLE = 'AgentHub'
 // Configs saved before these switches existed keep the defaults.
 const PREFERENCE_DEFAULTS = { defaultSessionPush: true, contentPreview: false }
 
@@ -61,7 +61,7 @@ export function normalizeBarkConfig(input: Record<string, unknown>, previous?: B
   const locale = shortText(input.locale, 16) || previous?.locale || 'zh'
   if (!NOTIFICATION_LOCALES.includes(locale as typeof NOTIFICATION_LOCALES[number])) throw new BarkError('invalid_config')
   return {
-    serverUrl: url.toString().replace(/\/+$/, ''), deviceKey, group: shortText(input.group, 120) || 'TATin Studio', sound, studioUrl, allowPrivateNetwork, locale,
+    serverUrl: url.toString().replace(/\/+$/, ''), deviceKey, group: shortText(input.group, 120) || 'AgentHub', sound, studioUrl, allowPrivateNetwork, locale,
     defaultSessionPush: flag(input.defaultSessionPush, previous?.defaultSessionPush ?? PREFERENCE_DEFAULTS.defaultSessionPush),
     contentPreview: flag(input.contentPreview, previous?.contentPreview ?? PREFERENCE_DEFAULTS.contentPreview),
   }
@@ -145,7 +145,7 @@ export class BarkService {
   ready(userId: number): boolean { return Boolean(this.read(userId)) }
   get(userId: number) {
     const stored = this.read(userId)
-    const { deviceKey: _secret, ...safe } = stored || { serverUrl: DEFAULT_SERVER, group: 'TATin Studio', sound: '', studioUrl: '', allowPrivateNetwork: false, locale: DEFAULT_LOCALE, deviceKey: '', ...PREFERENCE_DEFAULTS }
+    const { deviceKey: _secret, ...safe } = stored || { serverUrl: DEFAULT_SERVER, group: 'AgentHub', sound: '', studioUrl: '', allowPrivateNetwork: false, locale: DEFAULT_LOCALE, deviceKey: '', ...PREFERENCE_DEFAULTS }
     return { ...safe, hasKey: Boolean(stored), configured: Boolean(stored), pushReady: Boolean(stored), lastResult: this.results.get(userId) || null }
   }
   save(userId: number, input: Record<string, unknown>) {

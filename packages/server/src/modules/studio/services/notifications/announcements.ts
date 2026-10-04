@@ -1,4 +1,4 @@
-// TATin Studio does not read the upstream Ekko Studio announcement feed. The endpoint and the
+// AgentHub does not read the upstream Ekko Studio announcement feed. The endpoint and the
 // prompt stay so a deployment can publish its own feed with the same response shape.
 
 function announcementsUrl(env: NodeJS.ProcessEnv): URL | null {

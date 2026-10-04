@@ -19,8 +19,8 @@ const packageJson = JSON.parse(readFileSync(join(rootDir, 'package.json'), 'utf-
 const openapi = {
   openapi: '3.0.3',
   info: {
-    title: 'TATin Studio API',
-    description: 'TATin Studio API — chat sessions, scheduled jobs, platform channels, model management, skills, memory, logs, file browser, group chat, and terminal.',
+    title: 'AgentHub API',
+    description: 'AgentHub API — chat sessions, scheduled jobs, platform channels, model management, skills, memory, logs, file browser, group chat, and terminal.',
     version: packageJson.version,
   },
   servers: [
@@ -1213,7 +1213,7 @@ openapi.paths['/api/coding-agents/dsh/agent-presets/{presetId}/location'] = { po
 // Outbound-only Bark notification settings. The existing session push-enabled API is unchanged.
 const barkConfigProperties = {
   serverUrl: { type: 'string', format: 'uri', default: 'https://api.day.app' },
-  group: { type: 'string', maxLength: 120, default: 'TATin Studio' },
+  group: { type: 'string', maxLength: 120, default: 'AgentHub' },
   sound: { type: 'string', maxLength: 80 },
   studioUrl: { type: 'string', description: 'Optional phone-reachable Studio HTTP(S) address; empty string omits the link.' },
   allowPrivateNetwork: { type: 'boolean', default: false, description: 'Enabling private targets or HTTP requires super_admin.' },

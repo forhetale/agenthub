@@ -367,7 +367,7 @@ export async function mockHermesApi(page: Page, options: MockHermesApiOptions = 
     // The chat composer reads the user's Bark default for new chats; specs that test Bark override this.
     if (pathname === '/api/studio/notifications/bark' && request.method() === 'GET') {
       await route.fulfill(jsonResponse({
-        serverUrl: 'https://api.day.app', group: 'TATin Studio', sound: '', studioUrl: '', allowPrivateNetwork: false,
+        serverUrl: 'https://api.day.app', group: 'AgentHub', sound: '', studioUrl: '', allowPrivateNetwork: false,
         locale: 'zh', defaultSessionPush: true, contentPreview: false,
         hasKey: false, configured: false, pushReady: false, lastResult: null,
       }))

@@ -10,7 +10,7 @@ function service(send = vi.fn().mockResolvedValue(undefined)) {
   const home = mkdtempSync(join(tmpdir(), 'tatin-bark-test-')); homes.push(home)
   return { home, send, service: new BarkService(home, send) }
 }
-const input = { serverUrl: 'https://api.day.app', deviceKey: 'TEST_DEVICE_KEY_ONLY', group: 'TATin Studio' }
+const input = { serverUrl: 'https://api.day.app', deviceKey: 'TEST_DEVICE_KEY_ONLY', group: 'AgentHub' }
 afterEach(() => { for (const home of homes.splice(0)) rmSync(home, { recursive: true, force: true }) })
 describe('Bark configuration and security', () => {
   it('encrypts credentials, redacts reads, persists across restarts, and isolates users', () => {
@@ -77,7 +77,7 @@ describe('Bark transport', () => {
     const settings = normalizeBarkConfig({ ...input, serverUrl: `http://127.0.0.1:${port}`, allowPrivateNetwork: true })
     try {
       await postBark(settings, '状态通知')
-      expect(requests[0]).toMatchObject({ method: 'POST', path: '/push', body: { device_key: input.deviceKey, title: 'TATin Studio', body: '状态通知' } })
+      expect(requests[0]).toMatchObject({ method: 'POST', path: '/push', body: { device_key: input.deviceKey, title: 'AgentHub', body: '状态通知' } })
       code = 400; await expect(postBark(settings, 'status')).rejects.toThrow('server_rejected')
       status = 302; await expect(postBark(settings, 'status')).rejects.toThrow('http_302')
       expect(requests).toHaveLength(3)
@@ -99,7 +99,7 @@ describe('Bark session integration', () => {
     expect(await n.notify('s1', event, { run_id: 'r1' }, 'codex')).toBe(0)
     expect(sendBark).toHaveBeenCalledTimes(1)
     expect(sendBark.mock.calls[0][0]).toBe(7)
-    expect(sendBark.mock.calls[0][1]).toContain('TATin Studio')
+    expect(sendBark.mock.calls[0][1]).toContain('AgentHub')
     expect(sendBark.mock.calls[0][1]).not.toContain('PRIVATE')
   })
   it('honors disabled sessions, invalid owner, unsupported events and interrupted runs', async () => {

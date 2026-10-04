@@ -1,557 +1,165 @@
-> [!IMPORTANT]
-> **This repository is a customized community fork — not the upstream project.**
-> All upstream paid/commercial surfaces are removed (mobile-app download & purchase
-> pages, paid-access upsells, hardware purchase entries) and session notifications are
-> delivered by a self-hosted **Bark** push channel.
-> **TATin Studio** is a source-level customization of
-> [Ekko Studio / Hermes Studio](https://github.com/EKKOLearnAI/ekko-studio) **v0.7.26**,
-> published as `0.7.26-tatin.1`. It adds a per-user **Bark push-notification channel**,
-> rebrands the user-visible product name to TATin Studio, and trims upstream surfaces the
-> fork does not use: the App download hub, the Little Box (MCU voice) feature, the App
-> connections/relay and LAN device stacks, the Studio social-channel senders, and every
-> Device Connections tab except the Bark message-push panel. See
-> [CUSTOMIZATION.md](./CUSTOMIZATION.md) for the change list, security notes, and build
-> instructions. Build and install from this source — the `hermes-web-ui` npm package
-> remains the upstream build. The documentation below otherwise describes the shared
-> upstream product.
+# AgentHub
 
 <p align="center">
-  <strong>Ekko Studio</strong>
-  <a href="./README_zh.md">中文</a>
+  <strong>Local-first, privacy-respecting AI workspace for multi-agent chat, coding, and visual workflows.</strong><br/>
+  Independent community fork of Ekko Studio / Hermes Studio, purged of commercial relays and mobile upsells.
 </p>
 
 <p align="center">
-  A local-first AI workspace for multi-agent chat, coding, and visual workflows.<br/>
-  Available as a desktop app and self-hosted web console, with support for<br/>
-  <a href="https://github.com/NousResearch/hermes-agent">Hermes Agent</a>, Ekko Agent, Claude Code, Codex, Pi, Grok, OpenCode, and DeepSeek Harness (DSH).<br/>
-  Bring conversations, group collaboration, voice, and files together in one place.
+  <a href="./README_zh.md">简体中文</a> · <a href="./CUSTOMIZATION.md">Customization Spec</a> · <a href="./docs/upstream-sync-0.7.29.md">Upstream Sync (v0.7.29)</a>
 </p>
 
 <p align="center">
-  <a href="#quick-start">Build from source</a>
-  ·
-  <a href="./CUSTOMIZATION.md">What this fork changes</a>
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/License-BSL--1.1-blue.svg" alt="License: BSL-1.1" /></a>
+  <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/Node.js-%3E%3D23-brightgreen.svg" alt="Node.js >= 23" /></a>
+  <a href="https://github.com/forhetale/agenthub"><img src="https://img.shields.io/badge/release-0.7.29--agenthub.1-informational.svg" alt="Release 0.7.29-agenthub.1" /></a>
+  <a href="https://github.com/Finb/Bark"><img src="https://img.shields.io/badge/push-Bark-ff5a5f.svg" alt="Push: Bark" /></a>
 </p>
-
-Ekko Studio was previously named Hermes Studio / Hermes Web UI; the upstream
-repository is `EKKOLearnAI/ekko-studio`. This fork lives at
-[forhetale/tatin-studio](https://github.com/forhetale/tatin-studio) and keeps the package and server CLI name
-`hermes-web-ui`.
-
-## Screenshots
-
-Captured in Ekko Studio **v0.7.18** on 2026-09-10.
-
-| Agent Manager |
-| --- |
-| [![Seven agent runtimes in Agent Manager](./docs/screenshots/overview/agent-manager.png)](./docs/screenshots/overview/agent-manager.png) |
-| Manage agent installations, settings, and updates in one place. |
-
-<details>
-<summary>Explore the Skills interface</summary>
-
-Browse installed skills, read their instructions, and enable them as needed.
-
-![Ekko Agent Skills browser showing the GitHub skill](./docs/screenshots/overview/skills.png)
-
-</details>
-
-## Core Capabilities
-
-| Area | What Ekko Studio does |
-| --- | --- |
-| Multi-agent runtime | Runs Hermes, Ekko, Claude Code, Codex, Pi, Grok, OpenCode, and DeepSeek Harness (DSH) with streaming responses, tool traces, generated-file previews, persistent sessions, and standalone desktop chat windows. |
-| Studio workspace | Provides shared chats, group chat, global-agent runs, workflows, files, voice, media, themes, logs, usage, and Bark message push across agent runtimes. |
-| Agent control planes | Keeps Hermes profiles, providers, models, memory, skills, plugins, jobs, Kanban, channels, and runtime management in their owning agent module. |
-| Automation | Builds executable visual workflows and connects the supported runtimes through schedules, approval gates, group-chat rooms, platform channels, and MCP servers. |
-| Workspace tools | Provides a file browser, web terminal, Desktop Agent Browser, voice input/output, coding-agent runners, Journey graph, and performance views. |
-| Distribution | Ships as a desktop app for Windows/macOS/Linux, an npm CLI package, and a Docker image. |
-
-## Agent and Platform Boundaries
-
-Ekko Studio provides a shared workspace for its supported agent runtimes,
-grouped into three agent families:
-
-| Agent family | Runtime | Owned behavior |
-| --- | --- | --- |
-| Hermes | Hermes | Profiles, providers, models, skills, plugins, memory, jobs, Kanban, channels, MCP, terminal, and Hermes runtime integration. |
-| Ekko | Ekko | Ekko execution, approvals, clarifications, memory, MCP, and provider runtime behavior. |
-| Coding | Claude Code, Codex, Pi, Grok, OpenCode, DSH | Coding-agent installation, configuration, proxies, sessions, and process execution. |
-
-Studio owns capabilities shared by those families: single chat, group chat,
-global-agent orchestration, workflows, webhooks, sessions, files and uploads,
-TTS/STT, media, pets, themes, networking, logs, usage, authentication,
-and Bark message push. Studio-owned HTTP APIs use `/api/studio/*`; Hermes-owned
-control-plane APIs use `/api/hermes/*`. Already-released mobile App paths are
-handled by one centralized compatibility layer instead of duplicate legacy
-controllers.
-
-## Features
-
-### AI Chat
-
-- Real-time chat streaming over Socket.IO `/chat-run`; Studio dispatches each run to Hermes, Ekko, Claude Code, Codex, Pi, Grok, OpenCode, or DSH through runtime adapters
-- Multi-session management — create, rename, delete, switch between sessions
-- **Self-built session database** — local SQLite storage for Studio sessions; Hermes state.db remains a read-only source for Hermes history APIs
-- Session grouping by source (Telegram, Discord, Slack, etc.) with collapsible accordion
-- Active session indicator — live sessions pin to top with spinner icon
-- Sessions sorted by latest message time
-- Markdown rendering with syntax highlighting and code copy
-- Tool call detail expansion (arguments / result)
-- Profile-scoped file uploads, clipboard image/file paste, and workspace attachments
-- File download support — download uploaded files and agent-generated files by resolved path across local, Docker, SSH, and Singularity backends
-- Inline previews for generated HTML, PDF, DOCX, PPTX, XLSX, CSV, images, Markdown, and source files
-- Session search — Ctrl+K search across the Studio local session database; read-only Hermes history sessions are not included
-- Session categories, message references, compression progress, and durable background delegation results
-- Profile-aware model selector — discovers models available to the signed-in account through authorized Hermes profiles
-- Per-session model display badge and context token usage
-
-### Platform Channels
-
-Unified configuration for **10 platforms** in one page:
-
-| Platform      | Features                                                               |
-| ------------- | ---------------------------------------------------------------------- |
-| Telegram      | Bot token, mention control, reactions, free-response chats             |
-| Discord       | Bot token, mention, auto-thread, reactions, channel allow/ignore lists |
-| Slack         | Bot token, mention control, bot message handling                       |
-| WhatsApp      | Enable/disable, mention control, mention patterns                      |
-| Matrix        | Access token, homeserver, auto-thread, DM mention threads              |
-| Feishu (Lark) | App ID / Secret, mention control                                       |
-| DingTalk      | Client ID / Secret, mention control                                    |
-| QQBot         | App ID / Secret, mention control                                       |
-| WeChat        | QR code login (scan in browser, auto-save credentials)                 |
-| WeCom         | Bot ID / Secret                                                        |
-
-- Credential management writes to `~/.hermes/.env`
-- Channel behavior settings write to `~/.hermes/config.yaml`
-- Per-platform configured/unconfigured status detection
-
-### Usage Analytics
-
-- Total token usage breakdown (input / output)
-- Session count with daily average
-- Estimated cost tracking & cache hit rate
-- Model usage distribution chart
-- 30-day daily trend (bar chart + data table)
-
-### Scheduled Jobs
-
-- Create, edit, pause, resume, delete cron jobs
-- Trigger immediate execution
-- Cron expression quick presets
-
-### Kanban
-
-- Profile-aware Kanban board for planning and tracking agent work
-- Task creation, updates, and status movement from the dashboard
-- Shared with the same local Studio state and authentication model
-
-### Visual Workflows
-
-- Vue Flow canvas for Hermes, Ekko, Claude Code, Codex, Pi, Grok, OpenCode, and DeepSeek Harness (DSH) nodes with file/image attachments
-- Directed edges, structured conditions, success/failure routes, loops, and approval gates
-- Import/export for portable workflow definitions and profile-aware workspaces
-- Run budgets, deadlines, stop/rerun controls, and persisted execution history
-- Frozen run snapshots, node conversations, edge decisions, and evidence playback on the canvas
-
-### Model Management
-
-- Auto-discover models from credential pool (`~/.hermes/auth.json`)
-- Fetch available models from each provider endpoint (`/v1/models`)
-- Add, update, and delete providers (preset and custom OpenAI-compatible)
-- OAuth/device flows for OpenAI Codex, Nous Portal, xAI, Claude, and GitHub Copilot
-- Provider URL auto-detection for non-v1 API versions (e.g. `/v4`)
-- Provider-level model grouping, visible-model controls, aliases, refresh, and default switching
-- Separate STT and TTS provider catalogs under Models
-
-### Multi-Profile
-
-- Create, rename, delete, and switch between Hermes profiles
-- Clone existing profile or import from archive (`.tar.gz`)
-- Export profile for backup or sharing
-- Profile-scoped configuration, cache, uploads, sessions, jobs, usage, memory, skills, plugins, providers, and model visibility
-- Account-bound profile access: super administrators can manage every profile; regular administrators only see and use profiles assigned to their account
-
-### File Browser
-
-- Browse files on remote backends (local, Docker, SSH, Singularity)
-- Upload, download, rename, copy, move, and delete files
-- Store uploaded files under the selected/requested Hermes profile while keeping downloads path-based for agent-generated artifacts outside the upload directory
-- Create directories
-- Preview and edit supported files with syntax highlighting, then attach workspace files back to a chat
-
-### Group Chat
-
-- Multi-agent chat rooms with real-time messaging via Socket.IO
-- @mention routing — mention an agent to trigger a contextual reply
-- Context compression — automatic conversation summarization when history exceeds token threshold
-- Typing status and reply progress indicators
-- Room creation, deletion, and invite code management
-- Agent management — add/remove agents from rooms with per-agent profiles
-- SQLite message persistence
-- Mobile responsive with collapsible sidebar
-
-### Coding Agents
-
-- Install, configure, launch, and monitor Claude Code, Codex, Pi, Grok, OpenCode, and DeepSeek Harness (DSH) from the dashboard
-- Built-in coding-agent terminal, session history, workspace selection, images, and file diffs
-- Dedicated proxy routes and API modes for provider/model compatibility
-- Standalone desktop chat windows and persisted output/reasoning metadata
-
-#### DeepSeek Harness (DSH)
-
-- Use DSH in single chats, group-chat rooms, and workflow nodes, with Studio-selected providers/models or native global configuration.
-- Select an Agent preset when creating a chat, adding a group member, or configuring a workflow node; resumed conversations retain their selected preset.
-- Reuse the native `web` profile’s plugins. **Plugin configuration** embeds the plugins’ own settings UI with light/dark theme support; **Plugin list** manages installed packages. Agent presets have a separate Studio management page.
-- Manage DSH settings, instructions, MCP, and private skills. Shared `~/.agents/skills` entries are display-only in every Coding Agent page; editing and deletion are blocked.
-
-Install DSH on the machine running the Studio backend through Agent Manager. Native plugin installation requires `pnpm` on that machine’s PATH. See [DSH setup, profiles, and compatibility](docs/dsh-management.md) for details.
-
-### Desktop Agent Browser
-
-- Desktop-only multi-tab browser that agents can navigate through the managed MCP server
-- Isolated browser profiles, per-tab control leases, proxy settings, downloads, cookies, and permissions
-- Accessibility snapshots, screenshots, console logs, and page annotations for agent-assisted browsing
-
-### Skills & Memory
-
-- Browse and search installed skills
-- View skill details and attached files
-- Install and manage Skill Bundles with profile-aware usage statistics
-- User notes, persistent Ekko Agent memory, and profile-scoped memory management
-- Interactive Journey graph for skill/memory relationships, category filtering, detail inspection, and playback
-
-### Theme Customization
-
-- Light/dark mode, interface style, base font size, text color, and active color
-- Per-account background images and live preview across the workspace
-
-### Logs
-
-- View agent / server / error logs
-- Filter by log level, log file, and keyword
-- Structured log parsing with HTTP access log highlighting
-
-### Admin & Runtime Management
-
-- MCP manager for the managed `ekko-studio-*` servers, profile injection, and `api` / `browser` / `use` / `plan` toolsets
-- Runtime version and version-preview tooling for testing newer builds in isolation
-- Performance monitor views for super administrators
-
-### Authentication
-
-- Token-based auth (auto-generated on first run or set via `AUTH_TOKEN` env var)
-- Username/password login with account management in Settings
-- Default bootstrap credentials are `admin` / `123456`; users are prompted after login to change the default username and password
-- Super administrators can manage users and profile bindings; regular administrators can manage their own account details
-
-CLI maintenance commands (from a source checkout, run `node bin/hermes-web-ui.mjs` in place of `hermes-web-ui`; see [CLI Commands](#cli-commands)):
-
-```bash
-# Delete persisted login IP lock records
-hermes-web-ui clear-login-locks
-
-# Delete login locks and restart the running Studio server
-hermes-web-ui clear-login-locks --restart
-
-# Create or reset the default super administrator login to admin / 123456
-hermes-web-ui reset-default-login
-```
-
-`clear-login-locks` removes `${HERMES_WEB_UI_HOME:-~/.hermes-web-ui}/.login-lock.json`. If the server is running, restart it to clear in-memory lock state. `reset-default-login` updates the Studio account database; if an `admin` user already exists, its password is reset to `123456` and the account is enabled as a super administrator.
-
-### Settings
-
-- Display (streaming, compact mode, reasoning, cost display)
-- Agent (max turns, timeout, tool enforcement)
-- Memory (enable/disable, char limits)
-- Session reset (idle timeout, scheduled reset)
-- Privacy (PII redaction)
-- Model settings (default model & provider)
-- Profile and provider configuration
-
-### Voice / TTS / STT
-
-- Manage voice providers under Models → STT and Models → TTS; existing Settings → Voice links redirect there.
-- TTS adapters: Edge, OpenAI-compatible, MiMo, Doubao, ElevenLabs, Gemini, xAI, Mistral, MiniMax, and DeepInfra.
-- STT adapters: Browser, OpenAI-compatible, Doubao, Groq, Mistral, xAI, ElevenLabs, and DeepInfra.
-- Use editable turn-based voice input from the chat mic, or open the full-screen real-time voice stage for a continuous voice-focused experience.
-- Provider keys and MiMo voice-clone audio stay server-side; the browser receives only masked secret status.
-- Starting a new voice turn stops current assistant playback first, but does not implicitly cancel an active agent run.
-- For supported settings, security notes, and current non-goals, see [`docs/voice-dialogue.md`](./docs/voice-dialogue.md).
-- The real-time stage does not claim simultaneous full-duplex listen/speak; telephony and always-on wake-word listening remain out of scope.
-
-### Web Terminal
-
-- Integrated terminal powered by node-pty and @xterm/xterm
-- Multi-session support — create, switch between, and close terminal sessions
-- Real-time keyboard input and PTY output streaming via WebSocket
-- Window resize support
-
-### Desktop App & Updates
-
-- Native Electron shell for Windows, macOS, and Linux
-- Bundles the Studio runtime and starts the local server automatically
-- TATin builds never download upstream desktop updates; rebuild from this source to update
 
 ---
 
-## Quick Start
+## What is AgentHub?
 
-All installs build from this repository. Upstream release installers, the
-`hermes-web-ui` npm package and upstream Docker images are the upstream product
-without this fork's changes.
+**AgentHub** is a clean, local-first workbench that unifies premier AI coding agents, autonomous runtimes, and visual orchestration inside a self-hosted desktop and web console.
 
-### Desktop App
+Forked from [Ekko Studio](https://github.com/EKKOLearnAI/ekko-studio) (originally Hermes Studio), AgentHub is maintained at [forhetale/agenthub](https://github.com/forhetale/agenthub.git). While maintaining full ecosystem compatibility (via the `hermes-web-ui` CLI, `~/.hermes-web-ui` state directory, and `ekko-studio-*` MCP toolsets), AgentHub permanently removes upstream commercial funnels, proprietary mobile-app tie-ins, referral relays, and closed hardware dependencies.
 
-Build the desktop installer on the operating system and CPU architecture it is
-for (Node.js 23 or newer). These are the steps the release workflow runs:
+### Supported Agent Families
+
+AgentHub coordinates agents across three integrated families:
+
+1. **Hermes Family**: [Hermes Agent](https://github.com/NousResearch/hermes-agent) — multi-profile isolation, providers, models, memories, skills, plugins, tasks, kanban, terminal backends, and 10 messaging platform channels.
+2. **Ekko Family**: Ekko Agent — approval gates, clarification dialogues, persistent memory, and dedicated provider runtimes.
+3. **Coding Agent Family**: Full desktop & web lifecycle for **Claude Code**, **Codex**, **Pi**, **Grok**, **OpenCode**, **DeepSeek Harness (DSH)**, **Antigravity CLI**, and **Cursor CLI**.
+
+---
+
+## Key Features
+
+- **Streaming Multi-Agent AI Chat**: Socket.IO-driven streaming with live tokens/sec speed, persisted usage attribution, Markdown formatting, tool execution traces, inline file preview, and context overflow recovery.
+- **Group Chat Rooms**: Multi-agent collaborative rooms with `@mention` message routing, token usage bubbles on replies, context summarization, and invite management.
+- **Visual DAG Workflows**: Vue Flow canvas orchestrating multi-agent nodes, conditional logic, approval gates, file attachments, and replayable execution snapshots ([docs/workflow.md](./docs/workflow.md)).
+- **Integrated Workspace Tools**: Remote/local file browser with diff toolbar & workspace tree downloads, interactive web terminal (PTY via node-pty and xterm), cards, voice input & speech synthesis ([docs/voice-dialogue.md](./docs/voice-dialogue.md)).
+- **Preserved Platform Channels**: Hermes platform messaging integration for 10 platforms: Telegram, Discord, Slack, WhatsApp, Matrix, Feishu, DingTalk, QQBot, WeChat, and Enterprise WeChat, plus incoming HTTP webhooks.
+- **Bark Push Notifications**: Self-hosted, encrypted (AES-256-GCM) push notifications via [Bark](https://github.com/Finb/Bark) for completed runs, approvals, and questions with per-session toggles.
+- **Cleaned & De-commercialized**: Completely stripped of mobile app download popups, paid subscription prompts, LittleBox MCU hardware, LAN device pairing, and commercial API partner relays (`apikey.fan`).
+- **Privacy & Safety by Default**: Optional TypeSafe AI evaluation (JEV) is disabled by default ([docs/jev.md](./docs/jev.md)). Custom update guards protect custom builds from upstream overwrites.
+
+---
+
+## Quick Start (Build & Run)
+
+> [!WARNING]
+> **Do NOT install via `npm install -g hermes-web-ui`**: That command pulls the upstream release package from npm and will overwrite your AgentHub customization. Always build from this repository.
+
+### Prerequisites
+
+- **Node.js**: `v23.0.0` or newer (tested with Node 26 on macOS Homebrew / Linux / Windows).
+- **Python**: Python 3.10+ (for Hermes Agent runtime).
+- **Native Build Tools**: `make`, `gcc`/`clang`, `python3` (for native compilation).
+
+### Source Build & Launch
 
 ```bash
-git clone https://github.com/forhetale/tatin-studio.git
-cd tatin-studio
+# 1. Clone the repository
+git clone https://github.com/forhetale/agenthub.git
+cd agenthub
+
+# 2. Install dependencies (skipping pre-install scripts)
 npm ci --ignore-scripts
-npm rebuild node-pty
+
+# 3. Rebuild native modules
+npm rebuild node-pty sharp sherpa-onnx-node
+
+# 4. Build frontend, server, and generate OpenAPI definitions
 npm run build
-npm prune --omit=dev --no-audit --no-fund
-npm run verify:sharp-runtime
-npm ci --prefix packages/desktop --no-audit --no-fund
-npm --prefix packages/desktop run write:runtime-release
-# Windows: --win nsis --x64 | macOS: --mac dmg zip --arm64 (or --x64) | Linux: --linux AppImage deb --x64
-npm --prefix packages/desktop run dist -- --win nsis --x64 --publish never
+
+# 5. Start the AgentHub server (default port 8648)
+node bin/hermes-web-ui.mjs start 8648 --no-open
 ```
 
-Installers are written to `packages/desktop/release` and are unsigned unless
-you configure signing. `npm prune` removes the build tools, so start again from
-`npm ci` for the next build. The desktop app bundles the Studio runtime and
-stores Hermes Agent data in `~/.hermes` on Windows, macOS, and Linux.
+Open **http://localhost:8648** in your browser. Fresh installs use `admin` / `123456`; change this password before exposing the server remotely. Existing installs keep their accounts and passwords.
 
-The desktop wrapper stores its own Studio state separately in
-`~/.hermes-web-ui` unless `HERMES_WEB_UI_HOME` is set.
+### User State & Data Directory
 
-After the packaged desktop app starts, it installs managed command shims so the
-desktop app, bundled Hermes Agent CLI, and bundled server CLI do not conflict:
+AgentHub stores server configuration, SQLite databases, login records, and Bark encryption keys in `~/.hermes-web-ui` (or the directory specified by `HERMES_WEB_UI_HOME`). Hermes profile data remains safely isolated in `~/.hermes`.
 
-| Command | Description |
-| --- | --- |
-| `ekko-studio` | Open the Ekko Studio desktop app |
-| `ekko-studio cli ...` | Run the bundled Hermes Agent CLI |
-| `ekko-studio web ...` | Run the bundled `hermes-web-ui` command |
-| `ekko-studio -h` | Show wrapper help |
-| `ekko-studio-mcp [api\|browser\|use\|plan]` | Run one managed Studio MCP toolset |
+### Desktop Application (Electron)
 
-The desktop command is `ekko-studio`; the previous managed `hermes-studio`
-command is removed when the new shim is installed. No compatibility alias is created.
-
-Use `ekko-studio cli -h` for Hermes Agent CLI help and
-`ekko-studio web -h` for server CLI help. `ekko-studio-mcp` defaults to the
-`api` toolset; choose `browser`, `use`, or `plan` to keep the exposed MCP
-surface focused on the current task.
-
-TATin builds do not auto-update: the updater refuses upstream feeds on custom
-builds. Pull this repository and rebuild to update.
-
-### Web Console From Source
+Build desktop installers on the target operating system and supported architecture; the commands below do not guarantee cross-platform builds:
 
 ```bash
-git clone https://github.com/forhetale/tatin-studio.git
-cd tatin-studio
-npm ci
-npm run build
-node bin/hermes-web-ui.mjs start
+# Package desktop distribution (skips remote feed publish)
+npm run build:desktop
+
+# Platform specific targets:
+npm run build:desktop:mac    # macOS (dmg, zip)
+npm run build:desktop:win    # Windows (nsis)
+npm run build:desktop:linux  # Linux (AppImage, deb)
 ```
 
-Open **http://localhost:8648**
+Outputs land in `packages/desktop/release`. Bundled desktop applications inherit custom build protection guards.
 
 ### Docker Compose
 
-Single-container deployment with integrated Hermes Agent:
+Single-container deployment with bundled Hermes Agent runtime:
 
 ```bash
-# Build the image from this repository's source
 docker compose up -d --build
-
 docker compose logs -f hermes-webui
 ```
 
-Open **http://localhost:6060**
-
-- Persistent Hermes data is stored in `./hermes_data`
-- Studio auth token is stored in `./hermes_data/hermes-web-ui/.token`
-- On first run with auth enabled, the token is printed to container logs
-- All runtime settings are environment-variable driven in `docker-compose.yml`
-
-For detailed notes and troubleshooting, see [`docs/docker.md`](./docs/docker.md).
-
-### Hermes Agent Runtime Discovery
-
-When Studio starts backend chat features, it prefers a source checkout that
-contains `run_agent.py` such as `~/.hermes/hermes-agent`. If no source checkout
-is found, it falls back to the Python environment used by the installed
-`hermes` command, then the system Python. This supports both source installs
-and package installs such as `pip install hermes-agent`.
-
-## Studio Environment Variables
-
-These variables configure Ekko Studio, its local Hermes runtime integration, and development/preview helpers. Provider API keys and Hermes Agent settings are normally managed through Hermes profiles; environment variables here are process-level overrides.
-
-| Variable | Default | Description |
-| --- | --- | --- |
-| `PORT` | `8648` | Studio server listen port. |
-| `BIND_HOST` | `0.0.0.0` | Studio server bind host. Set `::` explicitly for IPv6. |
-| `HERMES_WEB_UI_HOME` | `~/.hermes-web-ui` | Studio data home for auth token, credentials, logs, DB, and default uploads. `HERMES_WEBUI_STATE_DIR` is also supported as a compatibility alias. |
-| `HERMES_WEBUI_STATE_DIR` | unset | Compatibility alias for `HERMES_WEB_UI_HOME`. |
-| `HERMES_WEB_UI_DISABLE_MCP_AUTOINJECT` | unset | Disable startup injection of the managed `ekko-studio-*` MCP servers into Hermes profile configs. |
-| `HERMES_WEB_UI_ALLOW_TRANSIENT_MCP_AUTOINJECT` | unset | Allow managed MCP injection when `HERMES_WEB_UI_HOME` is under a temporary directory, such as Version Preview runtimes. |
-| `UPLOAD_DIR` | `$HERMES_WEB_UI_HOME/upload` | Upload root override. Files are stored below profile-scoped subdirectories. |
-| `CORS_ORIGINS` | same host only | Comma- or space-separated cross-origin allowlist for HTTP, Socket.IO, and WebSocket requests. Set `*` only when you intentionally need legacy wildcard CORS. |
-| `AUTH_TOKEN` | auto-generated | Explicit bearer token. If unset, Studio creates one under `HERMES_WEB_UI_HOME`. |
-| `AUTH_JWT_SECRET` | `AUTH_TOKEN` | JWT signing secret override for username/password sessions. |
-| `HERMES_WEB_UI_AUTH_JWT_EXPIRES_IN` | `30d` | Username/password session JWT lifetime. Accepts seconds or `s`/`m`/`h`/`d` suffixes, for example `12h` or `7d`. |
-| `PROFILE` | `default` | Startup/default Hermes profile. Runtime requests use the profile selected by the frontend and authorized for the current account. |
-| `LOG_LEVEL` | `info` | Server log level. |
-| `BRIDGE_LOG_LEVEL` | `$LOG_LEVEL` or `info` | Bridge log level. |
-| `MAX_DOWNLOAD_SIZE` | `200MB` | Maximum file download size. |
-| `MAX_EDIT_SIZE` | `10MB` | Maximum editable file size. |
-| `WORKSPACE_BASE` | current user's home directory | Base directory for workspace browsing. |
-| `HERMES_HOME` | `~/.hermes` | Hermes data home on Windows, macOS, and Linux. |
-| `HERMES_BIN` | `hermes` | Custom Hermes CLI binary path. |
-| `HERMES_AGENT_ROOT` | auto-discovered | Hermes Agent source checkout containing `run_agent.py`. |
-| `HERMES_AGENT_BRIDGE_PYTHON` | auto-discovered | Python interpreter used to launch the agent bridge. |
-| `HERMES_AGENT_BRIDGE_UV` | auto-discovered | `uv` executable used to launch the agent bridge when available. |
-| `UV` | auto-discovered | Fallback `uv` executable path. |
-| `PYTHON` | auto-discovered | Fallback Python executable for the agent bridge. |
-| `HERMES_AGENT_BRIDGE_ENDPOINT` | platform default | Agent bridge broker endpoint. Windows defaults to `tcp://127.0.0.1:18765`; macOS/Linux defaults to `ipc:///tmp/hermes-agent-bridge.sock`. |
-| `HERMES_AGENT_BRIDGE_TIMEOUT_MS` | `120000` | Timeout for Node requests to the bridge broker. |
-| `HERMES_AGENT_BRIDGE_CONNECT_RETRY_MS` | `5000` | Short retry window for connecting to the bridge socket. |
-| `HERMES_AGENT_BRIDGE_STARTUP_TIMEOUT_MS` | `120000` | Timeout while waiting for the Python bridge to become ready. |
-| `HERMES_AGENT_BRIDGE_STOP_ON_SHUTDOWN` | enabled | Stop the bridge broker during Studio shutdown and restart. Set `0`, `false`, `no`, or `off` to keep the bridge across restarts. |
-| `HERMES_AGENT_BRIDGE_AUTO_RESTART` | enabled | Auto-restart the bridge broker after unexpected exit. Set `0`, `false`, `no`, or `off` to disable. |
-| `HERMES_AGENT_BRIDGE_RESTART_DELAY_MS` | `1000` | Base delay for bridge auto-restart backoff. |
-| `HERMES_AGENT_BRIDGE_PLATFORM` | `cli` | Platform identity passed to Hermes Agent. |
-| `HERMES_AGENT_BRIDGE_WORKER_TRANSPORT` | platform default | Profile worker transport. Set `tcp` for loopback TCP or `ipc`/`unix` for Unix domain sockets; defaults to Windows TCP and macOS/Linux IPC. |
-| `HERMES_AGENT_BRIDGE_WORKER_PORT_BASE` | `18780` | Base port for TCP worker endpoints. |
-| `HERMES_BRIDGE_PROVIDER` | profile/default | Provider override for bridge runs. |
-| `HERMES_BRIDGE_TOOLSETS` | profile/default | Toolset override for bridge runs. |
-| `HERMES_BRIDGE_MAX_TURNS` | profile/default | Maximum turn override for bridge runs. |
-| `HERMES_BRIDGE_SUPPRESS_PLATFORM_HINT` | `cli` | Controls bridge platform hint suppression passed to Hermes Agent. |
-| `HERMES_OPENROUTER_APP_REFERER` | unset | Optional OpenRouter attribution referer for bridge runs. Studio sends no attribution of its own. |
-| `HERMES_OPENROUTER_APP_TITLE` | unset | Optional OpenRouter attribution title for bridge runs. |
-| `HERMES_OPENROUTER_APP_CATEGORIES` | unset | Optional OpenRouter attribution categories for bridge runs. |
-| `HERMES_WEB_UI_MANAGED_GATEWAY` | enabled | Controls Studio-managed Hermes gateway process handling. Set `0`, `false`, `no`, or `off` to use `hermes gateway start` instead. |
-| `HERMES_WEB_UI_DISABLE_GATEWAY_AUTOSTART` | unset | Skip startup gateway checks/autostart. Set `1`, `true`, `yes`, or `on` for dashboard-only deployments where another service owns Hermes gateway lifecycle. |
-| `HERMES_WEB_UI_DISABLE_SKILL_INJECTION` | unset | Skip startup bundled skill injection. Set `1`, `true`, `yes`, or `on` when bundled skills are managed outside Studio. When injection is enabled, Studio updates only skills it previously installed or identical existing bundled copies; local edits and user-owned same-name skills are skipped. |
-| `HERMES_WEB_UI_ANNOUNCEMENTS_URL` | unset | HTTP(S) feed for the Studio announcement prompt, answering `{ "ok": true, "platform": "desktop", "list": [...] }`. When unset, Studio contacts no announcement server and shows none. |
-| `HERMES_WEB_UI_STOP_GATEWAYS_ON_SHUTDOWN` | enabled | Controls whether Studio shutdown also stops only the gateway processes started and tracked by this Studio process. Set `0` or `false` to detach them; externally discovered gateways are never adopted or stopped. |
-| `HERMES_WEB_UI_SHUTDOWN_FORCE_EXIT_MS` | `10000` | Short cleanup budget before Studio force-stops its owned process trees and exits. |
-| `HERMES_DESKTOP_STOP_TIMEOUT_MS` | `20000` | Desktop host's existing outer deadline before it force-stops the complete Web UI process tree; independent from the Web UI's 10-second cleanup budget. |
-| `HERMES_GATEWAY_URL` / `GATEWAY_URL` | unset | Explicit Hermes gateway upstream URL for proxy routes. |
-| `GATEWAY_HOST` | `127.0.0.1` | Default Hermes gateway upstream host for proxy routes. |
-| `GATEWAY_PORT` | `8642` | Default Hermes gateway upstream port for proxy routes. |
-| `HERMES_WEB_UI_PREVIEW_REPO` | package repository | GitHub repository used by Version Preview. |
-| `HERMES_WEB_UI_PREVIEW_AGENT_BRIDGE_TRANSPORT` | platform default | Version Preview broker transport. Set `tcp` to use loopback TCP for Preview on macOS/Linux; when unset, Preview follows `HERMES_AGENT_BRIDGE_WORKER_TRANSPORT=tcp`. |
-| `HERMES_WEB_UI_PREVIEW_AGENT_BRIDGE_ENDPOINT` | isolated preview endpoint | Directly overrides the Version Preview broker endpoint. |
-| `HERMES_WEB_UI_BACKEND_PORT` | `8648` | Backend port used by the Vite dev proxy. |
-| `HERMES_WEB_UI_FRONTEND_PORT` | `8649` | Frontend Vite dev server port. |
-
-### CLI Commands
-
-From a source checkout, run these in the repository as `node bin/hermes-web-ui.mjs <command>`
-(and `node bin/hermes-web-ui-mcp.mjs` for the MCP entry), or run `npm link` once to put
-`hermes-web-ui` on PATH. The desktop app exposes them as `ekko-studio web <command>`.
-
-| Command | Description |
-| --- | --- |
-| `hermes-web-ui start [port]` | Start in background; accepts a positional port or `--port <port>` |
-| `hermes-web-ui client [port]` | Start for a remote client with gateway autostart disabled and permissive CORS |
-| `hermes-web-ui restart [port]` | Restart; stops the bridge by default |
-| `hermes-web-ui stop` | Stop the background process |
-| `hermes-web-ui status` | Check if running |
-| `hermes-web-ui clear-login-locks [--restart]` | Clear persisted login locks, optionally restart |
-| `hermes-web-ui reset-default-login` | Create or reset the default administrator login |
-| `hermes-web-ui update` / `upgrade` | Refused on TATin builds; pull and rebuild this source instead |
-| `hermes-web-ui version` / `-v` | Show the version |
-| `hermes-web-ui -h` | Show help |
-| `hermes-web-ui-mcp [api\|browser\|use\|plan]` | Run one managed Studio MCP toolset (same as `ekko-studio-mcp`) |
-
-Add `--no-open` to `start` or `client` when no browser should open.
-
-`restart`, `update`, and `upgrade` stop the Agent Bridge broker by default so restarted or updated servers do not reuse stale Python bridge processes. Set `HERMES_AGENT_BRIDGE_STOP_ON_SHUTDOWN=0` before restarting only when you explicitly want to keep the bridge broker and running bridge sessions alive.
-
-`update` / `upgrade` would install the upstream `hermes-web-ui@latest` npm package, so they refuse to run on TATin builds. To update, stop the server (`node bin/hermes-web-ui.mjs stop`), pull this repository, run `npm ci` and `npm run build`, then start it again. On Windows `npm ci` fails while a running server holds native modules such as node-pty.
-
-### Auto Configuration
-
-On startup the BFF server automatically:
-
-- Initializes Studio data directories, local databases, and bundled skills
-- Starts the Hermes agent bridge used by `/chat-run`
-- Opens a browser on successful startup unless `--no-open` is set
+Compose defaults to **http://localhost:6060**; set `PORT` to change it. See [docs/docker.md](./docs/docker.md) for full Docker deployment options and environment variables.
 
 ---
 
-## Development
+## CLI Management
 
-```bash
-git clone https://github.com/forhetale/tatin-studio.git
-cd tatin-studio
-npm install
-npm run dev
-```
+When running from source, use `node bin/hermes-web-ui.mjs <command>`:
 
-- Frontend: http://localhost:8649
-- BFF Server: http://localhost:8647
+| Command | Description |
+|---|---|
+| `start [port] [--no-open]` | Start AgentHub daemon in background |
+| `restart [port]` | Restart background server and bridge broker |
+| `stop` | Gracefully stop the background server |
+| `status` | Check the Web UI daemon process status |
+| `clear-login-locks [--restart]` | Clear IP-based login rate limit locks |
+| `reset-default-login` | Reset superadmin credentials to `admin` / `123456` |
+| `update` / `upgrade` | Blocked on custom builds (`-agenthub.` / `-tatin.`) to prevent overwrite |
 
-```bash
-npm run harness:check
-npm run test
-npm run build   # outputs to dist/
-```
+---
 
-See [DEVELOPMENT.md](./DEVELOPMENT.md) for contributor commands and
-[ARCHITECTURE.md](./ARCHITECTURE.md) for the complete package and state model.
+## Update Guards & Maintenance
 
-## Architecture
+AgentHub embeds protection guards in the server, CLI, and desktop launcher that block automated update paths (`POST /api/studio/update` returns `409 custom_build_protected`).
 
-```text
-Browser / Desktop / App
-          │ HTTP + Socket.IO
-          ▼
-Koa bootstrap (composition only)
-          │
-          ├─ Studio platform ── chat, groups, global agent, workflows,
-          │                    sessions, files, voice, webhooks
-          ├─ Hermes family ─── profiles, models, skills, memory, jobs,
-          │                    Kanban, channels, terminal, Hermes bridge
-          ├─ Ekko family ───── Ekko runtime and agent-owned services
-          └─ Coding family ─── Claude Code, Codex, Pi, Grok, OpenCode, DSH adapters
-```
+To update AgentHub:
+1. Stop running processes: `node bin/hermes-web-ui.mjs stop`
+2. Pull latest commits: `git pull origin <branch>`
+3. Reinstall & rebuild: `npm ci --ignore-scripts && npm rebuild node-pty sharp sherpa-onnx-node && npm run build`
+4. Restart: `node bin/hermes-web-ui.mjs start 8648 --no-open`
 
-The server is organized by business ownership under
-`packages/server/src/modules/{studio,hermes,ekko,coding-agents}`. Routes stay
-thin, controllers own HTTP concerns, services own reusable behavior, and only
-`packages/server/src/bootstrap` may compose concrete modules and adapters.
-Cross-agent code belongs to Studio; an agent module must not absorb a shared
-product surface merely because it uses that agent today.
+*Note: Built-in guards protect against in-app updates and API downloads; they cannot prevent manual shell commands such as `npm i -g hermes-web-ui`. Always update through git.*
 
-Studio state and Hermes Agent state remain separate. Studio defaults to
-`~/.hermes-web-ui`; Hermes profile data remains under the Hermes home. For the
-full ownership tree, dependency rules, and API migration contract, see
-[`docs/harness/server-module-boundaries.md`](./docs/harness/server-module-boundaries.md).
+---
 
-## Tech Stack
+## Documentation
 
-**Frontend:** Vue 3 + TypeScript + Vite + Naive UI + Pinia + Vue Router + vue-i18n + SCSS + markdown-it + highlight.js
+- **Customization & Security**: [CUSTOMIZATION.md](./CUSTOMIZATION.md)
+- **v0.7.29 Upstream Sync Ledger**: [docs/upstream-sync-0.7.29.md](./docs/upstream-sync-0.7.29.md)
+- **Architecture**: [ARCHITECTURE.md](./ARCHITECTURE.md)
+- **Docker Deployment**: [docs/docker.md](./docs/docker.md)
+- **Coding Agents**:
+  - DeepSeek Harness: [docs/dsh-management.md](./docs/dsh-management.md)
+  - Google Antigravity: [docs/antigravity-cli.md](./docs/antigravity-cli.md)
+- **Visual Workflows**: [docs/workflow.md](./docs/workflow.md)
+- **Voice & TTS/STT**: [docs/voice-dialogue.md](./docs/voice-dialogue.md)
+- **Optional JEV Evaluation**: [docs/jev.md](./docs/jev.md)
 
-**Backend:** Koa 2 + Socket.IO + SQLite + node-pty
+---
 
-## License
+## License & Attribution
 
-[BSL-1.1](./LICENSE)
+AgentHub is licensed under the [Business Source License 1.1](./LICENSE) (Licensor: EKKOLearnAI). Non-commercial use is granted under BSL-1.1 terms; commercial use requires a separate license from the licensor.
 
-The license covers Ekko Studio, the `hermes-web-ui` npm package and CLI,
-desktop applications, firmware, release
-artifacts, documentation, and associated files in this repository.
-
-The MCP entry point is `bin/ekko-studio-mcp.mjs`; tools use the `ekko_studio_*` prefix. Existing `hermes-studio-mcp` / `hermes-web-ui-mcp` commands and `hermes_studio_*` calls remain compatible. Restart the MCP client to discover the new tool names. Studio migrates managed server configurations to `ekko-studio-api`, `ekko-studio-browser`, and `ekko-studio-use`, and removes the retired `ekko-studio-devices` entry.
+All upstream copyright notices, authors, and source attributions are preserved.

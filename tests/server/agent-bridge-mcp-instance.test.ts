@@ -77,8 +77,13 @@ print('ok')
 
   it('sends real plan MCP requests to their owning server when shared config points elsewhere', () => {
     const output = execFileSync(python, ['-c', setup + String.raw`
-import subprocess, tempfile, threading
+import socketserver, subprocess, tempfile, threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+class TestServer(ThreadingHTTPServer):
+    def server_bind(self):
+        socketserver.TCPServer.server_bind(self)
+        self.server_name = '127.0.0.1'
+        self.server_port = self.server_address[1]
 hits = []
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *args): pass
@@ -90,8 +95,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('Content-Type', 'application/json')
         self.end_headers()
         self.wfile.write(json.dumps({'ok': True} if ok else {'error': 'Task plan context is unavailable or has expired'}).encode())
-owning = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
-other = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+owning = TestServer(('127.0.0.1', 0), Handler)
+other = TestServer(('127.0.0.1', 0), Handler)
 for server in (owning, other):
     threading.Thread(target=server.serve_forever, daemon=True).start()
 with tempfile.TemporaryDirectory() as home:
