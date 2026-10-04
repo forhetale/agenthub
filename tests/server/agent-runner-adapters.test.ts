@@ -672,6 +672,15 @@ describe('agent runner Responses adapters', () => {
     expect(responseToolNamespaceForName('unrelated_update_plan')).toBeUndefined()
   })
 
+  it('preserves empty arguments prefix during streaming instead of forcing object brackets', () => {
+    expect(normalizeResponseFunctionCall('calc', '')).toEqual({
+      name: 'calc', arguments: '', namespace: undefined,
+    })
+    expect(normalizeResponseFunctionCall('calc', undefined)).toEqual({
+      name: 'calc', arguments: '{}', namespace: undefined,
+    })
+  })
+
   it('keeps unknown MCP namespaces callable through a generic function fallback', () => {
     const body = {
       input: [{ role: 'user', content: [{ type: 'input_text', text: 'call custom mcp' }] }],
