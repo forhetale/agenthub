@@ -1153,7 +1153,7 @@ export class CodingAgentRunManager {
     if (run) this.touch(run)
   }
 
-  handleProxyUsageEvent(agentSessionId: string | undefined, event: CanonicalResponsesEvent, apiDuration?: number) {
+  handleProxyUsageEvent(agentSessionId: string | undefined, event: CanonicalResponsesEvent, apiDuration?: number, baseUrl?: string) {
     if (!agentSessionId || !['response.completed', 'response.failed', 'response.incomplete'].includes(event.type)) return
     const run = this.runs.get(agentSessionId)
     if (!run || run.launch.mode !== 'scoped') return
@@ -1187,6 +1187,7 @@ export class CodingAgentRunManager {
         cost: normalizeUsageCost(final),
         model: final?.model || run.launch.model,
         provider: run.launch.provider,
+        baseUrl,
         isEstimated: false,
       })
     })

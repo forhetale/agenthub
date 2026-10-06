@@ -859,6 +859,7 @@ describe('ekko-agent context usage events', () => {
       profile: 'default',
       model: 'ekko-test-model',
       provider: 'test-provider',
+      baseUrl: '',
       isEstimated: false,
     })
     runInput.onSkillReviewUsage({
@@ -879,6 +880,7 @@ describe('ekko-agent context usage events', () => {
       profile: 'default',
       model: 'ekko-review-model',
       provider: 'test-provider',
+      baseUrl: '',
       isEstimated: false,
     })
     expect(updateSessionMock).toHaveBeenCalledWith('session-1', expect.objectContaining({
@@ -1053,6 +1055,7 @@ describe('ekko-agent context usage events', () => {
       profile: 'default',
       model: 'ekko-test-model',
       provider: 'test-provider',
+      baseUrl: '',
       isEstimated: false,
     })
     expect(events).toEqual(expect.arrayContaining([

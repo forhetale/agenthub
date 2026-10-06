@@ -307,7 +307,7 @@ async function callAnthropicMessages(target: ClaudeCodeProxyTarget, body: any): 
     },
     body: anthropicRequestBody(nextBody, target),
   }))
-  codingAgentRunManager.handleProxyUsageEvent(target.agentSessionId, { type: 'response.completed', data: { response: result.value } }, (performance.now() - startedAt) / 1000)
+  codingAgentRunManager.handleProxyUsageEvent(target.agentSessionId, { type: 'response.completed', data: { response: result.value } }, (performance.now() - startedAt) / 1000, target.baseUrl)
   return result.value
 }
 
@@ -325,7 +325,7 @@ async function callOpenAiChat(target: ClaudeCodeProxyTarget, body: any): Promise
     provider: target.provider,
     body: anthropicToOpenAiChat(body, target),
   })
-  codingAgentRunManager.handleProxyUsageEvent(target.agentSessionId, { type: 'response.completed', data: { response } }, (performance.now() - startedAt) / 1000)
+  codingAgentRunManager.handleProxyUsageEvent(target.agentSessionId, { type: 'response.completed', data: { response } }, (performance.now() - startedAt) / 1000, target.baseUrl)
   return response
 }
 
@@ -343,7 +343,7 @@ async function callOpenAiResponses(target: ClaudeCodeProxyTarget, body: any): Pr
     provider: target.provider,
     body: anthropicToOpenAiResponses(body, target),
   })
-  codingAgentRunManager.handleProxyUsageEvent(target.agentSessionId, { type: 'response.completed', data: { response } }, (performance.now() - startedAt) / 1000)
+  codingAgentRunManager.handleProxyUsageEvent(target.agentSessionId, { type: 'response.completed', data: { response } }, (performance.now() - startedAt) / 1000, target.baseUrl)
   return response
 }
 
@@ -360,7 +360,7 @@ function observeResponsesEvents(target: ClaudeCodeProxyTarget, events: AsyncIter
   void (async () => {
     try {
       for await (const event of events) {
-        codingAgentRunManager.handleProxyUsageEvent(target.agentSessionId, event, (performance.now() - startedAt) / 1000)
+        codingAgentRunManager.handleProxyUsageEvent(target.agentSessionId, event, (performance.now() - startedAt) / 1000, target.baseUrl)
         codingAgentRunManager.handleResponseEvent(target.agentSessionId, event)
       }
     } catch (err) {

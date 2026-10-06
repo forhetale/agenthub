@@ -13,6 +13,7 @@ import { readAppConfig, writeAppConfig, providerDisplayLabel, type ModelVisibili
 import { listUserProfiles } from '../../studio/public/users'
 import { readModelContextRecord, upsertModelContextRecord } from '../../studio/public/provider-context'
 import { getModelContextLength } from '../services/models/context'
+import { applyCatalogModelMetadata } from '../services/models/metadata'
 import { readProviderModelCatalogCache,
   refreshConfiguredProviderModelCatalogs,
   resolveProviderCatalogModels,
@@ -27,7 +28,7 @@ import { OPENCODE_FREE_PROVIDER, OPENCODE_FREE_BASE_URL, isOpenCodeFreeModel } f
 
 const PROVIDER_MODEL_CATALOG = buildProviderModelMap()
 
-type ModelMeta = { preview?: boolean; disabled?: boolean; alias?: string }
+type ModelMeta = { preview?: boolean; disabled?: boolean; alias?: string; reasoning?: boolean; reasoning_efforts?: string[] }
 type ProviderApiMode = 'chat_completions' | 'codex_responses' | 'anthropic_messages' | 'bedrock_converse' | 'codex_app_server'
 type AvailableGroup = { catalog_status?: OpenCodeFreeStatus; provider: string; label: string; base_url: string; models: string[]; api_key: string; api_mode?: ProviderApiMode; builtin?: boolean; model_meta?: Record<string, ModelMeta>; available_models?: string[]; base_url_env?: string; provider_source?: 'custom_providers' | 'providers'; provider_key?: string; provider_editable?: boolean; editable_fields?: ProviderEditableField[]; model_refreshable?: boolean; model_refresh_reason?: string; model_restore_available?: boolean }
 type ModelVisibility = Record<string, ModelVisibilityRule>
@@ -576,7 +577,7 @@ async function buildAvailableForProfile(
   }
   const groupsWithCustomModels = applyCustomModels(groups, normalizeCustomModels(appConfig.customModels))
 
-  return { profile, default: currentDefault, default_provider: currentDefaultProvider, groups: groupsWithCustomModels }
+  return { profile, default: currentDefault, default_provider: currentDefaultProvider, groups: applyCatalogModelMetadata(groupsWithCustomModels) }
 }
 
 export async function getAvailableModelGroupsForProfile(profile: string): Promise<AvailableGroup[]> {
@@ -623,7 +624,7 @@ export async function getAvailable(ctx: any) {
         default: visibleDefault.defaultModel,
         default_provider: visibleDefault.defaultProvider,
         groups: visibleGroups,
-        allProviders: applyModelAliases(allProvidersBase, modelAliases),
+        allProviders: applyCatalogModelMetadata(applyModelAliases(allProvidersBase, modelAliases)),
         model_aliases: modelAliases,
         model_visibility: modelVisibility,
         custom_models: customModels,
@@ -650,13 +651,13 @@ export async function getAvailable(ctx: any) {
       default: visibleProfileDefault.defaultModel,
       default_provider: visibleProfileDefault.defaultProvider,
       groups: visibleProfileGroups,
-      allProviders: applyModelAliases(PROVIDER_PRESETS.map((p: any) => providerPresetToGroup(
+      allProviders: applyCatalogModelMetadata(applyModelAliases(PROVIDER_PRESETS.map((p: any) => providerPresetToGroup(
         p,
         resolveProviderCatalogModels(modelCatalogCacheForProfile, p.value, p.base_url, p.models, {
           freeOnly: p.value === 'openrouter',
           hasStaticManifest: p.builtin === true,
         }),
-      )), modelAliasesForProfile),
+      )), modelAliasesForProfile)),
       model_aliases: modelAliasesForProfile,
       model_visibility: modelVisibilityForProfile,
       custom_models: customModelsForProfile,
