@@ -1,6 +1,22 @@
 import { request } from './client'
 
-export type AgentStatusId = 'hermes' | 'ekko-agent' | 'claude-code' | 'codex' | 'pi' | 'grok' | 'opencode' | 'dsh' | 'cursor' | 'antigravity'
+export type AgentStatusId =
+  | 'hermes'
+  | 'ekko-agent'
+  | 'claude-code'
+  | 'codex'
+  | 'pi'
+  | 'grok'
+  | 'opencode'
+  | 'dsh'
+  | 'cursor'
+  | 'antigravity'
+  | 'qwen'
+  | 'kimi'
+  | 'codebuddy'
+  | 'qoder'
+  | 'copilot'
+  | 'zcode'
 export type AgentStatusSource = 'managed-runtime' | 'user-cli' | 'built-in' | 'not-installed'
 
 export interface AgentStatusRecord {
@@ -45,6 +61,12 @@ const AGENT_STATUS_ALIASES: Record<string, AgentStatusId> = {
   dsh: 'dsh',
   cursor: 'cursor',
   antigravity: 'antigravity',
+  qwen: 'qwen',
+  kimi: 'kimi',
+  codebuddy: 'codebuddy',
+  qoder: 'qoder',
+  copilot: 'copilot',
+  zcode: 'zcode',
 }
 
 export function resolveAgentStatusId(agent: string): AgentStatusId | null {
