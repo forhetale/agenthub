@@ -219,6 +219,9 @@ export async function mockHermesApi(page: Page, options: MockHermesApiOptions = 
           { id: 'pi', name: 'Pi', provider: 'Pi', kind: 'coding-agent', installed: true, version: '1.0.0', source: 'user-cli', path: '/usr/local/bin/pi', error: '', installations: [] },
           { id: 'grok', name: 'Grok', provider: 'xAI', kind: 'coding-agent', installed: true, version: '1.0.0', source: 'user-cli', path: '/usr/local/bin/grok', error: '', installations: [] },
           { id: 'dsh', name: 'DeepSeek Harness', provider: 'DeepSeek', kind: 'coding-agent', installed: true, version: '0.1.5-rc.1', source: 'user-cli', path: '/usr/local/bin/dsh', error: '', installations: [] },
+          { id: 'opencode', name: 'OpenCode', provider: 'OpenCode', kind: 'coding-agent', installed: true, version: '1.0.0', source: 'user-cli', path: '/usr/local/bin/opencode', error: '', installations: [] },
+          { id: 'cursor', name: 'Cursor', provider: 'Cursor', kind: 'coding-agent', installed: true, version: '1.0.0', source: 'user-cli', path: '/usr/local/bin/cursor', error: '', installations: [] },
+          { id: 'antigravity', name: 'Antigravity', provider: 'Google', kind: 'coding-agent', installed: true, version: '1.0.0', source: 'user-cli', path: '/usr/local/bin/agy', error: '', installations: [] },
         ],
       }))
       return
@@ -236,6 +239,9 @@ export async function mockHermesApi(page: Page, options: MockHermesApiOptions = 
           { id: 'pi', installed: true, source: 'user-cli' },
           { id: 'grok', installed: true, source: 'user-cli' },
           { id: 'dsh', installed: true, source: 'user-cli' },
+          { id: 'opencode', installed: true, source: 'user-cli' },
+          { id: 'cursor', installed: true, source: 'user-cli' },
+          { id: 'antigravity', installed: true, source: 'user-cli' },
         ],
       }))
       return

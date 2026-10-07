@@ -6,7 +6,11 @@ const testAgents = AGENT_OPTIONS.map(agent => ({
   id: agent.value,
   name: agent.label,
   kind: agent.value === 'hermes' ? 'hermes' : agent.value === 'ekko-agent' ? 'built-in' : 'coding-agent',
-  modes: agent.value === 'cursor' ? ['scoped'] : ['scoped', 'global'],
+  modes: agent.value === 'hermes' || agent.value === 'ekko-agent'
+    ? ['scoped']
+    : agent.value === 'cursor'
+      ? ['global']
+      : ['scoped', 'global'],
 }))
 
 function gate() {
@@ -173,7 +177,7 @@ for (const entry of ['/hermes/chat', '/studio/agents']) {
     await input.fill('First message')
     await page.getByRole('button', { name: 'Send', exact: true }).click()
     await expect.poll(() => page.evaluate(() => (window as any).__PW_CHAT_SOCKET__?.emitted
-      ?.find((item: any) => item.event === 'run')?.payload)).toMatchObject({ session_id: sessionId, agent_id: 'ekko-agent' })
+      ?.find((item: any) => item.event === 'run')?.payload)).toMatchObject({ session_id: sessionId, coding_agent_id: 'ekko-agent' })
     expect(api.unexpectedRequests).toEqual([])
   })
 }
@@ -182,7 +186,7 @@ for (const agent of testAgents) {
   for (const mode of agent.modes) {
     test(`${agent.name} ${mode} new chat skips history resume and starts its first run`, async ({ page }) => {
       await authenticate(page, TEST_ACCESS_KEY, 'research')
-      await mockHermesApi(page)
+      const api = await mockHermesApi(page)
       await mockChatSocket(page)
       await page.route('**/api/agents/availability', route => route.fulfill({ json: {
         revision: 1,
@@ -211,8 +215,9 @@ for (const agent of testAgents) {
       await expect.poll(() => page.evaluate(() => (window as any).__PW_CHAT_SOCKET__?.emitted
         ?.find((item: any) => item.event === 'run')?.payload)).toMatchObject({
           session_id: sessionId,
-          ...(agent.kind === 'coding-agent' ? { coding_agent_id: agent.id, mode }
-            : agent.kind === 'built-in' ? { agent_id: agent.id } : { source: 'cli' }),
+          ...(agent.id === 'ekko-agent' ? { coding_agent_id: 'ekko-agent' }
+            : agent.kind === 'coding-agent' ? { coding_agent_id: agent.id, mode }
+            : { source: 'cli' }),
         })
       expect(api.unexpectedRequests).toEqual([])
     })

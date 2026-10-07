@@ -14,6 +14,7 @@ concurrency:
 
 jobs:
   build-and-push:
+    if: "${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}"
     runs-on: ubuntu-latest
     timeout-minutes: 45
 

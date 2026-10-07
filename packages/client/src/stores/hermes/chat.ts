@@ -2122,7 +2122,7 @@ export const useChatStore = defineStore('chat', () => {
 
     // Unsent drafts have no server history. Resuming them only waits for a
     // response to a session that does not exist until its first run.
-    if (activeSession.value.isLocalOnly && activeSession.value.messages.length === 0 && !isSessionWorking(sessionId)) return true
+    if (activeSession.value.isLocalOnly && activeSession.value.messages.length === 0 && !isSessionWorking(sessionId) && !startingPushChoices.has(sessionId)) return true
 
     beginMessageLoad(sessionId, requestSequence)
     let backgroundPendingOnResume = 0
