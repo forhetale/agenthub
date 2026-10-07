@@ -3,7 +3,7 @@
   "info": {
     "title": "AgentHub API",
     "description": "AgentHub API — chat sessions, scheduled jobs, platform channels, model management, skills, memory, logs, file browser, group chat, and terminal.",
-    "version": "0.7.29-agenthub.1"
+    "version": "0.7.31-agenthub.1"
   },
   "servers": [
     {

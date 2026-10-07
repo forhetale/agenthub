@@ -6,13 +6,13 @@
 </p>
 
 <p align="center">
-  <a href="./README.md">English</a> · <a href="./CUSTOMIZATION.md">定制设计规范</a> · <a href="./docs/upstream-sync-0.7.29.md">上游同步记录 (v0.7.29)</a>
+  <a href="./README.md">English</a> · <a href="./CUSTOMIZATION.md">定制设计规范</a> · <a href="./docs/upstream-sync-0.7.31.md">上游同步记录 (v0.7.31)</a>
 </p>
 
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-BSL--1.1-blue.svg" alt="许可证: BSL-1.1" /></a>
   <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/Node.js-%3E%3D23-brightgreen.svg" alt="Node.js >= 23" /></a>
-  <a href="https://github.com/forhetale/agenthub"><img src="https://img.shields.io/badge/release-0.7.29--agenthub.1-informational.svg" alt="版本 0.7.29-agenthub.1" /></a>
+  <a href="https://github.com/forhetale/agenthub"><img src="https://img.shields.io/badge/release-0.7.31--agenthub.1-informational.svg" alt="版本 0.7.31-agenthub.1" /></a>
   <a href="https://github.com/Finb/Bark"><img src="https://img.shields.io/badge/push-Bark-ff5a5f.svg" alt="推送: Bark" /></a>
 </p>
 
@@ -147,6 +147,7 @@ AgentHub 在服务端中间件、CLI 和桌面启动器中内置了定制版升�
 
 - **仅 PR 的上游精选自动同步**：[docs/upstream-automation.md](./docs/upstream-automation.md)。由维护者本机的 Hermes 定时任务检测稳定版本，在隔离目录精选改动、测试并创建 PR；合并与部署都须人工确认，不是 npm 自动覆盖，也不是 GitHub Actions 自动部署。
 - **定制设计与安全规范**：[CUSTOMIZATION.md](./CUSTOMIZATION.md)
+- **v0.7.31 上游同步记录**：[docs/upstream-sync-0.7.31.md](./docs/upstream-sync-0.7.31.md)
 - **v0.7.29 上游同步记录**：[docs/upstream-sync-0.7.29.md](./docs/upstream-sync-0.7.29.md)
 - **系统架构**：[ARCHITECTURE.md](./ARCHITECTURE.md)
 - **Docker 容器部署**：[docs/docker.md](./docs/docker.md)

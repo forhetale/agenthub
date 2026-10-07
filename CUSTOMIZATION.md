@@ -2,7 +2,7 @@
 
 **AgentHub** (formerly TATin Studio) is a source-level customization of
 [Ekko Studio / Hermes Studio](https://github.com/EKKOLearnAI/ekko-studio), synced through upstream
-**v0.7.29** and published under the version string **`0.7.29-agenthub.1`** (desktop package `0.7.29`).
+**v0.7.31** and published under the version string **`0.7.31-agenthub.1`** (desktop package `0.7.31`).
 
 This fork is not affiliated with the upstream project. All upstream code, documentation, and
 the upstream BSL-1.1 license remain in effect except for the deliberate deltas described below.
@@ -18,7 +18,7 @@ the upstream BSL-1.1 license remain in effect except for the deliberate deltas d
 
 1. **Rebranding.** The user-visible product name is **AgentHub**: page title, PWA manifest,
    login screen, chat tab titles, i18n strings across all locales, push notification texts, and
-   the generated OpenAPI title. The version string is `0.7.29-agenthub.1`. The npm package name
+   the generated OpenAPI title. The version string is `0.7.31-agenthub.1`. The npm package name
    (`hermes-web-ui`), CLI command binary, API prefixes, MCP server names (`ekko-studio-*`), data
    directories (`~/.hermes-web-ui`), and the bundled **Ekko Agent** name are unchanged for
    ecosystem and configuration compatibility. Upstream LICENSE and copyright notices are
@@ -82,7 +82,7 @@ the upstream BSL-1.1 license remain in effect except for the deliberate deltas d
    - npm update checks are disabled, so the UI never offers an upstream update;
    - the desktop app skips the startup update check, explains in tray → "Check for Updates"
      that custom builds are updated by rebuilding from source, and refuses update downloads/installs.
-   The desktop package version is `0.7.29`; the bundled Web UI's `-agenthub.` version marks
+   The desktop package version is `0.7.31`; the bundled Web UI's `-agenthub.` version marks
    the desktop build as custom. Note: built-in guards protect running instances and APIs; they do
    not prevent an external manual shell command like `npm install -g hermes-web-ui` from
    overwriting files, so always install and update via source build.
@@ -98,11 +98,12 @@ the upstream BSL-1.1 license remain in effect except for the deliberate deltas d
 
 ---
 
-### Upstream Sync History & v0.7.29 Sync
+### Upstream Sync History & v0.7.31 Sync
 
 The fork preserves upstream history starting from v0.7.21 as a common ancestor:
 - **v0.7.22 through v0.7.26**: Merged release-by-release via curated branches, removing mobile app and paid features (legacy `0.7.26-tatin.1`).
-- **v0.7.29 (`0.7.29-agenthub.1`)**: Curated sync importing 14 useful upstream commits while excluding commercial, device, and proprietary mobile app commits. Full ledger: [`docs/upstream-sync-0.7.29.md`](./docs/upstream-sync-0.7.29.md).
+- **v0.7.29 (`0.7.29-agenthub.1`)**: Curated sync importing 14 useful upstream commits while excluding commercial, device, and proprietary mobile app commits. Ledger: [`docs/upstream-sync-0.7.29.md`](./docs/upstream-sync-0.7.29.md).
+- **v0.7.31 (`0.7.31-agenthub.1`)**: Curated sync importing 7 upstream improvements (Antigravity & Cursor images/prompts, model ID path segment matching, unified metadata & pricing, chat creation optimization, comic theme reload persistence) while excluding mobile P2P/WebRTC relays. Ledger: [`docs/upstream-sync-0.7.31.md`](./docs/upstream-sync-0.7.31.md).
 
 #### Upstream Commits Summary:
 - **Accepted (14 commits)**:
@@ -174,7 +175,7 @@ Do NOT run `npm install -g hermes-web-ui` — it installs the upstream package f
 
 ### 本分支的改动
 
-1. **品牌更名**：产品显示名为 **AgentHub**（历史定制版曾用 TATin Studio）：页面标题、PWA manifest、登录页、会话标签标题、各语言界面文案、推送提示文案、生成的 OpenAPI 标题均已更新。当前版本号为 `0.7.29-agenthub.1`（桌面包 `0.7.29`）。npm 包名（`hermes-web-ui`）、CLI 命令、API 前缀、MCP 服务名（`ekko-studio-*`）、数据目录（`~/.hermes-web-ui`）及内置 **Ekko Agent** 名称均保持不变以维持生态兼容。上游 LICENSE 与版权声明原样保留；本分支与上游团队无关联，不冒充上游产品。
+1. **品牌更名**：产品显示名为 **AgentHub**（历史定制版曾用 TATin Studio）：页面标题、PWA manifest、登录页、会话标签标题、各语言界面文案、推送提示文案、生成的 OpenAPI 标题均已更新。当前版本号为 `0.7.31-agenthub.1`（桌面包 `0.7.31`）。npm 包名（`hermes-web-ui`）、CLI 命令、API 前缀、MCP 服务名（`ekko-studio-*`）、数据目录（`~/.hermes-web-ui`）及内置 **Ekko Agent** 名称均保持不变以维持生态兼容。上游 LICENSE 与版权声明原样保留；本分支与上游团队无关联，不冒充上游产品。
 
 2. **Bark 推送通道**：按登录用户隔离的 Bark 消息推送，入口在 **侧边栏 → 消息推送**（该页面仅包含 Bark 面板）。本分支不需要的上游功能已全部移除：**App 下载页**（手机平台下载卡片、下载二维码、移动版本清单请求）、**小方盒 / MCU 语音**（设备管理与远程中继、固件 OTA 分发、ESP32-C3 固件包、MCU 语音接口与事件、提示音与数据表）、**App 互联与中继**（app-login、连接与授权码表、云端/本地中继、App 分片上传、app_access 令牌、App 事件订阅）、**局域网设备**（`/api/devices/*`、devices 表、局域网发现与对等终端、对应 MCP 工具集）、**Studio 社交渠道消息**（Telegram / 飞书 / 微信适配器与账号表），以及「消息推送」页除 Bark 面板外的全部标签。会话推送**只走 Bark**，并提供通知语言选项（默认中文）；Hermes 自带「频道」平台页（10 个平台）与 HTTP Webhook 链路保持不变。
    - 粘贴 Bark App 复制的推送地址即可解析服务地址与 Device Key，也可手动填写；保存后可用测试按钮验证。
@@ -202,11 +203,12 @@ Do NOT run `npm install -g hermes-web-ui` — it installs the upstream package f
 
 ---
 
-### 上游同步历史与 v0.7.29 同步
+### 上游同步历史与 v0.7.31 同步
 
 本分支将上游 v0.7.21 记录为共同祖先：
 - **v0.7.22 至 v0.7.26**：逐个版本通过定制分支合并，剔除 App 与商业付费改动（历史 `0.7.26-tatin.1`）。
-- **v0.7.29（`0.7.29-agenthub.1`）**：合并 14 个高价值上游提交，排除商业中继、设备连接与移动 App 提交。完整记录见 [`docs/upstream-sync-0.7.29.md`](./docs/upstream-sync-0.7.29.md)。
+- **v0.7.29（`0.7.29-agenthub.1`）**：合并 14 个高价值上游提交，排除商业中继、设备连接与移动 App 提交。记录见 [`docs/upstream-sync-0.7.29.md`](./docs/upstream-sync-0.7.29.md)。
+- **v0.7.31（`0.7.31-agenthub.1`）**：合并 7 个核心改动（Antigravity/Cursor 图片与输入、模型 ID 斜杠尾段匹配、统一元数据与定价、新建会话免探测加速、漫画主题刷新持久化），排除移动端 P2P 直连堆栈。记录见 [`docs/upstream-sync-0.7.31.md`](./docs/upstream-sync-0.7.31.md)。
 
 #### 上游提交摘要：
 - **合入（14 项）**：

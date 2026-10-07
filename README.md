@@ -6,13 +6,13 @@
 </p>
 
 <p align="center">
-  <a href="./README_zh.md">简体中文</a> · <a href="./CUSTOMIZATION.md">Customization Spec</a> · <a href="./docs/upstream-sync-0.7.29.md">Upstream Sync (v0.7.29)</a>
+  <a href="./README_zh.md">简体中文</a> · <a href="./CUSTOMIZATION.md">Customization Spec</a> · <a href="./docs/upstream-sync-0.7.31.md">Upstream Sync (v0.7.31)</a>
 </p>
 
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-BSL--1.1-blue.svg" alt="License: BSL-1.1" /></a>
   <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/Node.js-%3E%3D23-brightgreen.svg" alt="Node.js >= 23" /></a>
-  <a href="https://github.com/forhetale/agenthub"><img src="https://img.shields.io/badge/release-0.7.29--agenthub.1-informational.svg" alt="Release 0.7.29-agenthub.1" /></a>
+  <a href="https://github.com/forhetale/agenthub"><img src="https://img.shields.io/badge/release-0.7.31--agenthub.1-informational.svg" alt="Release 0.7.31-agenthub.1" /></a>
   <a href="https://github.com/Finb/Bark"><img src="https://img.shields.io/badge/push-Bark-ff5a5f.svg" alt="Push: Bark" /></a>
 </p>
 
@@ -147,6 +147,7 @@ To update AgentHub:
 
 - **PR-only Upstream Automation**: [docs/upstream-automation.md](./docs/upstream-automation.md). A maintainer-operated local Hermes schedule detects stable releases, curates changes in an isolated checkout, and opens tested PRs. Human approval is required for merge and deployment; this is not an automatic npm updater or a GitHub Actions deployment.
 - **Customization & Security**: [CUSTOMIZATION.md](./CUSTOMIZATION.md)
+- **v0.7.31 Upstream Sync Ledger**: [docs/upstream-sync-0.7.31.md](./docs/upstream-sync-0.7.31.md)
 - **v0.7.29 Upstream Sync Ledger**: [docs/upstream-sync-0.7.29.md](./docs/upstream-sync-0.7.29.md)
 - **Architecture**: [ARCHITECTURE.md](./ARCHITECTURE.md)
 - **Docker Deployment**: [docs/docker.md](./docs/docker.md)
