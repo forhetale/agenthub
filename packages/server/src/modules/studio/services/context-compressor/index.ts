@@ -86,6 +86,7 @@ export interface SummarizerOptions {
   sessionId?: string
   historyRevision?: number
   workerKey?: string
+  force?: boolean
   allowHermesFallback?: boolean
 }
 

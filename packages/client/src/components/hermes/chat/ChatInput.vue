@@ -1,8 +1,6 @@
 <script setup lang="ts">
 import { getBarkSettings } from '@/api/studio/bark'
 import { modelReasoningEfforts } from '@/utils/model-reasoning-effort'
-import { isBuiltinEkkoSession, isExternalCodingAgentSession } from '@/utils/hermes/session-agent'
-import { EKKO_SESSION_COMMAND_DEFINITIONS } from '@/utils/hermes/bridge-session-commands'
 import type { Attachment } from '@/stores/hermes/chat'
 import { useChatStore } from '@/stores/hermes/chat'
 import { useAppStore } from '@/stores/hermes/app'
