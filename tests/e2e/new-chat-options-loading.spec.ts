@@ -1,6 +1,13 @@
 import { expect, test, type Page } from '@playwright/test'
 import { authenticate, mockChatSocket, mockHermesApi, TEST_ACCESS_KEY } from './fixtures'
-import agentCatalog from '../../config/agents.json'
+import { AGENT_OPTIONS } from '../../packages/client/src/utils/agent-options'
+
+const testAgents = AGENT_OPTIONS.map(agent => ({
+  id: agent.value,
+  name: agent.label,
+  kind: agent.value === 'hermes' ? 'hermes' : agent.value === 'ekko-agent' ? 'built-in' : 'coding-agent',
+  modes: agent.value === 'cursor' ? ['scoped'] : ['scoped', 'global'],
+}))
 
 function gate() {
   let release!: () => void
@@ -171,16 +178,16 @@ for (const entry of ['/hermes/chat', '/studio/agents']) {
   })
 }
 
-for (const agent of agentCatalog.agents) {
+for (const agent of testAgents) {
   for (const mode of agent.modes) {
     test(`${agent.name} ${mode} new chat skips history resume and starts its first run`, async ({ page }) => {
       await authenticate(page, TEST_ACCESS_KEY, 'research')
-      const api = await mockHermesApi(page)
+      await mockHermesApi(page)
       await mockChatSocket(page)
       await page.route('**/api/agents/availability', route => route.fulfill({ json: {
         revision: 1,
         updatedAt: new Date().toISOString(),
-        agents: agentCatalog.agents.map(item => ({
+        agents: testAgents.map(item => ({
           id: item.id, installed: true, source: item.kind === 'built-in' ? 'built-in' : 'user-cli',
         })),
       } }))

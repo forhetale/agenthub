@@ -64,17 +64,17 @@ vi.mock('@/utils/completion-sound', () => ({
 }))
 
 import { useChatStore, type Message, type Session } from '@/stores/hermes/chat'
-import agentCatalog from '../../config/agents.json'
+import { AGENT_OPTIONS } from '@/utils/agent-options'
 
 type NewChatOptions = NonNullable<Parameters<ReturnType<typeof useChatStore>['newChat']>[0]>
-const newChatCases = agentCatalog.agents.flatMap(agent => agent.modes.map(mode => ({
-  name: agent.name,
+const newChatCases = AGENT_OPTIONS.flatMap(agent => (agent.value === 'hermes' ? ['scoped'] as const : ['scoped', 'global'] as const).map(mode => ({
+  name: agent.label,
   mode,
   options: {
-    agent: agent.sessionId as NewChatOptions['agent'],
-    codingAgentId: agent.kind === 'hermes' ? undefined : agent.id as NewChatOptions['codingAgentId'],
+    agent: agent.value === 'hermes' ? 'hermes' : agent.value === 'ekko-agent' ? 'ekko-agent' : agent.value as NewChatOptions['agent'],
+    codingAgentId: agent.value === 'hermes' ? undefined : agent.value as NewChatOptions['codingAgentId'],
     codingAgentMode: mode as NewChatOptions['codingAgentMode'],
-    source: agent.kind === 'hermes' ? 'cli' : agent.kind === 'built-in' ? 'builtin_agent' : 'coding_agent',
+    source: agent.value === 'hermes' ? 'cli' : agent.value === 'ekko-agent' ? 'builtin_agent' : 'coding_agent',
   } satisfies NewChatOptions,
 })))
 
