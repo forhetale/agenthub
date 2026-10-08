@@ -42,6 +42,10 @@ const editing = ref(false)
 const saving = ref(false)
 const isDirty = computed(() => draftContent.value !== content.value)
 
+defineExpose({
+  hasUnsavedChanges: () => editing.value && isDirty.value,
+})
+
 async function loadSkill() {
   loading.value = true
   viewingFile.value = null

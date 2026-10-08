@@ -61,6 +61,8 @@ export const useFilesStore = defineStore('files', () => {
   const currentWorkspaceRoomId = ref<string | null>(null)
   const entries = ref<FileEntry[]>([])
   const loading = ref(false)
+  // Set when the current directory failed to load, so the UI does not present it as empty.
+  const loadError = ref<string | null>(null)
   const sortBy = ref<'name' | 'size' | 'modTime'>('name')
   const sortOrder = ref<'asc' | 'desc'>('asc')
   let fetchRequestSeq = 0
@@ -175,6 +177,7 @@ export const useFilesStore = defineStore('files', () => {
       entries.value = []
     }
     loading.value = true
+    loadError.value = null
     try {
       const result = await listEntries(currentPath.value)
       if (requestSeq !== fetchRequestSeq) return
@@ -182,6 +185,7 @@ export const useFilesStore = defineStore('files', () => {
     } catch (err) {
       if (requestSeq !== fetchRequestSeq) return
       console.error('Failed to fetch files:', err)
+      loadError.value = err instanceof Error && err.message ? err.message : String(err)
       if (nextWorkspaceSessionId || nextWorkspaceRoomId) entries.value = []
       throw err
     } finally {
@@ -490,7 +494,7 @@ export const useFilesStore = defineStore('files', () => {
   })
 
   return {
-    currentPath, currentProfile, currentWorkspaceSessionId, currentWorkspaceRoomId, entries, loading, sortBy, sortOrder,
+    currentPath, currentProfile, currentWorkspaceSessionId, currentWorkspaceRoomId, entries, loading, loadError, sortBy, sortOrder,
     editingFile, previewFile,
     pathSegments, sortedEntries, hasUnsavedChanges,
     fetchEntries, listEntries, fetchDirectory, navigateTo, navigateUp, selectDirectory,

@@ -2,7 +2,7 @@
 import PageLoading from '@/components/common/PageLoading.vue'
 import PageHeader from '@/components/layout/PageHeader.vue'
 import { ref, onMounted, computed, defineAsyncComponent } from 'vue'
-import { NButton, useMessage } from 'naive-ui'
+import { NButton, useDialog, useMessage } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import { fetchMemory, saveMemory, type MemoryData } from '@/api/hermes/skills'
 import { useProfilesStore } from '@/stores/hermes/profiles'
@@ -11,6 +11,7 @@ const MarkdownRenderer = defineAsyncComponent(async () => (await import('@/compo
 
 const { t } = useI18n()
 const message = useMessage()
+const dialog = useDialog()
 const profilesStore = useProfilesStore()
 const loading = ref(true)
 const data = ref<MemoryData | null>(null)
@@ -35,7 +36,27 @@ async function loadMemory() {
   }
 }
 
+function hasUnsavedEdit() {
+  const section = editingSection.value
+  return section !== null && editContent.value !== (data.value?.[section] || '')
+}
+
 function startEdit(section: 'memory' | 'user' | 'soul') {
+  if (editingSection.value === section) return
+  // Only one section is edited at a time; never drop another section's draft silently.
+  if (hasUnsavedEdit()) {
+    dialog.warning({
+      title: t('files.unsavedChanges'),
+      positiveText: t('common.discard'),
+      negativeText: t('common.cancel'),
+      onPositiveClick: () => beginEdit(section),
+    })
+    return
+  }
+  beginEdit(section)
+}
+
+function beginEdit(section: 'memory' | 'user' | 'soul') {
   editingSection.value = section
   editContent.value = data.value?.[section] || ''
 }

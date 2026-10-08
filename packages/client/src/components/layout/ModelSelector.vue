@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { NModal, NInput, NSelect } from 'naive-ui'
+import { NModal, NInput, NSelect, useMessage } from 'naive-ui'
 import { useAppStore } from '@/stores/hermes/app'
 import { useProfilesStore } from '@/stores/hermes/profiles'
 import { useCollapsedProviderGroups } from '@/composables/useCollapsedProviderGroups'
@@ -11,6 +11,7 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
+const message = useMessage()
 const appStore = useAppStore()
 const profilesStore = useProfilesStore()
 
@@ -83,9 +84,13 @@ const filteredGroups = computed(() => {
 function handleSelect(model: string, provider: string) {
   const meta = activeModelGroups.value.find(g => g.provider === provider)?.model_meta?.[model]
   if (meta?.disabled) return
-  appStore.switchModel(model, provider)
+  void switchAndReport(model, provider)
   setModalShow(false)
   searchQuery.value = ''
+}
+
+async function switchAndReport(model: string, provider: string) {
+  if (!await appStore.switchModel(model, provider)) message.error(t('models.switchFailed'))
 }
 
 function modelDisplayName(model: string, provider: string) {
@@ -102,7 +107,7 @@ function handleCustomSubmit() {
   // 拦截 disabled 模型，避免 custom input 绕过列表里的灰显限制
   const meta = activeModelGroups.value.find(g => g.provider === customProvider.value)?.model_meta?.[model]
   if (meta?.disabled) return
-  appStore.switchModel(model, customProvider.value)
+  void switchAndReport(model, customProvider.value)
   setModalShow(false)
   searchQuery.value = ''
   customInput.value = ''
@@ -236,7 +241,7 @@ async function handleRefresh() {
           </div>
         </div>
         <div v-if="filteredGroups.length === 0" class="model-empty">
-          {{ searchQuery ? 'No results' : 'No models' }}
+          {{ searchQuery ? t('models.noResults') : t('models.noModels') }}
         </div>
       </div>
       <div class="model-custom">

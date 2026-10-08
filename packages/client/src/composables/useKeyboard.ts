@@ -2,6 +2,8 @@ import { onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useSessionSearch } from './useSessionSearch'
 
+const CHAT_ROUTE_NAMES = new Set(['hermes.chat', 'hermes.session', 'hermes.globalAgent', 'hermes.globalAgentSession'])
+
 export function useKeyboard() {
   const router = useRouter()
   const { sessionSearchOpen, openSessionSearch, closeSessionSearch } = useSessionSearch()
@@ -10,9 +12,16 @@ export function useKeyboard() {
     const mod = e.ctrlKey || e.metaKey
 
     if (mod && e.key === 'n') {
+      // Only on chat pages: elsewhere the new session would be created out of sight.
+      if (!CHAT_ROUTE_NAMES.has(String(router.currentRoute.value.name || ''))) return
       e.preventDefault()
       void import('@/stores/hermes/chat').then(({ useChatStore }) => {
-        useChatStore().newChat()
+        const chatStore = useChatStore()
+        const session = chatStore.newChat()
+        void router.push({
+          name: chatStore.runtimeMode === 'global_agent' ? 'hermes.globalAgentSession' : 'hermes.session',
+          params: { sessionId: session.id },
+        })
       })
       return
     }

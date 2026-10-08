@@ -377,6 +377,7 @@ export default {
 
   // 공통
   common: {
+    discard: "버리기",
     close: '닫기',
     loading: '로딩 중...',
     cancel: '취소',
@@ -775,6 +776,10 @@ export default {
 
   // 채팅
   chat: {
+    sessionsLoadFailed: "세션을 불러오지 못했습니다",
+    historyEmptySession: "이 세션에는 메시지가 없습니다",
+    historySelectHint: "목록에서 세션을 선택하면 대화를 볼 수 있습니다",
+    folderPickerLoadFailed: "폴더를 불러오지 못했습니다",
     runUsageOutput: "출력 토큰",
     runUsageInput: "입력 토큰",
     runUsageCacheRate: "캐시 적중률",
@@ -1036,7 +1041,7 @@ export default {
     speechNotSupported: '이 브라우저는 음성 재생을 지원하지 않습니다',
     searchEnterHint: 'Enter로 열기 · Esc로 닫기',
     searchHint: 'Cmd/Ctrl+K',
-    searchScope: '검색 범위: Web UI 로컬 세션 DB만 포함하며 읽기 전용 Hermes 기록 세션은 포함하지 않습니다.',
+    searchScope: '채팅 세션을 검색합니다. 기록의 읽기 전용 세션은 포함되지 않습니다.',
     searchFailed: '세션 검색 실패',
     searchNoSnippet: '표시할 요약이 없습니다',
     searchNoResults: '일치하는 세션이 없습니다',
@@ -1103,6 +1108,8 @@ export default {
   // 예약 작업
   scheduleBuilder: { time: '시간', hour: '시', minute: '분', weekday: '요일', monthDay: '매월 날짜' },
   jobs: {
+    listLoadFailed: "예약 작업을 불러오지 못했습니다",
+    deleteConfirm: "작업 “{name}”을(를) 삭제할까요? 되돌릴 수 없습니다.",
     title: '예약 작업',
     createJob: '작업 생성',
     editJob: '작업 편집',
@@ -1190,6 +1197,7 @@ export default {
 
   // 스킬
   skills: {
+    listLoadFailed: "스킬을 불러오지 못했습니다",
     filterBySource: "출처별 필터",
     title: '스킬',
     targetFilter: '런타임',
@@ -1404,6 +1412,7 @@ export default {
 
   // 모델
   models: {
+    switchFailed: "모델을 전환하지 못했습니다. 다시 시도해 주세요.",
     opencodeFreeHint: "계정이나 API 키가 필요하지 않습니다. 무료 모델은 사용량이 제한될 수 있습니다.",
     opencodeFreeLoading: "백그라운드에서 무료 모델을 불러오는 중…",
     opencodeFreeRetry: "제공자 확인 또는 목록 갱신에 실패했습니다. 캐시를 유지하고 자동으로 다시 시도합니다.",
@@ -1715,6 +1724,8 @@ export default {
       resetFailed: '기본 아바타 복원 실패',
     },
     runtime: {
+      restartProfileConfirm: "프로필 “{name}”을(를) 다시 시작할까요? 진행 중인 대화가 중단될 수 있습니다.",
+      restartGatewayConfirm: "“{name}”의 게이트웨이를 다시 시작할까요? 진행 중인 대화가 중단될 수 있습니다.",
       activeProfile: '현재: {name}',
       bridgeWorker: 'Bridge 상태',
       gateway: '게이트웨이',
@@ -2688,6 +2699,9 @@ export default {
   },
 
   workflow: {
+    approvalReject: "거부",
+    approvalApprove: "승인",
+    listLoadFailed: "워크플로를 불러오지 못했습니다",
     listActions: '워크플로 목록 작업',
     quality: { results: "JEV quality observations", rerun: "Edit and rerun from this node", decision: { pass: "Passed", needs_improvement: "Needs improvement", unknown: "Unknown" } },
     title: '워크플로',
@@ -2709,6 +2723,7 @@ export default {
     },
     stats: { nodes: '노드', edges: '연결' },
     runs: {
+      exitSnapshot: "편집으로 돌아가기",
       title: '실행 기록', refresh: '새로 고침', empty: '실행 기록 없음', startNodes: '시작 노드 {count}개', snapshotIndicator: '이 실행이 시작된 시점의 고정 스냅샷', show: '실행 기록 표시', hide: '실행 기록 숨기기',
       nodeSessionTitle: '노드 세션 - {node}', noNodeSession: '이 노드에는 아직 세션 기록이 없습니다', loadNodeSessionFailed: '노드 세션을 불러오지 못했습니다', stop: '실행 중지', stopRequested: '중지를 요청했습니다', stopFailed: '실행을 중지하지 못했습니다', delete: '기록 삭제', deleteSuccess: '실행 기록을 삭제했습니다',
     },
@@ -2857,6 +2872,7 @@ export default {
 
   // 변경 이력
   groupChat: {
+    memberCountOne: "멤버 1명",
     routingHandoffIncomplete: '인계 정보가 불완전할 수 있습니다.',
     routingLoopDetected: '협업이 반복 공회전 중일 수 있습니다.',
     routingSuggested: 'JEV 추천: {agent}',
@@ -3087,6 +3103,7 @@ export default {
   },
 
   files: {
+    loadDirFailed: "이 폴더를 불러오지 못했습니다",
     collapseTree: '파일 트리 접기', expandTree: '파일 트리 펼치기',
     attachToChat: '채팅에 추가', attachFailed: '파일을 채팅에 추가하지 못했습니다',
     previewMode: '미리보기', sourceMode: '소스', tableMode: '표', worksheet: '워크시트',

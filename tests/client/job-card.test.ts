@@ -39,6 +39,10 @@ vi.mock('naive-ui', () => ({
   NTooltip: defineComponent({
     template: '<div class="n-tooltip-stub"><slot name="trigger" /><slot /></div>',
   }),
+  NPopconfirm: defineComponent({
+    emits: ['positive-click'],
+    template: '<div class="n-popconfirm-stub"><slot name="trigger" /><span class="popconfirm-content"><slot /></span><button class="popconfirm-positive" @click="$emit(\'positive-click\')">ok</button></div>',
+  }),
   useMessage: () => mockMessage,
 }))
 
@@ -110,5 +114,30 @@ describe('JobCard run now', () => {
 
     expect(mockMessage.info).toHaveBeenCalledOnce()
     expect(mockMessage.info).toHaveBeenCalledWith('jobs.jobTriggered')
+  })
+})
+
+describe('JobCard delete', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('asks for confirmation before deleting a job', async () => {
+    mockJobsStore.deleteJob.mockResolvedValue(undefined)
+    const wrapper = mount(JobCard, {
+      props: { job: makeJob() },
+    })
+    const deleteButton = wrapper.findAll('.n-button-stub')
+      .find(button => button.text() === 'common.delete')!
+
+    await deleteButton.trigger('click')
+    expect(mockJobsStore.deleteJob).not.toHaveBeenCalled()
+    expect(wrapper.find('.popconfirm-content').text()).toBe('jobs.deleteConfirm')
+
+    await wrapper.find('.popconfirm-positive').trigger('click')
+    await flushPromises()
+
+    expect(mockJobsStore.deleteJob).toHaveBeenCalledWith('job-1')
+    expect(mockMessage.success).toHaveBeenCalledWith('jobs.jobDeleted')
   })
 })

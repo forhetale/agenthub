@@ -297,4 +297,47 @@ describe('keyboard shortcut', () => {
 
     wrapper.unmount()
   })
+
+  it('creates a new chat on Ctrl+N from a chat page and opens it', async () => {
+    routerCurrentRoute.value = { name: 'hermes.session' }
+    chatStoreMock.newChat.mockReturnValue({ id: 'fresh-1' })
+    const Dummy = defineComponent({
+      setup() {
+        useKeyboard()
+        return () => h('div')
+      },
+    })
+
+    const wrapper = mount(Dummy)
+
+    const event = new KeyboardEvent('keydown', { key: 'n', ctrlKey: true, bubbles: true, cancelable: true })
+    window.dispatchEvent(event)
+
+    expect(event.defaultPrevented).toBe(true)
+    await vi.waitFor(() => expect(chatStoreMock.newChat).toHaveBeenCalledTimes(1))
+    expect(apiMocks.routerPushMock).toHaveBeenCalledWith({ name: 'hermes.session', params: { sessionId: 'fresh-1' } })
+
+    wrapper.unmount()
+  })
+
+  it('ignores Ctrl+N outside chat pages', async () => {
+    routerCurrentRoute.value = { name: 'hermes.settings' }
+    const Dummy = defineComponent({
+      setup() {
+        useKeyboard()
+        return () => h('div')
+      },
+    })
+
+    const wrapper = mount(Dummy)
+
+    const event = new KeyboardEvent('keydown', { key: 'n', ctrlKey: true, bubbles: true, cancelable: true })
+    window.dispatchEvent(event)
+    await flushPromises()
+
+    expect(event.defaultPrevented).toBe(false)
+    expect(chatStoreMock.newChat).not.toHaveBeenCalled()
+
+    wrapper.unmount()
+  })
 })

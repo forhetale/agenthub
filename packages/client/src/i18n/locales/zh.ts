@@ -365,6 +365,7 @@ export default {
 
   // 通用
   common: {
+    discard: "放弃修改",
     close: '关闭',
     loading: '加载中...',
     cancel: '取消',
@@ -789,6 +790,10 @@ export default {
 
   // 对话
   chat: {
+    sessionsLoadFailed: "会话加载失败",
+    historyEmptySession: "此会话没有消息",
+    historySelectHint: "从列表中选择一个会话查看对话内容",
+    folderPickerLoadFailed: "文件夹加载失败",
     runUsageOutput: "输出 token",
     runUsageInput: "输入 token",
     runUsageCacheRate: "缓存命中率",
@@ -960,7 +965,7 @@ export default {
     loadMoreSessions: '加载更多会话',
     searchTitle: '搜索会话',
     searchSubtitle: '按标题或消息内容搜索',
-    searchScope: '搜索范围：仅 Web UI 本地会话库；不包含只读 Hermes 历史会话。',
+    searchScope: '搜索你的聊天会话，不包含“历史”中的只读会话。',
     searchHint: 'Cmd/Ctrl+K',
     searchPlaceholder: '搜索会话...',
     searchEmpty: '最近会话',
@@ -1119,6 +1124,9 @@ export default {
   },
 
   workflow: {
+    approvalReject: "拒绝",
+    approvalApprove: "批准",
+    listLoadFailed: "工作流加载失败",
     listActions: '工作流列表操作',
     quality: { results: "JEV 质量观察", rerun: "编辑并从此节点重跑", decision: { pass: "已通过", needs_improvement: "需要改进", unknown: "未知" } },
     title: '工作流',
@@ -1358,6 +1366,7 @@ export default {
       canceled: '已取消',
     },
     runs: {
+      exitSnapshot: "返回编辑",
       title: '执行记录',
       refresh: '刷新',
       empty: '暂无执行记录',
@@ -1551,6 +1560,8 @@ export default {
   // 定时任务
   scheduleBuilder: { time: '时间', hour: '小时', minute: '分钟', weekday: '星期', monthDay: '每月日期' },
   jobs: {
+    listLoadFailed: "定时任务加载失败",
+    deleteConfirm: "删除任务“{name}”？此操作无法撤销。",
     title: '定时任务',
     createJob: '创建任务',
     editJob: '编辑任务',
@@ -1638,6 +1649,7 @@ export default {
 
   // 技能
   skills: {
+    listLoadFailed: "技能加载失败",
     filterBySource: "按来源筛选",
     title: '技能',
     targetFilter: '运行时',
@@ -1852,6 +1864,7 @@ export default {
 
   // 模型
   models: {
+    switchFailed: "切换模型失败，请重试。",
     opencodeFreeHint: "无需账号或 API key，免费模型可能受到限流。",
     opencodeFreeLoading: "正在后台加载免费模型…",
     opencodeFreeRetry: "免费提供商检测或目录刷新失败，将自动重试并保留缓存模型。",
@@ -2202,6 +2215,8 @@ export default {
       resetFailed: '恢复默认头像失败',
     },
     runtime: {
+      restartProfileConfirm: "重启 Profile“{name}”？正在进行的对话可能会中断。",
+      restartGatewayConfirm: "重启“{name}”的网关？正在进行的对话可能会中断。",
       activeProfile: '当前：{name}',
       bridgeWorker: '桥接状态',
       gateway: '网关',
@@ -3177,6 +3192,7 @@ export default {
 
   // 群聊
   groupChat: {
+    memberCountOne: "1 成员",
     routingHandoffIncomplete: '交接信息可能不完整。',
     routingLoopDetected: '检测到协作可能在重复空转。',
     routingSuggested: 'JEV 建议交给 {agent}',
@@ -3474,6 +3490,7 @@ export default {
 
   // 文件管理
   files: {
+    loadDirFailed: "无法加载此文件夹",
     title: '文件',
     fileTree: '文件树',
     collapseTree: '收起文件树',

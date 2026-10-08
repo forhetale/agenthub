@@ -356,18 +356,22 @@ onMounted(() => { loadLockedIps(); });
 
 .action-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 12px 16px;
 }
 
 .action-label {
+  min-width: 0;
   font-size: 14px;
   color: $text-secondary;
+  overflow-wrap: anywhere;
 }
 
 .action-buttons {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   flex-shrink: 0;
 }
@@ -393,8 +397,10 @@ onMounted(() => { loadLockedIps(); });
 
 .locked-item {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
   padding: 8px 12px;
   border: 1px solid $border-color;
   border-radius: $radius-sm;
@@ -403,8 +409,10 @@ onMounted(() => { loadLockedIps(); });
 
 .locked-info {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
+  min-width: 0;
 }
 
 .locked-ip {
@@ -450,6 +458,14 @@ onMounted(() => { loadLockedIps(); });
 
 .avatar-actions {
   flex: 1;
+  min-width: 0;
+}
+
+@media (max-width: $breakpoint-mobile) {
+  .avatar-row {
+    align-items: flex-start;
+    gap: 16px;
+  }
 }
 
 .avatar-hint {

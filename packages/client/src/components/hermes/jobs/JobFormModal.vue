@@ -41,6 +41,8 @@ const message = useMessage()
 
 const showModal = ref(true)
 const loading = ref(false)
+// Editing starts from the saved job; keep the form read-only until it arrives so typed input is not overwritten.
+const jobLoading = ref(Boolean(props.jobId))
 const skillsLoading = ref(false)
 const skillOptions = ref<Array<{ label: string; value: string }>>([])
 const deliveryTargetsLoading = ref(false)
@@ -262,6 +264,8 @@ onMounted(async () => {
       scheduleMonthDay.value = parsedSchedule.monthDay
     } catch (e: any) {
       message.error(t('jobs.loadFailed') + ': ' + e.message)
+    } finally {
+      jobLoading.value = false
     }
   }
 })
@@ -329,10 +333,10 @@ function handleClose() {
     preset="card"
     :title="isEdit ? t('jobs.editJob') : t('jobs.createJob')"
     :style="{ width: 'min(520px, calc(100vw - 32px))' }"
-    :mask-closable="!loading"
+    :mask-closable="false"
     @after-leave="emit('close')"
   >
-    <NForm label-placement="top">
+    <NForm label-placement="top" :disabled="jobLoading">
       <NFormItem :label="t('jobs.name')" required>
         <NInput
           v-model:value="formData.name"
@@ -477,7 +481,7 @@ function handleClose() {
     <template #footer>
       <div class="modal-footer">
         <NButton @click="handleClose">{{ t('common.cancel') }}</NButton>
-        <NButton type="primary" :loading="loading" @click="handleSave">
+        <NButton type="primary" :loading="loading" :disabled="jobLoading" @click="handleSave">
           {{ isEdit ? t('common.update') : t('common.create') }}
         </NButton>
       </div>

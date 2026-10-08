@@ -330,6 +330,7 @@ watch(
 )
 
 const workflowsLoading = ref(false)
+const workflowsLoadFailed = ref(false)
 const workflowProfileFilter = ref<string | null>(null)
 const createWorkflowDrawerVisible = ref(false)
 const createWorkflowName = ref('')
@@ -556,7 +557,7 @@ const contextMenuOptions = computed<DropdownOption[]>(() => {
 const workflowRunContextMenuOptions = computed<DropdownOption[]>(() => {
   const run = workflowRunContextMenuTarget.value
   const options: DropdownOption[] = []
-  if (run?.status === 'queued' || run?.status === 'running') {
+  if (run && isWorkflowRunActive(run)) {
     options.push({ key: 'stop-run', label: t('workflow.runs.stop') })
   }
   options.push({ key: 'delete-run', label: t('workflow.runs.delete') })
@@ -939,7 +940,7 @@ onUnmounted(() => {
   removeWorkflowStatusErrorListener = null
 })
 
-watch(isMobile, mobile => { if (mobile) showWorkflowRunsPanel.value = false })
+watch(isMobile, mobile => { if (mobile) showWorkflowRunsPanel.value = false }, { immediate: true })
 
 
 function loadWorkflowChatPanelWidth() {
@@ -1252,6 +1253,7 @@ watch(
 
 async function loadWorkflows() {
   workflowsLoading.value = true
+  workflowsLoadFailed.value = false
   try {
     let records: WorkflowRecord[]
     try {
@@ -1281,6 +1283,8 @@ async function loadWorkflows() {
     await applyWorkflow(activeWorkflow || docs[0], false)
   } catch (err) {
     console.error('Failed to load workflows:', err)
+    // Without this the sidebar would claim there are no workflows.
+    workflowsLoadFailed.value = true
   } finally {
     workflowsLoading.value = false
   }
@@ -1754,6 +1758,7 @@ async function clearSelectedWorkflowRun() {
   nextAutoSelect.delete(activeWorkflowId.value)
   autoSelectRunningWorkflowIds.value = nextAutoSelect
   selectedWorkflowRunId.value = null
+  closeWorkflowChatPanel()
   workflowRunPage.value = 'history'
   workflowRunPageAnnouncement.value = t('workflow.evidence.historyPage')
   const workflow = workflows.value.find(item => item.id === activeWorkflowId.value)
@@ -2085,6 +2090,8 @@ function finishWorkflowRunPageSwipe(event: PointerEvent) {
 }
 
 async function selectWorkflowRun(run: WorkflowRunRecord) {
+  // The node session drawer belongs to one run; keep approvals from targeting another run.
+  if (selectedWorkflowRunId.value !== run.id) closeWorkflowChatPanel()
   const nextDeselected = new Set(manuallyDeselectedWorkflowRunIds.value)
   nextDeselected.delete(run.id)
   manuallyDeselectedWorkflowRunIds.value = nextDeselected
@@ -2138,19 +2145,29 @@ async function toggleWorkflowRunsPanel() {
   }
 }
 
+function isWorkflowRunActive(run: WorkflowRunRecord) {
+  return run.status === 'queued' || run.status === 'running'
+}
+
+async function stopWorkflowRunFromUi(run: WorkflowRunRecord) {
+  const workflowId = activeWorkflowId.value
+  if (!workflowId) return
+  try {
+    const stopped = await stopWorkflowRun(workflowId, run.id)
+    workflowRuns.value = workflowRuns.value.map(item => item.id === stopped.id ? { ...item, ...stopped } : item)
+    await loadWorkflowRuns(workflowId, selectedWorkflowRunId.value)
+    message.success(t('workflow.runs.stopRequested'))
+  } catch (err: any) {
+    message.error(err?.message || t('workflow.runs.stopFailed'))
+  }
+}
+
 async function handleWorkflowRunContextMenuSelect(key: string | number) {
   const run = workflowRunContextMenuTarget.value
   closeWorkflowRunContextMenu()
   if (!run || !activeWorkflowId.value) return
   if (key === 'stop-run') {
-    try {
-      const stopped = await stopWorkflowRun(activeWorkflowId.value, run.id)
-      workflowRuns.value = workflowRuns.value.map(item => item.id === stopped.id ? { ...item, ...stopped } : item)
-      await loadWorkflowRuns(activeWorkflowId.value, selectedWorkflowRunId.value)
-      message.success(t('workflow.runs.stopRequested'))
-    } catch (err: any) {
-      message.error(err?.message || t('workflow.runs.stopFailed'))
-    }
+    await stopWorkflowRunFromUi(run)
     return
   }
   if (key === 'delete-run') {
@@ -2338,6 +2355,10 @@ async function applyWorkflow(
   workflowSelectionLoading.value = true
   applyingWorkflow = true
   try {
+    if (activeWorkflowId.value !== workflow.id) {
+      closeWorkflowChatPanel()
+      lastCanvasTransaction.value = null
+    }
     selectedWorkflowRunId.value = null
     clearWorkflowSchedules()
     activeWorkflowId.value = workflow.id
@@ -2463,7 +2484,9 @@ function openCreateWorkflowDrawer() {
   if (profilesStore.profiles.length === 0) void profilesStore.fetchProfiles()
 }
 
-async function submitCreateWorkflow() {
+async function submitCreateWorkflow(event?: KeyboardEvent) {
+  // Ignore Enter that confirms an IME composition, and repeated submits while creating.
+  if (event?.isComposing || creatingWorkflow.value) return
   const name = createWorkflowName.value.trim()
   if (!name) {
     message.warning(t('workflow.namePlaceholder'))
@@ -2904,10 +2927,18 @@ async function handleConnectEnd(event?: MouseEvent | TouchEvent) {
 function undoLastCanvasTransaction() {
   const transaction = lastCanvasTransaction.value
   if (!transaction || selectedWorkflowRunId.value) return
-  setNodes(transaction.before.nodes)
-  setEdges(transaction.before.edges)
-  nextNodeIndex.value = Math.max(1, nextNodeIndex.value - 1)
   lastCanvasTransaction.value = null
+  // Remove only what the transaction added instead of restoring its whole snapshot,
+  // so edits made after it (or on another canvas) are never rolled back.
+  const beforeNodeIds = new Set(transaction.before.nodes.map(node => node.id))
+  const beforeEdgeIds = new Set(transaction.before.edges.map(edge => edge.id))
+  const addedNodeIds = new Set(transaction.after.nodes.filter(node => !beforeNodeIds.has(node.id)).map(node => node.id))
+  const addedEdgeIds = new Set(transaction.after.edges.filter(edge => !beforeEdgeIds.has(edge.id)).map(edge => edge.id))
+  if (!nodes.value.some(node => addedNodeIds.has(node.id))) return
+  setNodes(nodes.value.filter(node => !addedNodeIds.has(node.id)))
+  setEdges(edges.value.filter(edge =>
+    !addedEdgeIds.has(edge.id) && !addedNodeIds.has(edge.source) && !addedNodeIds.has(edge.target),
+  ))
 }
 
 function handleWorkflowUndoShortcut(event: KeyboardEvent) {
@@ -3286,7 +3317,14 @@ function nodeColor(node: { data: WorkflowAgentNodeData }) {
       </div>
       <div v-if="showWorkflowSidebar" class="workflow-list">
         <div v-if="workflowsLoading" class="workflow-list-empty"><NSpin size="small" :description="t('common.loading')" /></div>
-        <div v-else-if="workflowList.length === 0" class="workflow-list-empty">{{ t('common.noData') }}</div>
+        <div v-else-if="workflowsLoadFailed && workflowList.length === 0" class="workflow-list-empty workflow-list-empty--stacked" role="alert">
+          <span>{{ t('workflow.listLoadFailed') }}</span>
+          <NButton size="tiny" @click="loadWorkflows">{{ t('common.retry') }}</NButton>
+        </div>
+        <div v-else-if="workflowList.length === 0" class="workflow-list-empty workflow-list-empty--stacked">
+          <span>{{ t('common.noData') }}</span>
+          <NButton size="tiny" type="primary" secondary @click="openCreateWorkflowDrawer">{{ t('workflow.actions.newWorkflow') }}</NButton>
+        </div>
         <button
           v-for="workflow in workflowList"
           :key="workflow.id"
@@ -3719,7 +3757,7 @@ function nodeColor(node: { data: WorkflowAgentNodeData }) {
                     :disabled="workflowApprovalSubmitting"
                     @click="respondWorkflowNodeApproval(false)"
                   >
-                    {{ t('common.cancel') }}
+                    {{ t('workflow.approvalReject') }}
                   </NButton>
                   <NButton
                     type="primary"
@@ -3727,7 +3765,7 @@ function nodeColor(node: { data: WorkflowAgentNodeData }) {
                     :loading="workflowApprovalSubmitting"
                     @click="respondWorkflowNodeApproval(true)"
                   >
-                    {{ t('common.confirm') }}
+                    {{ t('workflow.approvalApprove') }}
                   </NButton>
                 </div>
               </div>
@@ -3784,7 +3822,22 @@ function nodeColor(node: { data: WorkflowAgentNodeData }) {
             v-if="selectedWorkflowRun" class="workflow-run-snapshot-indicator"
             role="status"
           >
-            {{ t('workflow.runs.snapshotIndicator') }}
+            <span class="workflow-run-snapshot-text">{{ t('workflow.runs.snapshotIndicator') }}</span>
+            <button
+              v-if="isWorkflowRunActive(selectedWorkflowRun)"
+              type="button"
+              class="workflow-run-snapshot-action workflow-run-snapshot-action--danger nodrag nopan"
+              @click="stopWorkflowRunFromUi(selectedWorkflowRun)"
+            >
+              {{ t('workflow.runs.stop') }}
+            </button>
+            <button
+              type="button"
+              class="workflow-run-snapshot-action nodrag nopan"
+              @click="clearSelectedWorkflowRun"
+            >
+              {{ t('workflow.runs.exitSnapshot') }}
+            </button>
           </div>
           <Background :gap="24" :size="1.2" color="var(--border-color)" />
           <MiniMap pannable zoomable :node-color="nodeColor" />
@@ -4187,7 +4240,7 @@ function nodeColor(node: { data: WorkflowAgentNodeData }) {
             <NInput
               v-model:value="createWorkflowName"
               :placeholder="t('workflow.namePlaceholder')"
-              @keydown.enter.prevent="submitCreateWorkflow"
+              @keydown.enter.prevent="submitCreateWorkflow($event)"
             />
           </label>
           <label class="workflow-field">
@@ -4208,7 +4261,7 @@ function nodeColor(node: { data: WorkflowAgentNodeData }) {
             <NButton @click="createWorkflowDrawerVisible = false">
               {{ t('common.cancel') }}
             </NButton>
-            <NButton type="primary" :loading="creatingWorkflow" @click="submitCreateWorkflow">
+            <NButton type="primary" :loading="creatingWorkflow" @click="submitCreateWorkflow()">
               {{ t('common.create') }}
             </NButton>
           </NSpace>
@@ -4336,6 +4389,13 @@ function nodeColor(node: { data: WorkflowAgentNodeData }) {
   font-size: 12px;
   color: $text-muted;
   text-align: center;
+}
+
+.workflow-list-empty--stacked {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
 }
 
 .workflow-list-item {
@@ -4731,6 +4791,47 @@ function nodeColor(node: { data: WorkflowAgentNodeData }) {
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
   backdrop-filter: blur(8px);
   white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100% - 24px);
+}
+
+.workflow-run-snapshot-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.workflow-run-snapshot-action {
+  flex-shrink: 0;
+  pointer-events: auto;
+  padding: 1px 8px;
+  border: 1px solid $border-color;
+  border-radius: 999px;
+  background: transparent;
+  color: $text-primary;
+  font: inherit;
+  cursor: pointer;
+
+  &:hover {
+    border-color: $accent-primary;
+    color: $accent-primary;
+  }
+
+  &:focus-visible {
+    outline: 2px solid $accent-primary;
+    outline-offset: 1px;
+  }
+
+  &--danger {
+    color: $error;
+
+    &:hover {
+      border-color: $error;
+      color: $error;
+    }
+  }
 }
 
 .workflow-runs-panel {

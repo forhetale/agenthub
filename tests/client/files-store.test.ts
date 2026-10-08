@@ -79,6 +79,21 @@ describe('files store', () => {
     expect(isPreviewableFile('module.wasm')).toBe(false)
   })
 
+  it('reports a failed directory load instead of an empty directory, and clears it on retry', async () => {
+    mockFilesApi.listFiles.mockRejectedValueOnce(new Error('permission denied'))
+    const store = useFilesStore()
+
+    await expect(store.fetchEntries('private')).rejects.toThrow('permission denied')
+    expect(store.loadError).toBe('permission denied')
+    expect(store.entries).toEqual([])
+
+    mockFilesApi.listFiles.mockResolvedValueOnce({ entries: [{ name: 'a.txt', path: 'private/a.txt', isDir: false, size: 1, modTime: '' }] })
+    await store.fetchEntries()
+
+    expect(store.loadError).toBeNull()
+    expect(store.entries).toHaveLength(1)
+  })
+
   it('opens text previews with detected syntax language', async () => {
     mockFilesApi.readFile.mockResolvedValue({
       content: 'FROM node:20\nRUN npm test\n',

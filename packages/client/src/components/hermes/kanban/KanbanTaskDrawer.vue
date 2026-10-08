@@ -132,6 +132,16 @@ async function searchTaskSessions() {
   }
 }
 
+// Worker sessions live in the Hermes profile, so they open in the read-only History view.
+function openRelatedSession(sessionId: string) {
+  const profile = latestRunProfile.value
+  void router.push({
+    name: 'hermes.historySession',
+    params: { sessionId },
+    query: profile ? { profile } : undefined,
+  })
+}
+
 function openResultDetail() {
   if (detail.value?.session) {
     showMessagesModal.value = true
@@ -567,7 +577,15 @@ function handleNavigateTask(taskId: string) {
               <NSpin v-if="sessionLoading" :size="12" style="margin-inline-start: 6px;" />
             </div>
             <div v-if="showSessions && sessionResults.length > 0" class="session-list">
-              <div v-for="session in sessionResults" :key="session.id" class="session-item" @click="router.push({ name: 'hermes.chat', query: { session: session.id } })">
+              <div
+                v-for="session in sessionResults"
+                :key="session.id"
+                class="session-item"
+                role="link"
+                tabindex="0"
+                @click="openRelatedSession(session.id)"
+                @keydown.enter="openRelatedSession(session.id)"
+              >
                 <div class="session-title" dir="auto">{{ session.title || session.id }}</div>
                 <div class="session-meta">
                   <span>{{ session.source }}</span>

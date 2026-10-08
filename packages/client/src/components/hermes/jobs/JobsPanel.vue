@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { NButton } from 'naive-ui'
 import JobCard from './JobCard.vue'
 import { useJobsStore } from '@/stores/hermes/jobs'
 import { useI18n } from 'vue-i18n'
@@ -47,7 +48,11 @@ function handleDeselect() {
 </script>
 
 <template>
-  <div v-if="jobsStore.jobs.length === 0" class="empty-state">
+  <div v-if="jobsStore.loadFailed && jobsStore.jobs.length === 0" class="empty-state" role="alert">
+    <p>{{ t('jobs.listLoadFailed') }}</p>
+    <NButton size="small" :loading="jobsStore.loading" @click="jobsStore.fetchJobs()">{{ t('common.retry') }}</NButton>
+  </div>
+  <div v-else-if="jobsStore.jobs.length === 0" class="empty-state">
     <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" class="empty-icon">
       <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
       <line x1="16" y1="2" x2="16" y2="6"/>

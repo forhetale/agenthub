@@ -30,6 +30,7 @@ vi.mock('vue-i18n', () => ({
 }))
 
 vi.mock('naive-ui', () => ({
+  useDialog: () => ({ warning: vi.fn() }),
   NBadge: defineComponent({
     props: ['value', 'max', 'show'],
     template: '<span class="n-badge-stub"><slot /></span>',

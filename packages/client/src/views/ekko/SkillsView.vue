@@ -2,7 +2,7 @@
 import PageLoading from '@/components/common/PageLoading.vue'
 import PageHeader from '@/components/layout/PageHeader.vue'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { NButton, NInput, useMessage } from 'naive-ui'
+import { NButton, NInput, useDialog, useMessage } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import SkillDetail from '@/components/hermes/skills/SkillDetail.vue'
 import SkillExternalDirsModal from '@/components/hermes/skills/SkillExternalDirsModal.vue'
@@ -28,6 +28,8 @@ type SourceFilter = SkillSource | 'modified'
 
 const { t } = useI18n()
 const message = useMessage()
+const dialog = useDialog()
+const skillDetailRef = ref<InstanceType<typeof SkillDetail> | null>(null)
 const skills = ref<EkkoSkillSummary[]>([])
 const loading = ref(true)
 const selectedCategory = ref('')
@@ -96,6 +98,21 @@ async function loadSkills() {
 }
 
 function handleSelect(category: string, skill: string) {
+  const switching = selectedCategory.value !== category || selectedSkill.value !== skill
+  // Switching skills reloads the detail pane, which would drop an unsaved SKILL.md edit.
+  if (switching && skillDetailRef.value?.hasUnsavedChanges?.()) {
+    dialog.warning({
+      title: t('files.unsavedChanges'),
+      positiveText: t('common.discard'),
+      negativeText: t('common.cancel'),
+      onPositiveClick: () => selectSkill(category, skill),
+    })
+    return
+  }
+  selectSkill(category, skill)
+}
+
+function selectSkill(category: string, skill: string) {
   selectedCategory.value = category
   selectedSkill.value = skill
   if (window.innerWidth <= 768) showSidebar.value = false
@@ -225,6 +242,7 @@ onUnmounted(() => mobileQuery?.removeEventListener('change', handleMobileChange)
         <div class="skills-main">
           <SkillDetail
             v-if="selectedSkill"
+            ref="skillDetailRef"
             :category="selectedCategory"
             :skill="selectedSkill"
             :skill-name="selectedSkill"

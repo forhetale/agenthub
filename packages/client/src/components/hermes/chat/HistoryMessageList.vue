@@ -201,7 +201,7 @@ defineExpose({
       <template #empty>
         <div class="empty-state">
           <img :src="assistantAgent.src" :alt="assistantAgent.label" class="empty-logo" />
-          <p>{{ t("chat.emptyState") }}</p>
+          <p>{{ activeSession ? t("chat.historyEmptySession") : t("chat.historySelectHint") }}</p>
         </div>
       </template>
       <template #before>

@@ -365,6 +365,7 @@ export default {
 
   // Common
   common: {
+    discard: "Discard",
     close: 'Close',
     loading: 'Loading...',
     cancel: 'Cancel',
@@ -789,6 +790,10 @@ export default {
 
   // Chat
   chat: {
+    sessionsLoadFailed: "Couldn't load sessions",
+    historyEmptySession: "This session has no messages",
+    historySelectHint: "Select a session from the list to view its conversation",
+    folderPickerLoadFailed: "Couldn't load folders",
     runUsageOutput: "Output tokens",
     runUsageInput: "Input tokens",
     runUsageCacheRate: "Cache hit rate",
@@ -960,7 +965,7 @@ export default {
     loadMoreSessions: 'Load more sessions',
     searchTitle: 'Search Sessions',
     searchSubtitle: 'Search by title or message content',
-    searchScope: 'Search scope: Web UI local session database only. Read-only Hermes history sessions are not included.',
+    searchScope: 'Searches your chat sessions. Read-only sessions in History are not included.',
     searchHint: 'Cmd/Ctrl+K',
     searchPlaceholder: 'Search sessions...',
     searchEmpty: 'Recent sessions',
@@ -1119,6 +1124,9 @@ export default {
   },
 
   workflow: {
+    approvalReject: "Reject",
+    approvalApprove: "Approve",
+    listLoadFailed: "Couldn't load workflows",
     listActions: 'Workflow list actions',
     quality: { results: "JEV quality observations", rerun: "Edit and rerun from this node", decision: { pass: "Passed", needs_improvement: "Needs improvement", unknown: "Unknown" } },
     title: 'Workflow',
@@ -1312,6 +1320,7 @@ export default {
       canceled: 'Canceled',
     },
     runs: {
+      exitSnapshot: "Back to editor",
       title: 'Run Records',
       refresh: 'Refresh',
       empty: 'No run records',
@@ -1505,6 +1514,8 @@ export default {
   // Jobs
   scheduleBuilder: { time: 'Time', hour: 'Hour', minute: 'Minute', weekday: 'Day of week', monthDay: 'Day of month' },
   jobs: {
+    listLoadFailed: "Couldn't load scheduled jobs",
+    deleteConfirm: "Delete job “{name}”? This cannot be undone.",
     title: 'Scheduled Jobs',
     createJob: 'Create Job',
     editJob: 'Edit Job',
@@ -1592,6 +1603,7 @@ export default {
 
   // Skills
   skills: {
+    listLoadFailed: "Couldn't load skills",
     filterBySource: "Filter by source",
     title: 'Skills',
     targetFilter: 'Runtime',
@@ -1806,6 +1818,7 @@ export default {
 
   // Models
   models: {
+    switchFailed: "Could not switch the model. Please try again.",
     opencodeFreeHint: "No account or API key required. Free models may be rate limited.",
     opencodeFreeLoading: "Loading free models in the background…",
     opencodeFreeRetry: "Free provider check or catalog refresh failed. Retrying automatically; cached models are retained.",
@@ -2164,6 +2177,8 @@ export default {
       resetFailed: 'Failed to restore default avatar',
     },
     runtime: {
+      restartProfileConfirm: "Restart profile “{name}”? Running conversations may be interrupted.",
+      restartGatewayConfirm: "Restart the gateway of “{name}”? Running conversations may be interrupted.",
       activeProfile: 'Active: {name}',
       bridgeWorker: 'Bridge worker',
       gateway: 'Gateway',
@@ -3129,6 +3144,7 @@ export default {
 
   // Group Chat
   groupChat: {
+    memberCountOne: "1 member",
     routingHandoffIncomplete: 'Handoff information may be incomplete.',
     routingLoopDetected: 'Possible repeated collaboration loop detected.',
     routingSuggested: 'JEV suggests {agent}',
@@ -3426,6 +3442,7 @@ export default {
 
   // Files
   files: {
+    loadDirFailed: "Couldn't load this folder",
     title: 'Files',
     fileTree: 'File Tree',
     collapseTree: 'Collapse file tree',
