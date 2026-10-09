@@ -236,12 +236,14 @@ describe('keyboard shortcut', () => {
       },
     })
 
-    mount(Dummy)
+    const wrapper = mount(Dummy)
 
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true }))
     await nextTick()
 
     expect(useSessionSearch().sessionSearchOpen.value).toBe(true)
+    // Leaving the listener mounted would let later shortcut tests trigger extra async work.
+    wrapper.unmount()
   })
 
   it.each([
@@ -314,8 +316,9 @@ describe('keyboard shortcut', () => {
     window.dispatchEvent(event)
 
     expect(event.defaultPrevented).toBe(true)
-    await vi.waitFor(() => expect(chatStoreMock.newChat).toHaveBeenCalledTimes(1))
-    expect(apiMocks.routerPushMock).toHaveBeenCalledWith({ name: 'hermes.session', params: { sessionId: 'fresh-1' } })
+    // Wait for the lazily imported store to finish so no import outlives this test file.
+    await vi.waitFor(() => expect(apiMocks.routerPushMock).toHaveBeenCalledWith({ name: 'hermes.session', params: { sessionId: 'fresh-1' } }))
+    expect(chatStoreMock.newChat).toHaveBeenCalledTimes(1)
 
     wrapper.unmount()
   })
