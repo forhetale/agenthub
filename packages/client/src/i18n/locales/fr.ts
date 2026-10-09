@@ -377,6 +377,7 @@ export default {
 
   // Common
   common: {
+    discard: "Abandonner",
     close: 'Fermer',
     loading: 'Chargement...',
     cancel: 'Annuler',
@@ -775,6 +776,10 @@ export default {
 
   // Chat
   chat: {
+    sessionsLoadFailed: "Impossible de charger les sessions",
+    historyEmptySession: "Cette session ne contient aucun message",
+    historySelectHint: "Sélectionnez une session dans la liste pour afficher sa conversation",
+    folderPickerLoadFailed: "Impossible de charger les dossiers",
     runUsageOutput: "Tokens de sortie",
     runUsageInput: "Tokens d’entrée",
     runUsageCacheRate: "Taux de cache",
@@ -1036,7 +1041,7 @@ export default {
     speechNotSupported: 'Reproduction vocale non prise en charge dans ce navigateur',
     searchEnterHint: 'Entrée pour ouvrir · Échap pour fermer',
     searchHint: 'Cmd/Ctrl+K',
-    searchScope: 'Portée de recherche : base locale des sessions Web UI uniquement ; les sessions d’historique Hermes en lecture seule ne sont pas incluses.',
+    searchScope: 'Recherche dans vos sessions de chat. Les sessions en lecture seule de l’historique ne sont pas incluses.',
     searchFailed: 'Échec de la recherche de sessions',
     searchNoSnippet: 'Aucun extrait disponible',
     searchNoResults: 'Aucune session correspondante',
@@ -1103,6 +1108,8 @@ export default {
   // Jobs
   scheduleBuilder: { time: 'Heure', hour: 'Heure', minute: 'Minute', weekday: 'Jour de la semaine', monthDay: 'Jour du mois' },
   jobs: {
+    listLoadFailed: "Impossible de charger les tâches planifiées",
+    deleteConfirm: "Supprimer la tâche « {name} » ? Cette action est irréversible.",
     title: 'Taches planifiees',
     createJob: 'Creer une tache',
     editJob: 'Modifier la tache',
@@ -1190,6 +1197,7 @@ jobTriggered: 'Job declenche',
 
   // Skills
   skills: {
+    listLoadFailed: "Impossible de charger les compétences",
     filterBySource: "Filtrer par source",
     title: 'Competences',
     targetFilter: 'Runtime',
@@ -1404,6 +1412,7 @@ jobTriggered: 'Job declenche',
 
   // Models
   models: {
+    switchFailed: "Impossible de changer de modèle. Veuillez réessayer.",
     opencodeFreeHint: "Aucun compte ni clé API requis. Les modèles gratuits peuvent être limités.",
     opencodeFreeLoading: "Chargement des modèles gratuits en arrière-plan…",
     opencodeFreeRetry: "Échec de la vérification ou de la mise à jour du catalogue. Nouvelle tentative automatique ; le cache est conservé.",
@@ -1715,6 +1724,8 @@ jobTriggered: 'Job declenche',
       resetFailed: 'Échec de la restauration de l’avatar par défaut',
     },
     runtime: {
+      restartProfileConfirm: "Redémarrer le profil « {name} » ? Les conversations en cours peuvent être interrompues.",
+      restartGatewayConfirm: "Redémarrer la passerelle de « {name} » ? Les conversations en cours peuvent être interrompues.",
       activeProfile: 'Actuel : {name}',
       bridgeWorker: 'État du Bridge',
       gateway: 'Passerelle',
@@ -2689,6 +2700,9 @@ jobTriggered: 'Job declenche',
   },
 
   workflow: {
+    approvalReject: "Refuser",
+    approvalApprove: "Approuver",
+    listLoadFailed: "Impossible de charger les workflows",
     listActions: 'Actions de la liste des workflows',
     quality: { results: "JEV quality observations", rerun: "Edit and rerun from this node", decision: { pass: "Passed", needs_improvement: "Needs improvement", unknown: "Unknown" } },
     title: 'Workflow',
@@ -2710,6 +2724,7 @@ jobTriggered: 'Job declenche',
     },
     stats: { nodes: 'nœuds', edges: 'connexions' },
     runs: {
+      exitSnapshot: "Retour à l'éditeur",
       title: 'Historique des exécutions', refresh: 'Actualiser', empty: 'Aucune exécution', startNodes: '{count} nœuds de départ', snapshotIndicator: 'Instantané immuable au lancement de cette exécution', show: 'Afficher l’historique', hide: 'Masquer l’historique',
       nodeSessionTitle: 'Session du nœud – {node}', noNodeSession: 'Ce nœud n’a pas encore de session enregistrée', loadNodeSessionFailed: 'Impossible de charger la session du nœud', stop: 'Arrêter l’exécution', stopRequested: 'Arrêt demandé', stopFailed: 'Impossible d’arrêter l’exécution', delete: 'Supprimer l’entrée', deleteSuccess: 'Entrée d’exécution supprimée',
     },
@@ -2858,6 +2873,7 @@ jobTriggered: 'Job declenche',
 
   // Journal des modifications
   groupChat: {
+    memberCountOne: "1 membre",
     routingHandoffIncomplete: 'Les informations de transfert peuvent être incomplètes.',
     routingLoopDetected: 'Une boucle de collaboration répétitive est possible.',
     routingSuggested: 'JEV suggère {agent}',
@@ -3088,6 +3104,7 @@ jobTriggered: 'Job declenche',
   },
 
   files: {
+    loadDirFailed: "Impossible de charger ce dossier",
     collapseTree: 'Réduire l’arborescence des fichiers', expandTree: 'Développer l’arborescence des fichiers',
     attachToChat: 'Ajouter au chat', attachFailed: 'Impossible d’ajouter le fichier au chat',
     previewMode: 'Aperçu', sourceMode: 'Source', tableMode: 'Tableau', worksheet: 'Feuille',

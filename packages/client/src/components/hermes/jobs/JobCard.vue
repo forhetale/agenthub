@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { NButton, NTooltip, useMessage } from 'naive-ui'
+import { NButton, NPopconfirm, NTooltip, useMessage } from 'naive-ui'
 import type { Job } from '@/api/hermes/jobs'
 import { scheduleToDisplayText } from '@/api/hermes/jobs'
 import { useJobsStore } from '@/stores/hermes/jobs'
@@ -162,7 +162,12 @@ function handleCardClick(e: MouseEvent) {
         {{ t('jobs.action.runNow') }}
       </NButton>
       <NButton size="tiny" quaternary @click.stop="emit('edit', jobId)">{{ t('common.edit') }}</NButton>
-      <NButton size="tiny" quaternary type="error" @click.stop="handleDelete">{{ t('common.delete') }}</NButton>
+      <NPopconfirm @positive-click="handleDelete">
+        <template #trigger>
+          <NButton size="tiny" quaternary type="error" @click.stop>{{ t('common.delete') }}</NButton>
+        </template>
+        {{ t('jobs.deleteConfirm', { name: job.name }) }}
+      </NPopconfirm>
     </div>
   </div>
 </template>

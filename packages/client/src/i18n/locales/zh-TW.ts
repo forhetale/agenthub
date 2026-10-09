@@ -365,6 +365,7 @@ export default {
 
   // 通用
   common: {
+    discard: "放棄修改",
     close: '關閉',
     loading: '載入中...',
     cancel: '取消',
@@ -789,6 +790,10 @@ export default {
 
   // 對話
   chat: {
+    sessionsLoadFailed: "工作階段載入失敗",
+    historyEmptySession: "此工作階段沒有訊息",
+    historySelectHint: "從列表中選擇一個工作階段以檢視對話內容",
+    folderPickerLoadFailed: "資料夾載入失敗",
     runUsageOutput: "輸出 token",
     runUsageInput: "輸入 token",
     runUsageCacheRate: "快取命中率",
@@ -958,7 +963,7 @@ export default {
     loadMoreSessions: '載入更多工作階段',
     searchTitle: '搜尋工作階段',
     searchSubtitle: '依標題或訊息內容搜尋',
-    searchScope: '搜尋範圍：僅 Web UI 本地工作階段資料庫；不包含唯讀 Hermes 歷史工作階段。',
+    searchScope: '搜尋你的聊天工作階段，不包含「歷史」中的唯讀工作階段。',
     searchHint: 'Cmd/Ctrl+K',
     searchPlaceholder: '搜尋工作階段...',
     searchEmpty: '最近工作階段',
@@ -1119,6 +1124,9 @@ export default {
   },
 
   workflow: {
+    approvalReject: "拒絕",
+    approvalApprove: "核准",
+    listLoadFailed: "工作流程載入失敗",
     listActions: '工作流列表操作',
     quality: { results: "JEV 质量观察", rerun: "编辑并从此节点重跑", decision: { pass: "已通过", needs_improvement: "需要改进", unknown: "未知" } },
     title: '工作流',
@@ -1353,6 +1361,7 @@ export default {
       canceled: '已取消',
     },
     runs: {
+      exitSnapshot: "返回編輯",
       title: '執行記錄',
       refresh: '重新整理',
       empty: '暫無執行記錄',
@@ -1546,6 +1555,8 @@ export default {
   // 排程任務
   scheduleBuilder: { time: '時間', hour: '小時', minute: '分鐘', weekday: '星期', monthDay: '每月日期' },
   jobs: {
+    listLoadFailed: "排程任務載入失敗",
+    deleteConfirm: "刪除任務「{name}」？此操作無法復原。",
     title: '排程任務',
     createJob: '建立任務',
     editJob: '編輯任務',
@@ -1633,6 +1644,7 @@ export default {
 
   // 技能
   skills: {
+    listLoadFailed: "技能載入失敗",
     filterBySource: "依來源篩選",
     title: '技能',
     targetFilter: '執行環境',
@@ -1847,6 +1859,7 @@ export default {
 
   // 模型
   models: {
+    switchFailed: "切換模型失敗，請重試。",
     opencodeFreeHint: "無需帳號或 API key，免費模型可能受到限流。",
     opencodeFreeLoading: "正在背景載入免費模型…",
     opencodeFreeRetry: "免費提供商檢查或目錄更新失敗，將自動重試並保留快取模型。",
@@ -2158,6 +2171,8 @@ export default {
       resetFailed: '恢復預設頭像失敗',
     },
     runtime: {
+      restartProfileConfirm: "重新啟動 Profile「{name}」？進行中的對話可能會中斷。",
+      restartGatewayConfirm: "重新啟動「{name}」的閘道？進行中的對話可能會中斷。",
       activeProfile: '目前：{name}',
       bridgeWorker: '橋接狀態',
       gateway: '閘道',
@@ -3078,6 +3093,7 @@ export default {
 
   // 群聊
   groupChat: {
+    memberCountOne: "1 位成員",
     routingHandoffIncomplete: '交接資訊可能不完整。',
     routingLoopDetected: '偵測到協作可能在重複空轉。',
     routingSuggested: 'JEV 建議交給 {agent}',
@@ -3376,6 +3392,7 @@ export default {
 
   // 檔案管理
   files: {
+    loadDirFailed: "無法載入此資料夾",
     title: '檔案',
     fileTree: '檔案樹',
     collapseTree: '收合檔案樹',

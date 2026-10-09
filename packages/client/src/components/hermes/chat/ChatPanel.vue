@@ -1403,7 +1403,7 @@ async function copySessionLink(id?: string) {
   if (sessionId) {
     const ok = await copyToClipboard(buildSessionUrl(sessionId, sessionProfile(sessionId)));
     if (ok) message.success(t("common.copied"));
-    else message.error(t("common.copied") + " ✗");
+    else message.error(t("chat.copyFailed"));
   }
 }
 
@@ -1412,7 +1412,7 @@ async function copySessionId(id?: string) {
   if (sessionId) {
     const ok = await copyToClipboard(sessionId);
     if (ok) message.success(t("common.copied"));
-    else message.error(t("common.copied") + " ✗");
+    else message.error(t("chat.copyFailed"));
   }
 }
 

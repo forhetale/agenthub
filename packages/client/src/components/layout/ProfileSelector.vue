@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { NSpin, NButton, NModal, useMessage } from 'naive-ui'
+import { NSpin, NButton, NModal, NPopconfirm, useMessage } from 'naive-ui'
 import { useProfilesStore } from '@/stores/hermes/profiles'
 import {
   fetchProfileRuntimeStatusesWithMeta,
@@ -287,22 +287,23 @@ onMounted(() => {
               >
                 {{ t('profiles.avatar.customize') }}
               </NButton>
-              <NButton
-                size="small"
-                type="primary"
-                :loading="gatewayRestarting[profile.name]"
-                @click="handleRestartGateway(profile.name)"
-              >
-                {{ t('profiles.runtime.restartGateway') }}
-              </NButton>
-              <NButton
-                size="small"
-                type="primary"
-                :loading="profileRestarting[profile.name]"
-                @click="handleRestartProfile(profile.name)"
-              >
-                {{ t('profiles.runtime.restartProfile') }}
-              </NButton>
+              <!-- Restarts interrupt running work, so they ask first and are not styled as the primary action. -->
+              <NPopconfirm @positive-click="handleRestartGateway(profile.name)">
+                <template #trigger>
+                  <NButton size="small" :loading="gatewayRestarting[profile.name]">
+                    {{ t('profiles.runtime.restartGateway') }}
+                  </NButton>
+                </template>
+                {{ t('profiles.runtime.restartGatewayConfirm', { name: profile.name }) }}
+              </NPopconfirm>
+              <NPopconfirm @positive-click="handleRestartProfile(profile.name)">
+                <template #trigger>
+                  <NButton size="small" :loading="profileRestarting[profile.name]">
+                    {{ t('profiles.runtime.restartProfile') }}
+                  </NButton>
+                </template>
+                {{ t('profiles.runtime.restartProfileConfirm', { name: profile.name }) }}
+              </NPopconfirm>
               <NButton
                 size="small"
                 type="primary"

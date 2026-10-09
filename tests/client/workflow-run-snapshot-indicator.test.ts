@@ -11,6 +11,9 @@ describe('Workflow run snapshot indicator', () => {
 
     expect(view).toContain('v-if="selectedWorkflowRun" class="workflow-run-snapshot-indicator"')
     expect(view).toContain("t('workflow.runs.snapshotIndicator')")
+    // The snapshot is read-only, so it must offer a visible way back to editing.
+    expect(view).toContain('@click="clearSelectedWorkflowRun"')
+    expect(view).toContain("t('workflow.runs.exitSnapshot')")
     expect(zh).toContain("snapshotIndicator: '本次运行启动时的冻结快照'")
     expect(en).toContain("snapshotIndicator: 'Immutable snapshot from this run’s launch'")
   })

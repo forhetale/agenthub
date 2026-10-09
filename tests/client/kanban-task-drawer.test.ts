@@ -280,7 +280,7 @@ describe('KanbanTaskDrawer', () => {
 
     expect(mockRequest).toHaveBeenCalledWith('/api/hermes/kanban/search-sessions?task_id=task-2&profile=fresh&board=project-a')
     await wrapper.find('.session-item').trigger('click')
-    expect(mockRouterPush).toHaveBeenCalledWith({ name: 'hermes.chat', query: { session: 'session-2' } })
+    expect(mockRouterPush).toHaveBeenCalledWith({ name: 'hermes.historySession', params: { sessionId: 'session-2' }, query: { profile: 'fresh' } })
   })
 
   it('renders task run history through a paged window', async () => {

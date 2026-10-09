@@ -377,6 +377,7 @@ export default {
 
   // Common
   common: {
+    discard: "Verwerfen",
     close: 'Schließen',
     loading: 'Laden...',
     cancel: 'Abbrechen',
@@ -775,6 +776,10 @@ export default {
 
   // Chat
   chat: {
+    sessionsLoadFailed: "Sitzungen konnten nicht geladen werden",
+    historyEmptySession: "Diese Sitzung enthält keine Nachrichten",
+    historySelectHint: "Wähle eine Sitzung aus der Liste, um den Verlauf anzuzeigen",
+    folderPickerLoadFailed: "Ordner konnten nicht geladen werden",
     runUsageOutput: "Ausgabe-Tokens",
     runUsageInput: "Eingabe-Tokens",
     runUsageCacheRate: "Cache-Trefferquote",
@@ -1036,7 +1041,7 @@ export default {
     speechNotSupported: 'Sprachwiedergabe in diesem Browser nicht unterstützt',
     searchEnterHint: 'Enter zum Öffnen · Esc zum Schließen',
     searchHint: 'Cmd/Ctrl+K',
-    searchScope: 'Suchbereich: nur lokale Web-UI-Sitzungsdatenbank; schreibgeschützte Hermes-Verlaufssitzungen sind nicht enthalten.',
+    searchScope: 'Durchsucht deine Chat-Sitzungen. Schreibgeschützte Sitzungen im Verlauf sind nicht enthalten.',
     searchFailed: 'Sitzungssuche fehlgeschlagen',
     searchNoSnippet: 'Keine Vorschau verfügbar',
     searchNoResults: 'Keine passenden Sitzungen',
@@ -1103,6 +1108,8 @@ export default {
   // Jobs
   scheduleBuilder: { time: 'Zeit', hour: 'Stunde', minute: 'Minute', weekday: 'Wochentag', monthDay: 'Tag des Monats' },
   jobs: {
+    listLoadFailed: "Geplante Jobs konnten nicht geladen werden",
+    deleteConfirm: "Job „{name}“ löschen? Dies kann nicht rückgängig gemacht werden.",
     title: 'Geplante Aufgaben',
     createJob: 'Aufgabe erstellen',
     editJob: 'Aufgabe bearbeiten',
@@ -1190,6 +1197,7 @@ jobTriggered: 'Job ausgelost',
 
   // Skills
   skills: {
+    listLoadFailed: "Skills konnten nicht geladen werden",
     filterBySource: "Nach Quelle filtern",
     title: 'Fahigkeiten',
     targetFilter: 'Runtime',
@@ -1404,6 +1412,7 @@ jobTriggered: 'Job ausgelost',
 
   // Models
   models: {
+    switchFailed: "Modell konnte nicht gewechselt werden. Bitte erneut versuchen.",
     opencodeFreeHint: "Kein Konto oder API-Schlüssel erforderlich. Für kostenlose Modelle können Nutzungslimits gelten.",
     opencodeFreeLoading: "Kostenlose Modelle werden im Hintergrund geladen…",
     opencodeFreeRetry: "Anbieterprüfung oder Katalogaktualisierung fehlgeschlagen. Automatischer neuer Versuch; der Cache bleibt erhalten.",
@@ -1715,6 +1724,8 @@ jobTriggered: 'Job ausgelost',
       resetFailed: 'Standard-Avatar konnte nicht wiederhergestellt werden',
     },
     runtime: {
+      restartProfileConfirm: "Profil „{name}“ neu starten? Laufende Unterhaltungen können unterbrochen werden.",
+      restartGatewayConfirm: "Gateway von „{name}“ neu starten? Laufende Unterhaltungen können unterbrochen werden.",
       activeProfile: 'Aktuell: {name}',
       bridgeWorker: 'Bridge-Status',
       gateway: 'Gateway',
@@ -2689,6 +2700,9 @@ jobTriggered: 'Job ausgelost',
   },
 
   workflow: {
+    approvalReject: "Ablehnen",
+    approvalApprove: "Genehmigen",
+    listLoadFailed: "Workflows konnten nicht geladen werden",
     listActions: 'Aktionen für die Workflow-Liste',
     quality: { results: "JEV quality observations", rerun: "Edit and rerun from this node", decision: { pass: "Passed", needs_improvement: "Needs improvement", unknown: "Unknown" } },
     title: 'Workflow',
@@ -2710,6 +2724,7 @@ jobTriggered: 'Job ausgelost',
     },
     stats: { nodes: 'Knoten', edges: 'Verbindungen' },
     runs: {
+      exitSnapshot: "Zurück zum Editor",
       title: 'Ausführungsverlauf', refresh: 'Aktualisieren', empty: 'Keine Ausführungen', startNodes: '{count} Startknoten', snapshotIndicator: 'Unveränderlicher Snapshot beim Start dieses Laufs', show: 'Ausführungsverlauf anzeigen', hide: 'Ausführungsverlauf ausblenden',
       nodeSessionTitle: 'Knotensitzung – {node}', noNodeSession: 'Für diesen Knoten gibt es noch keine Sitzung', loadNodeSessionFailed: 'Knotensitzung konnte nicht geladen werden', stop: 'Ausführung stoppen', stopRequested: 'Stopp angefordert', stopFailed: 'Ausführung konnte nicht gestoppt werden', delete: 'Eintrag löschen', deleteSuccess: 'Ausführungseintrag gelöscht',
     },
@@ -2858,6 +2873,7 @@ jobTriggered: 'Job ausgelost',
 
   // Anderungsprotokoll
   groupChat: {
+    memberCountOne: "1 Mitglied",
     routingHandoffIncomplete: 'Die Übergabeinformationen könnten unvollständig sein.',
     routingLoopDetected: 'Mögliche wiederholte Kooperationsschleife erkannt.',
     routingSuggested: 'JEV empfiehlt {agent}',
@@ -3088,6 +3104,7 @@ jobTriggered: 'Job ausgelost',
   },
 
   files: {
+    loadDirFailed: "Dieser Ordner konnte nicht geladen werden",
     collapseTree: 'Dateibaum einklappen', expandTree: 'Dateibaum ausklappen',
     attachToChat: 'Zum Chat hinzufügen', attachFailed: 'Datei konnte nicht zum Chat hinzugefügt werden',
     previewMode: 'Vorschau', sourceMode: 'Quelltext', tableMode: 'Tabelle', worksheet: 'Arbeitsblatt',

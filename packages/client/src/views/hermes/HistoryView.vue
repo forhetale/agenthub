@@ -45,6 +45,7 @@ const effectiveHistoryProfile = computed(() => profilesStore.activeProfileName |
 const hermesSessions = ref<SessionSummary[]>([])
 const hermesSessionsLoading = ref(false)
 const hermesSessionsLoaded = ref(false)
+const hermesSessionsLoadFailed = ref(false)
 const initializingPage = ref(true)
 const historySessionLoading = ref(false)
 const pageLoading = computed(() => initializingPage.value || hermesSessionsLoading.value || historySessionLoading.value)
@@ -80,6 +81,7 @@ function handleOutlineNavigate(target: { messageId: string; anchorId: string }) 
 async function loadHermesSessions() {
   const requestId = ++hermesSessionsRequestId
   hermesSessionsLoading.value = true
+  hermesSessionsLoadFailed.value = false
   try {
     const includedIds: string[] = []
     if (routeSessionId.value && !includedIds.includes(routeSessionId.value)) includedIds.push(routeSessionId.value)
@@ -99,6 +101,8 @@ async function loadHermesSessions() {
     hermesSessionsLoaded.value = true
   } catch (err) {
     console.error('Failed to load Hermes sessions:', err)
+    // An empty list here would read as "no sessions"; show the failure with a retry instead.
+    if (requestId === hermesSessionsRequestId) hermesSessionsLoadFailed.value = true
   } finally {
     if (requestId === hermesSessionsRequestId) {
       hermesSessionsLoading.value = false
@@ -511,7 +515,7 @@ function toggleSessionSelection(session: Session) {
     selectedSessionKeys.value.add(key)
   }
   selectedSessionKeys.value = new Set(selectedSessionKeys.value)
-  if (selectedSessionKeys.value.size === 0) {
+  if (selectedCount.value === 0) {
     showBatchDeleteConfirm.value = false
   }
 }
@@ -529,16 +533,29 @@ function toggleSelectAllSessions() {
     return
   }
   selectedSessionKeys.value.clear()
-  for (const session of historySessions.value) {
+  for (const session of visibleSelectableSessions.value) {
     selectedSessionKeys.value.add(sessionSelectionKey(session))
   }
   selectedSessionKeys.value = new Set(selectedSessionKeys.value)
 }
 
-const selectedCount = computed(() => selectedSessionKeys.value.size)
-const canSelectAll = computed(() => historySessions.value.length > 0)
+// Selection only counts rows the user can see, so sessions inside collapsed
+// groups (even ones selected before the group was collapsed) are never
+// batch-deleted without being reviewed first.
+const visibleSelectableSessions = computed(() => [
+  ...pinnedSessions.value,
+  ...groupedSessions.value
+    .filter(group => !collapsedGroups.value.has(group.source))
+    .flatMap(group => group.sessions),
+])
+const visibleSelectedSessions = computed(() =>
+  visibleSelectableSessions.value.filter(session => selectedSessionKeys.value.has(sessionSelectionKey(session))),
+)
+const selectedCount = computed(() => visibleSelectedSessions.value.length)
+const canSelectAll = computed(() => visibleSelectableSessions.value.length > 0)
 const allSessionsSelected = computed(() =>
-  historySessions.value.length > 0 && selectedSessionKeys.value.size === historySessions.value.length
+  visibleSelectableSessions.value.length > 0
+  && visibleSelectableSessions.value.every(session => selectedSessionKeys.value.has(sessionSelectionKey(session)))
 )
 
 // Source sort order: api_server first, cron last, others alphabetical
@@ -678,7 +695,7 @@ watch(hermesSessionsLoaded, (loaded) => {
 }, { once: true })
 
 const activeSessionTitle = computed(() =>
-  historySession.value?.title || t('chat.newChat'),
+  historySession.value ? historySession.value.title || t('chat.newChat') : t('sidebar.history'),
 )
 
 const activeSessionSource = computed(() =>
@@ -690,7 +707,7 @@ async function copySessionId(id?: string) {
   if (sessionId) {
     const ok = await copyToClipboard(sessionId)
     if (ok) message.success(t('common.copied'))
-    else message.error(t('common.copied') + ' ✗')
+    else message.error(t('chat.copyFailed'))
   }
 }
 
@@ -714,7 +731,7 @@ async function copySessionLink(id?: string) {
   if (sessionId) {
     const ok = await copyToClipboard(buildHistorySessionUrl(sessionId, historySessionProfile(sessionId)))
     if (ok) message.success(t('common.copied'))
-    else message.error(t('common.copied') + ' ✗')
+    else message.error(t('chat.copyFailed'))
   }
 }
 
@@ -811,18 +828,15 @@ async function handleDeleteSession(id: string, profile?: string | null) {
 }
 
 async function handleBatchDelete() {
-  if (selectedSessionKeys.value.size === 0 || isBatchDeleting.value) return
+  if (isBatchDeleting.value) return
 
-  const sessionsByKey = new Map(historySessions.value.map(session => [sessionSelectionKey(session), session]))
-  const targets = Array.from(selectedSessionKeys.value)
-    .map(key => sessionsByKey.get(key))
-    .filter((session): session is Session => Boolean(session))
-    .map(session => ({ id: session.id, profile: session.profile || null }))
+  const selectedSessions = visibleSelectedSessions.value
+  const targets = selectedSessions.map(session => ({ id: session.id, profile: session.profile || null }))
   if (targets.length === 0) return
 
-  const activeWasSelected = historySession.value
-    ? selectedSessionKeys.value.has(sessionSelectionKey(historySession.value))
-    : false
+  const activeKey = historySession.value ? sessionSelectionKey(historySession.value) : null
+  const activeWasSelected = activeKey !== null
+    && selectedSessions.some(session => sessionSelectionKey(session) === activeKey)
 
   isBatchDeleting.value = true
   try {
@@ -943,6 +957,10 @@ function handleBatchDeleteConfirm() {
       </div>
       <div v-if="showSessions" class="session-items">
         <div v-if="hermesSessionsLoading && hermesSessions.length === 0" class="session-loading"><NSpin size="small" :description="t('common.loading')" /></div>
+        <div v-else-if="hermesSessionsLoadFailed && hermesSessions.length === 0" class="session-empty session-load-error" role="alert">
+          <span>{{ t('chat.sessionsLoadFailed') }}</span>
+          <NButton size="tiny" :loading="hermesSessionsLoading" @click="loadHermesSessions">{{ t('common.retry') }}</NButton>
+        </div>
         <div v-else-if="hermesSessions.length === 0" class="session-empty">{{ t('chat.noSessions') }}</div>
 
         <template v-if="pinnedSessions.length > 0">
@@ -970,9 +988,17 @@ function handleBatchDeleteConfirm() {
 
         <template v-for="group in groupedSessions" :key="group.source">
           <div class="session-group-header" @click="toggleGroup(group.source)">
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="group-chevron" :class="{ collapsed: collapsedGroups.has(group.source) }"><polyline points="9 18 15 12 9 6"/></svg>
-            <span class="session-group-label">{{ group.label }}</span>
-            <span class="session-group-count">{{ group.sessions.length }}{{ group.hasMore ? '+' : '' }}</span>
+            <!-- A real button keeps the group toggle keyboard-operable without nesting the load-more button inside it. -->
+            <button
+              type="button"
+              class="session-group-toggle"
+              :aria-expanded="!collapsedGroups.has(group.source)"
+              @click.stop="toggleGroup(group.source)"
+            >
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="group-chevron" :class="{ collapsed: collapsedGroups.has(group.source) }" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
+              <span class="session-group-label">{{ group.label }}</span>
+              <span class="session-group-count">{{ group.sessions.length }}{{ group.hasMore ? '+' : '' }}</span>
+            </button>
             <NTooltip v-if="group.hasMore" trigger="hover">
               <template #trigger>
                 <NButton
@@ -1046,10 +1072,10 @@ function handleBatchDeleteConfirm() {
           <span class="header-session-title">{{ activeSessionTitle }}</span>
           <span v-if="activeSessionSource" class="source-badge">{{ getSourceLabel(activeSessionSource) }}</span>
         </div>
-        <div class="header-actions">
+        <div v-if="historySession" class="header-actions">
           <NTooltip trigger="hover">
             <template #trigger>
-              <NButton quaternary size="small" @click="showOutline = !showOutline" circle>
+              <NButton quaternary size="small" :aria-label="t('chat.outlineTitle')" @click="showOutline = !showOutline" circle>
                 <template #icon>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
                 </template>
@@ -1059,7 +1085,7 @@ function handleBatchDeleteConfirm() {
           </NTooltip>
           <NTooltip trigger="hover">
             <template #trigger>
-              <NButton quaternary size="small" @click="copySessionId()" circle>
+              <NButton quaternary size="small" :aria-label="t('chat.copySessionId')" @click="copySessionId()" circle>
                 <template #icon>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
                 </template>
@@ -1246,6 +1272,25 @@ function handleBatchDeleteConfirm() {
   cursor: default;
 }
 
+.session-group-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: 2px solid rgba($accent-primary, 0.55);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+}
+
 .group-chevron {
   flex-shrink: 0;
   transition: transform 0.15s ease;
@@ -1292,6 +1337,13 @@ function handleBatchDeleteConfirm() {
   font-size: 12px;
   color: $text-muted;
   text-align: center;
+}
+
+.session-load-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
 }
 
 .chat-main {

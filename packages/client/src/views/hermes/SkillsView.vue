@@ -2,7 +2,7 @@
 import PageLoading from '@/components/common/PageLoading.vue'
 import PageHeader from '@/components/layout/PageHeader.vue'
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
-import { NBadge, NButton, NDrawer, NDrawerContent, NInput } from 'naive-ui'
+import { NBadge, NButton, NDrawer, NDrawerContent, NInput, useDialog } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import SkillList from '@/components/hermes/skills/SkillList.vue'
 import SkillDetail from '@/components/hermes/skills/SkillDetail.vue'
@@ -25,10 +25,13 @@ const props = withDefaults(defineProps<{
 })
 
 const { t } = useI18n()
+const dialog = useDialog()
+const skillDetailRef = ref<InstanceType<typeof SkillDetail> | null>(null)
 const profilesStore = useProfilesStore()
 const categories = ref<SkillCategory[]>([])
 const archived = ref<SkillInfo[]>([])
 const loading = ref(true)
+const loadFailed = ref(false)
 const selectedCategory = ref('')
 const selectedSkill = ref('')
 const searchQuery = ref('')
@@ -84,6 +87,7 @@ watch(() => props.target, () => {
 
 async function loadSkills() {
   loading.value = true
+  loadFailed.value = false
   try {
     if (!profilesStore.activeProfileName || profilesStore.profiles.length === 0) {
       await profilesStore.fetchProfiles()
@@ -94,6 +98,7 @@ async function loadSkills() {
     ensureSelectedSkill()
   } catch (err: any) {
     console.error('Failed to load skills:', err)
+    loadFailed.value = true
   } finally {
     loading.value = false
   }
@@ -124,6 +129,20 @@ function handleSelect(category: string, skill: string) {
   if (selectedCategory.value === category && selectedSkill.value === skill) {
     return
   }
+  // Switching skills reloads the detail pane, which would drop an unsaved SKILL.md edit.
+  if (skillDetailRef.value?.hasUnsavedChanges?.()) {
+    dialog.warning({
+      title: t('files.unsavedChanges'),
+      positiveText: t('common.discard'),
+      negativeText: t('common.cancel'),
+      onPositiveClick: () => selectSkill(category, skill),
+    })
+    return
+  }
+  selectSkill(category, skill)
+}
+
+function selectSkill(category: string, skill: string) {
   selectedCategory.value = category
   selectedSkill.value = skill
   if (window.innerWidth <= 768) {
@@ -285,6 +304,7 @@ function handleSkillSaved() {
           <div class="skills-main">
             <SkillDetail
               v-if="selectedCategory && selectedSkill"
+              ref="skillDetailRef"
               :category="selectedCategory"
               :skill="selectedSkill"
               :skill-name="selectedSkillData?.name || selectedSkill"
@@ -304,7 +324,11 @@ function handleSkillSaved() {
                 <polyline points="2 17 12 22 22 17" />
                 <polyline points="2 12 12 17 22 12" />
               </svg>
-              <span>{{ t('skills.noSkills') }}</span>
+              <template v-if="loadFailed">
+                <span role="alert">{{ t('skills.listLoadFailed') }}</span>
+                <NButton size="small" @click="loadSkills">{{ t('common.retry') }}</NButton>
+              </template>
+              <span v-else>{{ t('skills.noSkills') }}</span>
             </div>
           </div>
         </div>

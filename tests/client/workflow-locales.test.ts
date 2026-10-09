@@ -40,6 +40,7 @@ const requiredPaths = [
   'workflow.edgeEditor.canvasLabel.withoutValue',
   'workflow.edgeEditor.canvasLabel.join',
   'workflow.runs.snapshotIndicator',
+  'workflow.runs.exitSnapshot',
   ...operatorKeys.flatMap(operator => [
     `workflow.edgeEditor.rawTextOperatorHelp.${operator}`,
     `workflow.edgeEditor.jsonFieldOperatorHelp.${operator}`,

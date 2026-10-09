@@ -237,6 +237,8 @@ const activeSessionId = ref<string | null>(null);
 const selectedTheme = ref(localStorage.getItem(STORAGE_KEY_THEME) || "default");
 
 let ws: WebSocket | null = null;
+let disposed = false;
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 // Keep all terminal instances alive, only dispose on close
 const termMap = new Map<
   string,
@@ -323,8 +325,14 @@ function connect() {
   };
 
   ws.onclose = () => {
+    if (disposed) return;
+    // The server kills every PTY of a closed connection, so existing tabs cannot come back.
+    if (sessions.value.some((s) => !s.exited)) {
+      for (const s of sessions.value) s.exited = true;
+      activeTerm?.write(`\r\n\x1b[90m[${t("terminal.connectionClosed")}]\x1b[0m\r\n`);
+    }
     // Reconnect after delay
-    setTimeout(connect, 3000);
+    reconnectTimer = setTimeout(connect, 3000);
   };
 
   ws.onerror = () => {
@@ -395,6 +403,8 @@ function getOrCreateTerm(id: string): { term: Terminal; fitAddon: FitAddon } {
     term.loadAddon(fitAddon);
     term.loadAddon(new WebLinksAddon());
     term.onData((data) => {
+      // Raw input goes to the server's active PTY, so keys typed into an exited tab must not be sent.
+      if (activeSessionId.value !== id || isSessionExited(id)) return;
       if (ws?.readyState === WebSocket.OPEN) {
         ws.send(data);
       }
@@ -412,8 +422,12 @@ function switchSession(id: string) {
   activeTerm = entry.term;
   activeFitAddon = entry.fitAddon;
   mountActiveTerminal();
-  send({ type: "switch", sessionId: id });
+  if (!isSessionExited(id)) send({ type: "switch", sessionId: id });
   if (mobileQuery?.matches) showSessions.value = false;
+}
+
+function isSessionExited(id: string) {
+  return sessions.value.find((s) => s.id === id)?.exited === true;
 }
 
 function closeSession(id: string) {
@@ -561,6 +575,9 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  disposed = true;
+  if (reconnectTimer) clearTimeout(reconnectTimer);
+  reconnectTimer = null;
   mobileQuery?.removeEventListener("change", handleMobileChange);
   unmountActiveTerminal();
   // Dispose all terminal instances

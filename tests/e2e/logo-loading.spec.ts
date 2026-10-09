@@ -7,6 +7,8 @@ test.afterEach(() => {
   pendingReleases.clear()
 })
 
+// locator.evaluate does not retry, and the loading overlay can be re-created while a route
+// finishes loading, so assertions on this style poll instead of reading it once.
 async function sweepStyle(logo: Locator) {
   return logo.evaluate(element => {
     const style = getComputedStyle(element, '::after')
@@ -76,7 +78,7 @@ for (const theme of ['light', 'dark']) {
 
     const pageLogo = page.locator('.skills-view > .page-loading-overlay .studio-loading-logo')
     await expect(pageLogo).toBeVisible()
-    expect(await sweepStyle(pageLogo)).toEqual(bootSweep)
+    await expect.poll(() => sweepStyle(pageLogo)).toEqual(bootSweep)
     await expect(pageLogo).toHaveCSS('width', '72px')
     await pageLogo.locator('img').evaluate(img => (img as HTMLImageElement).decode())
     expect(await pageLogo.locator('img').evaluate(img => (img as HTMLImageElement).naturalWidth)).toBeGreaterThan(0)
@@ -95,10 +97,10 @@ for (const theme of ['light', 'dark']) {
     await expect(overlay).toHaveAttribute('aria-busy', 'true')
     const overlayLogo = overlay.locator('.studio-loading-logo')
     await expect(overlayLogo).toBeVisible()
-    expect(await sweepStyle(overlayLogo)).toEqual(bootSweep)
+    await expect.poll(() => sweepStyle(overlayLogo)).toEqual(bootSweep)
     await expect(overlay.locator(':scope > .page-loading-content')).toHaveCount(1)
     await page.emulateMedia({ reducedMotion: 'reduce' })
-    expect((await sweepStyle(overlayLogo)).name).toBe('none')
+    await expect.poll(async () => (await sweepStyle(overlayLogo)).name).toBe('none')
     releaseAgents()
     await expect(overlay).toHaveAttribute('aria-busy', 'false')
     await expect(overlayLogo).toHaveCount(0)

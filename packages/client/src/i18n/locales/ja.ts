@@ -377,6 +377,7 @@ export default {
 
   // 共通
   common: {
+    discard: "破棄",
     close: '閉じる',
     loading: '読み込み中...',
     cancel: 'キャンセル',
@@ -775,6 +776,10 @@ export default {
 
   // チャット
   chat: {
+    sessionsLoadFailed: "セッションを読み込めませんでした",
+    historyEmptySession: "このセッションにはメッセージがありません",
+    historySelectHint: "一覧からセッションを選ぶと会話を表示できます",
+    folderPickerLoadFailed: "フォルダーを読み込めませんでした",
     runUsageOutput: "出力 token",
     runUsageInput: "入力 token",
     runUsageCacheRate: "キャッシュ命中率",
@@ -1036,7 +1041,7 @@ export default {
     speechNotSupported: 'このブラウザは音声読み上げをサポートしていません',
     searchEnterHint: 'Enter で開く · Esc で閉じる',
     searchHint: 'Cmd/Ctrl+K',
-    searchScope: '検索範囲: Web UI のローカルセッション DB のみ。読み取り専用の Hermes 履歴セッションは含まれません。',
+    searchScope: 'チャットセッションを検索します。「履歴」の読み取り専用セッションは含まれません。',
     searchFailed: 'セッション検索に失敗しました',
     searchNoSnippet: '表示できる要約がありません',
     searchNoResults: '一致するセッションがありません',
@@ -1103,6 +1108,8 @@ export default {
   // スケジュールジョブ
   scheduleBuilder: { time: '時刻', hour: '時', minute: '分', weekday: '曜日', monthDay: '日付' },
   jobs: {
+    listLoadFailed: "スケジュールジョブを読み込めませんでした",
+    deleteConfirm: "ジョブ「{name}」を削除しますか？元に戻せません。",
     title: 'スケジュールジョブ',
     createJob: 'ジョブを作成',
     editJob: 'ジョブを編集',
@@ -1190,6 +1197,7 @@ export default {
 
   // スキル
   skills: {
+    listLoadFailed: "スキルを読み込めませんでした",
     filterBySource: "ソースで絞り込む",
     title: 'スキル',
     targetFilter: 'ランタイム',
@@ -1404,6 +1412,7 @@ export default {
 
   // モデル
   models: {
+    switchFailed: "モデルを切り替えられませんでした。もう一度お試しください。",
     opencodeFreeHint: "アカウントや API キーは不要です。無料モデルには利用制限があります。",
     opencodeFreeLoading: "無料モデルをバックグラウンドで読み込み中…",
     opencodeFreeRetry: "プロバイダーの確認または一覧の更新に失敗しました。キャッシュを保持して自動で再試行します。",
@@ -1715,6 +1724,8 @@ export default {
       resetFailed: 'デフォルトアバターへの復元に失敗しました',
     },
     runtime: {
+      restartProfileConfirm: "プロファイル「{name}」を再起動しますか？実行中の会話が中断される場合があります。",
+      restartGatewayConfirm: "「{name}」のゲートウェイを再起動しますか？実行中の会話が中断される場合があります。",
       activeProfile: '現在: {name}',
       bridgeWorker: 'Bridge 状態',
       gateway: 'ゲートウェイ',
@@ -2688,6 +2699,9 @@ export default {
   },
 
   workflow: {
+    approvalReject: "却下",
+    approvalApprove: "承認",
+    listLoadFailed: "ワークフローを読み込めませんでした",
     listActions: 'ワークフロー一覧の操作',
     quality: { results: "JEV quality observations", rerun: "Edit and rerun from this node", decision: { pass: "Passed", needs_improvement: "Needs improvement", unknown: "Unknown" } },
     title: 'ワークフロー',
@@ -2709,6 +2723,7 @@ export default {
     },
     stats: { nodes: 'ノード', edges: '接続' },
     runs: {
+      exitSnapshot: "編集に戻る",
       title: '実行記録', refresh: '更新', empty: '実行記録はありません', startNodes: '開始ノード {count} 件', snapshotIndicator: 'この実行の開始時点で固定されたスナップショット', show: '実行記録を表示', hide: '実行記録を隠す',
       nodeSessionTitle: 'ノードセッション - {node}', noNodeSession: 'このノードにはまだセッション記録がありません', loadNodeSessionFailed: 'ノードセッションの読み込みに失敗しました', stop: '実行を停止', stopRequested: '停止を要求しました', stopFailed: '実行の停止に失敗しました', delete: '記録を削除', deleteSuccess: '実行記録を削除しました',
     },
@@ -2857,6 +2872,7 @@ export default {
 
   // 更新履歴
   groupChat: {
+    memberCountOne: "1 人のメンバー",
     routingHandoffIncomplete: '引き継ぎ情報が不完全な可能性があります。',
     routingLoopDetected: '協力が同じ所を回っている可能性があります。',
     routingSuggested: 'JEV の提案: {agent}',
@@ -3087,6 +3103,7 @@ export default {
   },
 
   files: {
+    loadDirFailed: "このフォルダーを読み込めませんでした",
     collapseTree: 'ファイルツリーを折りたたむ', expandTree: 'ファイルツリーを展開',
     attachToChat: 'チャットに追加', attachFailed: 'ファイルをチャットに追加できませんでした',
     previewMode: 'プレビュー', sourceMode: 'ソース', tableMode: '表', worksheet: 'ワークシート',

@@ -377,6 +377,7 @@ export default {
 
   // Common
   common: {
+    discard: "Descartar",
     close: 'Cerrar',
     loading: 'Cargando...',
     cancel: 'Cancelar',
@@ -775,6 +776,10 @@ export default {
 
   // Chat
   chat: {
+    sessionsLoadFailed: "No se pudieron cargar las sesiones",
+    historyEmptySession: "Esta sesión no tiene mensajes",
+    historySelectHint: "Selecciona una sesión de la lista para ver su conversación",
+    folderPickerLoadFailed: "No se pudieron cargar las carpetas",
     runUsageOutput: "Tokens de salida",
     runUsageInput: "Tokens de entrada",
     runUsageCacheRate: "Tasa de caché",
@@ -1036,7 +1041,7 @@ export default {
     speechNotSupported: 'Reproducción de voz no soportada en este navegador',
     searchEnterHint: 'Enter para abrir · Esc para cerrar',
     searchHint: 'Cmd/Ctrl+K',
-    searchScope: 'Alcance de búsqueda: solo base de datos local de sesiones de Web UI; no incluye sesiones históricas Hermes de solo lectura.',
+    searchScope: 'Busca en tus sesiones de chat. No incluye las sesiones de solo lectura del historial.',
     searchFailed: 'No se pudieron buscar sesiones',
     searchNoSnippet: 'No hay resumen disponible',
     searchNoResults: 'No hay sesiones que coincidan',
@@ -1103,6 +1108,8 @@ export default {
   // Jobs
   scheduleBuilder: { time: 'Hora', hour: 'Hora', minute: 'Minuto', weekday: 'Día de la semana', monthDay: 'Día del mes' },
   jobs: {
+    listLoadFailed: "No se pudieron cargar las tareas programadas",
+    deleteConfirm: "¿Eliminar la tarea “{name}”? No se puede deshacer.",
     title: 'Tareas programadas',
     createJob: 'Crear tarea',
     editJob: 'Editar tarea',
@@ -1190,6 +1197,7 @@ jobTriggered: 'Job ejecutado',
 
   // Skills
   skills: {
+    listLoadFailed: "No se pudieron cargar las habilidades",
     filterBySource: "Filtrar por origen",
     title: 'Habilidades',
     targetFilter: 'Runtime',
@@ -1404,6 +1412,7 @@ jobTriggered: 'Job ejecutado',
 
   // Models
   models: {
+    switchFailed: "No se pudo cambiar el modelo. Inténtalo de nuevo.",
     opencodeFreeHint: "No se necesita cuenta ni clave API. Los modelos gratuitos pueden tener límites de uso.",
     opencodeFreeLoading: "Cargando modelos gratuitos en segundo plano…",
     opencodeFreeRetry: "Falló la comprobación o actualización del catálogo. Se reintentará automáticamente y se conservará la caché.",
@@ -1715,6 +1724,8 @@ jobTriggered: 'Job ejecutado',
       resetFailed: 'No se pudo restaurar el avatar predeterminado',
     },
     runtime: {
+      restartProfileConfirm: "¿Reiniciar el perfil “{name}”? Las conversaciones en curso pueden interrumpirse.",
+      restartGatewayConfirm: "¿Reiniciar la pasarela de “{name}”? Las conversaciones en curso pueden interrumpirse.",
       activeProfile: 'Actual: {name}',
       bridgeWorker: 'Estado del Bridge',
       gateway: 'Puerta de enlace',
@@ -2689,6 +2700,9 @@ jobTriggered: 'Job ejecutado',
   },
 
   workflow: {
+    approvalReject: "Rechazar",
+    approvalApprove: "Aprobar",
+    listLoadFailed: "No se pudieron cargar los flujos de trabajo",
     listActions: 'Acciones de la lista de flujos de trabajo',
     quality: { results: "JEV quality observations", rerun: "Edit and rerun from this node", decision: { pass: "Passed", needs_improvement: "Needs improvement", unknown: "Unknown" } },
     title: 'Workflow',
@@ -2710,6 +2724,7 @@ jobTriggered: 'Job ejecutado',
     },
     stats: { nodes: 'nodos', edges: 'conexiones' },
     runs: {
+      exitSnapshot: "Volver al editor",
       title: 'Historial de ejecuciones', refresh: 'Actualizar', empty: 'No hay ejecuciones', startNodes: '{count} nodos iniciales', snapshotIndicator: 'Instantánea inmutable del inicio de esta ejecución', show: 'Mostrar historial', hide: 'Ocultar historial',
       nodeSessionTitle: 'Sesión del nodo - {node}', noNodeSession: 'Este nodo aún no tiene una sesión registrada', loadNodeSessionFailed: 'No se pudo cargar la sesión del nodo', stop: 'Detener ejecución', stopRequested: 'Detención solicitada', stopFailed: 'No se pudo detener la ejecución', delete: 'Eliminar registro', deleteSuccess: 'Registro de ejecución eliminado',
     },
@@ -2858,6 +2873,7 @@ jobTriggered: 'Job ejecutado',
 
   // Registro de cambios
   groupChat: {
+    memberCountOne: "1 miembro",
     routingHandoffIncomplete: 'La información de entrega puede estar incompleta.',
     routingLoopDetected: 'Se detectó un posible ciclo de colaboración repetido.',
     routingSuggested: 'JEV sugiere {agent}',
@@ -3088,6 +3104,7 @@ jobTriggered: 'Job ejecutado',
   },
 
   files: {
+    loadDirFailed: "No se pudo cargar esta carpeta",
     collapseTree: 'Contraer árbol de archivos', expandTree: 'Expandir árbol de archivos',
     attachToChat: 'Añadir al chat', attachFailed: 'No se pudo añadir el archivo al chat',
     previewMode: 'Vista previa', sourceMode: 'Código fuente', tableMode: 'Tabla', worksheet: 'Hoja',

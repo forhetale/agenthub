@@ -81,6 +81,21 @@ function handleContextMenu(e: MouseEvent, entry: FileEntry) {
   emit('contextmenu-entry', e, entry)
 }
 
+// Keyboard access: Enter opens the entry, the Menu key or Shift+F10 opens its context menu.
+function handleRowKeydown(e: KeyboardEvent, entry: FileEntry) {
+  if (e.target !== e.currentTarget) return
+  if (e.key === 'Enter') {
+    e.preventDefault()
+    void handleDoubleClick(entry)
+    return
+  }
+  if (e.key === 'ContextMenu' || (e.key === 'F10' && e.shiftKey)) {
+    e.preventDefault()
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    emit('contextmenu-entry', new MouseEvent('contextmenu', { clientX: rect.left + 24, clientY: rect.bottom }), entry)
+  }
+}
+
 async function handleDownload(entry: FileEntry) {
   try {
     await downloadFile(entry.path, entry.name, filesStore.currentProfile)
@@ -88,13 +103,33 @@ async function handleDownload(entry: FileEntry) {
     message.error(err.message || t('files.backendError'))
   }
 }
+
+function retryLoadEntries() {
+  filesStore.fetchEntries().catch(() => {})
+}
 </script>
 
 <template>
   <div class="file-list">
     <NSpin :show="filesStore.loading">
-      <NEmpty v-if="!filesStore.loading && filesStore.sortedEntries.length === 0" :description="t('files.emptyDir')" />
+      <NEmpty
+        v-if="!filesStore.loading && filesStore.loadError && filesStore.sortedEntries.length === 0"
+        class="file-list-load-error"
+        role="alert"
+        :description="t('files.loadDirFailed')"
+        :title="filesStore.loadError"
+      >
+        <template #extra>
+          <NButton size="small" @click="retryLoadEntries">{{ t('common.retry') }}</NButton>
+        </template>
+      </NEmpty>
+      <NEmpty v-else-if="!filesStore.loading && filesStore.sortedEntries.length === 0" :description="t('files.emptyDir')" />
       <div v-else class="file-list-items">
+        <!-- A failed refresh keeps the previous entries; say so instead of presenting them as current. -->
+        <div v-if="!filesStore.loading && filesStore.loadError" class="file-list-stale-error" role="alert" :title="filesStore.loadError">
+          <span>{{ t('files.loadDirFailed') }}</span>
+          <NButton size="tiny" @click="retryLoadEntries">{{ t('common.retry') }}</NButton>
+        </div>
         <div class="file-list-header file-list-grid">
           <div class="file-name sort-header" @click="filesStore.setSort('name')">
             {{ t('files.name') }}
@@ -114,8 +149,11 @@ async function handleDownload(entry: FileEntry) {
           v-for="entry in filesStore.sortedEntries"
           :key="entry.path"
           class="file-list-row file-list-grid"
+          tabindex="0"
+          :aria-label="entry.name"
           @dblclick="handleDoubleClick(entry)"
           @contextmenu="handleContextMenu($event, entry)"
+          @keydown="handleRowKeydown($event, entry)"
         >
           <div class="file-name">
             <span class="file-icon">{{ getFileIcon(entry) }}</span>
@@ -124,9 +162,9 @@ async function handleDownload(entry: FileEntry) {
           <div class="file-size">{{ entry.isDir ? '—' : formatSize(entry.size) }}</div>
           <div class="file-date" :title="formatDateTitle(entry.modTime)">{{ formatDate(entry.modTime) }}</div>
           <div class="file-actions">
-            <NButton v-if="isPreviewableFile(entry.name) && !entry.isDir" size="tiny" quaternary @click.stop="handlePreview(entry)" :title="t('files.preview')">👁️</NButton>
-            <NButton v-if="isTextFile(entry.name) && !entry.isDir" size="tiny" quaternary @click.stop="filesStore.openEditor(entry.path)" :title="t('files.edit')">✏️</NButton>
-            <NButton v-if="!filesStore.currentWorkspaceSessionId && !filesStore.currentWorkspaceRoomId && !entry.isDir" size="tiny" quaternary @click.stop="handleDownload(entry)" :title="t('files.download')">⬇️</NButton>
+            <NButton v-if="isPreviewableFile(entry.name) && !entry.isDir" size="tiny" quaternary @click.stop="handlePreview(entry)" :title="t('files.preview')" :aria-label="t('files.preview')">👁️</NButton>
+            <NButton v-if="isTextFile(entry.name) && !entry.isDir" size="tiny" quaternary @click.stop="filesStore.openEditor(entry.path)" :title="t('files.edit')" :aria-label="t('files.edit')">✏️</NButton>
+            <NButton v-if="!filesStore.currentWorkspaceSessionId && !filesStore.currentWorkspaceRoomId && !entry.isDir" size="tiny" quaternary @click.stop="handleDownload(entry)" :title="t('files.download')" :aria-label="t('files.download')">⬇️</NButton>
           </div>
         </div>
       </div>
@@ -146,6 +184,19 @@ async function handleDownload(entry: FileEntry) {
   grid-template-columns: minmax(0, 1fr) 72px 104px 60px;
   align-items: center;
   column-gap: 8px;
+}
+
+.file-list-stale-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+  padding: 6px 12px;
+  border: 1px solid rgba($error, 0.35);
+  border-radius: $radius-sm;
+  font-size: 12px;
+  color: $error;
 }
 
 .file-list-header {
@@ -181,12 +232,25 @@ async function handleDownload(entry: FileEntry) {
   cursor: pointer;
   font-size: 13px;
 
-  &:hover {
+  &:hover,
+  &:focus-within {
     background-color: rgba(var(--accent-primary-rgb), 0.06);
 
     .file-actions {
       opacity: 1;
     }
+  }
+
+  &:focus-visible {
+    outline: 2px solid $accent-primary;
+    outline-offset: -2px;
+  }
+}
+
+// Touch screens have no hover, so keep the row actions visible there.
+@media (hover: none) {
+  .file-actions {
+    opacity: 1;
   }
 }
 

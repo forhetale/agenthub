@@ -238,7 +238,7 @@ export const useAppStore = defineStore('app', () => {
     modelAliases.value = next
   }
 
-  async function switchModel(modelId: string, providerOverride?: string) {
+  async function switchModel(modelId: string, providerOverride?: string): Promise<boolean> {
     try {
       // Find the group containing this model to get provider info
       const group = modelGroups.value.find(g => g.models.includes(modelId))
@@ -251,8 +251,10 @@ export const useAppStore = defineStore('app', () => {
         const res = await persistCustomModel({ provider, model: modelId })
         customModels.value = res.custom_models || {}
       }
+      return true
     } catch (err: any) {
       console.error('Failed to switch model:', err)
+      return false
     }
   }
 

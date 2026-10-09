@@ -4,6 +4,20 @@ import { authenticate, mockHermesApi, mockChatSocket, TEST_ACCESS_KEY } from './
 test('Antigravity native settings are editable and unmanaged installation is explicit', async ({ page }) => {
   await authenticate(page, TEST_ACCESS_KEY, 'research')
   await mockHermesApi(page)
+  // The shared mock reports Antigravity as installed; this test covers the unmanaged (not installed) card.
+  await page.route('**/api/agents/status', route => route.fulfill({ json: {
+    revision: 1, updatedAt: new Date().toISOString(), agents: [
+      { id: 'hermes', name: 'Hermes', provider: 'Nous Research', kind: 'hermes', installed: true, version: '0.19.1', source: 'user-cli', path: '/usr/local/bin/hermes', error: '', installations: [] },
+      { id: 'ekko-agent', name: 'Ekko', provider: 'Ekko Studio', kind: 'built-in', installed: true, version: '0.7.0', source: 'built-in', path: '', error: '', installations: [] },
+      { id: 'claude-code', name: 'Claude', provider: 'Anthropic', kind: 'coding-agent', installed: true, version: '1.0.0', source: 'user-cli', path: '/usr/local/bin/claude', error: '', installations: [] },
+      { id: 'codex', name: 'Codex', provider: 'OpenAI', kind: 'coding-agent', installed: true, version: '1.0.0', source: 'user-cli', path: '/usr/local/bin/codex', error: '', installations: [] },
+      { id: 'pi', name: 'Pi', provider: 'Pi', kind: 'coding-agent', installed: true, version: '1.0.0', source: 'user-cli', path: '/usr/local/bin/pi', error: '', installations: [] },
+      { id: 'grok', name: 'Grok', provider: 'xAI', kind: 'coding-agent', installed: true, version: '1.0.0', source: 'user-cli', path: '/usr/local/bin/grok', error: '', installations: [] },
+      { id: 'dsh', name: 'DeepSeek Harness', provider: 'DeepSeek', kind: 'coding-agent', installed: true, version: '0.1.5-rc.1', source: 'user-cli', path: '/usr/local/bin/dsh', error: '', installations: [] },
+      { id: 'opencode', name: 'OpenCode', provider: 'OpenCode', kind: 'coding-agent', installed: true, version: '1.0.0', source: 'user-cli', path: '/usr/local/bin/opencode', error: '', installations: [] },
+      { id: 'cursor', name: 'Cursor', provider: 'Cursor', kind: 'coding-agent', installed: true, version: '1.0.0', source: 'user-cli', path: '/usr/local/bin/cursor', error: '', installations: [] },
+    ],
+  } }))
   let settings = '{"toolPermission":"request-review"}'
   await page.route('**/api/coding-agents/antigravity/config-files/*', async route => {
     const key = new URL(route.request().url()).pathname.split('/').at(-1)!

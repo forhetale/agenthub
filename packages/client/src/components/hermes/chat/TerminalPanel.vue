@@ -103,6 +103,8 @@ let activeFitAddon: FitAddon | null = null;
 let resizeObserver: ResizeObserver | null = null;
 let reconnectAttempts = 0;
 const MAX_RECONNECT_ATTEMPTS = 3;
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let disposed = false;
 let touchScrollLastY: number | null = null;
 let touchScrollRemainder = 0;
 const TOUCH_SCROLL_LINE_PX = 18;
@@ -193,14 +195,25 @@ function connect() {
       return;
     }
 
-    // 其他情况尝试重连
-    setTimeout(connect, 3000);
+    // 其他情况尝试重连（面板已卸载时不再重连，否则服务端会留下无人使用的 PTY）
+    if (disposed) return;
+    reconnectTimer = setTimeout(connect, 3000);
   };
 
   ws.onerror = (error) => {
     console.error('[Terminal] WebSocket error:', error);
     connectionError.value = t('terminal.connectionError');
   };
+}
+
+// Manual retry starts a fresh round of attempts after automatic reconnects gave up.
+function retryConnection() {
+  // An attempt is already connecting or open; a second socket would spawn an extra PTY.
+  if (ws && (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN)) return;
+  if (reconnectTimer) clearTimeout(reconnectTimer);
+  reconnectTimer = null;
+  reconnectAttempts = 0;
+  connect();
 }
 
 function send(data: object | string) {
@@ -440,6 +453,9 @@ watch(() => props.visible, (visible) => {
 }, { immediate: true });
 
 onUnmounted(() => {
+  disposed = true;
+  if (reconnectTimer) clearTimeout(reconnectTimer);
+  reconnectTimer = null;
   for (const timer of initialCommandTimers) clearTimeout(timer);
   initialCommandTimers.clear();
   unmountActiveTerminal();
@@ -538,7 +554,7 @@ onUnmounted(() => {
       <div class="terminal-container">
         <div v-if="connectionError" class="terminal-state terminal-state-error">
           <span>{{ connectionError }}</span>
-          <NButton size="tiny" @click="connect">{{ t("common.retry") }}</NButton>
+          <NButton size="tiny" @click="retryConnection">{{ t("common.retry") }}</NButton>
         </div>
         <div
           v-else-if="sessions.length === 0"

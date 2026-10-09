@@ -363,6 +363,7 @@ export default {
 
 
   common: {
+    discard: "Не сохранять",
     close: 'Закрыть',
     loading: 'Загрузка...',
     cancel: 'Отмена',
@@ -698,6 +699,10 @@ export default {
 
 
   chat: {
+    sessionsLoadFailed: "Не удалось загрузить сеансы",
+    historyEmptySession: "В этой сессии нет сообщений",
+    historySelectHint: "Выберите сессию в списке, чтобы просмотреть переписку",
+    folderPickerLoadFailed: "Не удалось загрузить папки",
     runUsageOutput: "Выходные токены",
     runUsageInput: "Входные токены",
     runUsageCacheRate: "Попадания в кэш",
@@ -856,7 +861,7 @@ export default {
     loadMoreSessions: 'Загрузить ещё сеансы',
     searchTitle: 'Поиск сеансов',
     searchSubtitle: 'Поиск по заголовку или содержимому сообщений',
-    searchScope: 'Область поиска: только локальная библиотека сеансов Web UI; сеансы истории Hermes только для чтения не включаются.',
+    searchScope: 'Поиск по вашим чатам. Сеансы только для чтения из истории не включаются.',
     searchHint: 'Cmd/Ctrl+K',
     searchPlaceholder: 'Поиск сеансов...',
     searchEmpty: 'Недавние сеансы',
@@ -1006,6 +1011,9 @@ export default {
 
 
   workflow: {
+    approvalReject: "Отклонить",
+    approvalApprove: "Одобрить",
+    listLoadFailed: "Не удалось загрузить рабочие процессы",
     listActions: 'Действия со списком рабочих процессов',
     quality: { results: "JEV quality observations", rerun: "Edit and rerun from this node", decision: { pass: "Passed", needs_improvement: "Needs improvement", unknown: "Unknown" } },
     title: 'Рабочий процесс',
@@ -1215,6 +1223,7 @@ export default {
       canceled: 'Отменено',
     },
     runs: {
+      exitSnapshot: "Вернуться к редактору",
       title: 'История запусков',
       refresh: 'Обновить',
       empty: 'Нет записей о запусках',
@@ -1408,6 +1417,8 @@ export default {
 
   scheduleBuilder: { time: 'Время', hour: 'Час', minute: 'Минута', weekday: 'День недели', monthDay: 'День месяца' },
   jobs: {
+    listLoadFailed: "Не удалось загрузить запланированные задачи",
+    deleteConfirm: "Удалить задачу «{name}»? Это действие нельзя отменить.",
     title: 'Периодические задачи',
     createJob: 'Создать задачу',
     editJob: 'Редактировать задачу',
@@ -1495,6 +1506,7 @@ export default {
 
 
   skills: {
+    listLoadFailed: "Не удалось загрузить навыки",
     filterBySource: "Фильтр по источнику",
     title: 'Навыки',
     targetFilter: 'Среда',
@@ -1668,6 +1680,7 @@ export default {
 
 
   models: {
+    switchFailed: "Не удалось переключить модель. Попробуйте ещё раз.",
     opencodeFreeHint: "Аккаунт и API-ключ не нужны. Для бесплатных моделей возможны ограничения запросов.",
     opencodeFreeLoading: "Бесплатные модели загружаются в фоновом режиме…",
     opencodeFreeRetry: "Ошибка проверки провайдера или обновления каталога. Повторим автоматически; кеш сохранён.",
@@ -1979,6 +1992,8 @@ export default {
       resetFailed: 'Ошибка восстановления стандартного аватара',
     },
     runtime: {
+      restartProfileConfirm: "Перезапустить профиль «{name}»? Текущие диалоги могут прерваться.",
+      restartGatewayConfirm: "Перезапустить шлюз «{name}»? Текущие диалоги могут прерваться.",
       activeProfile: 'Текущий: {name}',
       bridgeWorker: 'Состояние моста',
       gateway: 'Шлюз',
@@ -2772,6 +2787,7 @@ export default {
 
 
   groupChat: {
+    memberCountOne: "Участники: 1",
     routingHandoffIncomplete: 'Информация для передачи может быть неполной.',
     routingLoopDetected: 'Возможно повторное хождение по кругу.',
     routingSuggested: 'JEV предлагает {agent}',
@@ -3069,6 +3085,7 @@ export default {
 
   
   files: {
+    loadDirFailed: "Не удалось загрузить эту папку",
     title: 'Файлы',
     fileTree: 'Древо файлов',
     collapseTree: 'Свернуть дерево файлов',

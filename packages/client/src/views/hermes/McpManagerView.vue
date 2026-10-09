@@ -247,7 +247,8 @@ async function handleRemove(server: McpServerInfo) {
 }
 
 async function handleToggleEnabled(server: McpServerInfo) {
-  const newValue = !server.raw_config.enabled
+  // A server without an explicit `enabled` is on (same rule as McpServerCard's switch).
+  const newValue = server.raw_config.enabled === false
   try {
     const config = { ...server.raw_config, enabled: newValue }
     const res = await mcpServerUpdate(server.name, config)

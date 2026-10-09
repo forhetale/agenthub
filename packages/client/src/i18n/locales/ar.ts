@@ -365,6 +365,7 @@ export default {
 
   // Common
   common: {
+    discard: "تجاهل",
     close: 'إغلاق',
     loading: 'جارٍ التحميل...',
     cancel: 'إلغاء',
@@ -789,6 +790,10 @@ export default {
 
   // Chat
   chat: {
+    sessionsLoadFailed: "تعذّر تحميل الجلسات",
+    historyEmptySession: "لا توجد رسائل في هذه الجلسة",
+    historySelectHint: "اختر جلسة من القائمة لعرض محادثتها",
+    folderPickerLoadFailed: "تعذّر تحميل المجلدات",
     runUsageOutput: "رموز الإخراج",
     runUsageInput: "رموز الإدخال",
     runUsageCacheRate: "نسبة إصابة التخزين",
@@ -960,7 +965,7 @@ export default {
     loadMoreSessions: 'تحميل جلسات أكثر',
     searchTitle: 'البحث في الجلسات',
     searchSubtitle: 'ابحث بالعنوان أو بمحتوى الرسالة',
-    searchScope: 'نطاق البحث: قاعدة بيانات جلسات واجهة الويب المحلية فقط. جلسات سجل Hermes للقراءة فقط غير مضمّنة.',
+    searchScope: 'يبحث في جلسات الدردشة الخاصة بك. لا يشمل جلسات السجل المخصصة للقراءة فقط.',
     searchHint: 'Cmd/Ctrl+K',
     searchPlaceholder: 'البحث في الجلسات...',
     searchEmpty: 'الجلسات الأخيرة',
@@ -1119,6 +1124,9 @@ export default {
   },
 
   workflow: {
+    approvalReject: "رفض",
+    approvalApprove: "موافقة",
+    listLoadFailed: "تعذّر تحميل مسارات العمل",
     listActions: 'إجراءات قائمة سير العمل',
     quality: { results: "JEV quality observations", rerun: "Edit and rerun from this node", decision: { pass: "Passed", needs_improvement: "Needs improvement", unknown: "Unknown" } },
     title: 'مسار العمل',
@@ -1358,6 +1366,7 @@ export default {
       canceled: 'ملغى',
     },
     runs: {
+      exitSnapshot: "العودة إلى المحرر",
       title: 'سجلات التشغيل',
       refresh: 'تحديث',
       empty: 'لا توجد سجلات تشغيل',
@@ -1551,6 +1560,8 @@ export default {
   // Jobs
   scheduleBuilder: { time: 'الوقت', hour: 'الساعة', minute: 'الدقيقة', weekday: 'يوم الأسبوع', monthDay: 'يوم الشهر' },
   jobs: {
+    listLoadFailed: "تعذّر تحميل المهام المجدولة",
+    deleteConfirm: "حذف المهمة “{name}”؟ لا يمكن التراجع عن ذلك.",
     title: 'المهام المجدولة',
     createJob: 'إنشاء مهمة',
     editJob: 'تعديل المهمة',
@@ -1638,6 +1649,7 @@ export default {
 
   // Skills
   skills: {
+    listLoadFailed: "تعذّر تحميل المهارات",
     filterBySource: "تصفية حسب المصدر",
     title: 'المهارات',
     targetFilter: 'بيئة التشغيل',
@@ -1852,6 +1864,7 @@ export default {
 
   // Models
   models: {
+    switchFailed: "تعذّر تبديل النموذج. يُرجى المحاولة مرة أخرى.",
     opencodeFreeHint: "لا يلزم حساب أو مفتاح API. قد تخضع النماذج المجانية لحدود الاستخدام.",
     opencodeFreeLoading: "جارٍ تحميل النماذج المجانية في الخلفية…",
     opencodeFreeRetry: "فشل التحقق من المزود أو تحديث القائمة. ستتم إعادة المحاولة تلقائيًا مع الاحتفاظ بالنماذج المخزنة مؤقتًا.",
@@ -2210,6 +2223,8 @@ export default {
       resetFailed: 'تعذّر استعادة الصورة الرمزية الافتراضية',
     },
     runtime: {
+      restartProfileConfirm: "إعادة تشغيل الملف الشخصي “{name}”؟ قد تنقطع المحادثات الجارية.",
+      restartGatewayConfirm: "إعادة تشغيل بوابة “{name}”؟ قد تنقطع المحادثات الجارية.",
       activeProfile: 'النشط: {name}',
       bridgeWorker: 'عامل الجسر',
       gateway: 'البوابة',
@@ -3117,6 +3132,7 @@ export default {
 
   // Group Chat
   groupChat: {
+    memberCountOne: "عضو واحد",
     routingHandoffIncomplete: 'قد تكون معلومات التسليم غير مكتملة.',
     routingLoopDetected: 'تم اكتشاف دوران متكرر محتمل في التعاون.',
     routingSuggested: 'يقترح JEV \u200f{agent}',
@@ -3414,6 +3430,7 @@ export default {
 
   // Files
   files: {
+    loadDirFailed: "تعذّر تحميل هذا المجلد",
     title: 'الملفات',
     fileTree: 'شجرة الملفات',
     collapseTree: 'طي شجرة الملفات',

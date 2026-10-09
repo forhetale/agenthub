@@ -27,6 +27,7 @@ interface FlatNode {
   isExpanded: boolean
   isLoading: boolean
   hasChildren: boolean | null  // null = unknown
+  loadFailed: boolean
 }
 
 const props = defineProps<{
@@ -51,6 +52,7 @@ const folders = ref<FolderEntry[]>([])
 const expandedPaths = ref<Set<string>>(new Set())
 const childrenCache = ref<Map<string, FolderEntry[]>>(new Map())
 const loadingPaths = ref<Set<string>>(new Set())
+const failedPaths = ref<Set<string>>(new Set())
 const selectedPath = ref(props.modelValue || '')
 const loadFailed = ref(false)
 const contextMenuVisible = ref(false)
@@ -96,11 +98,8 @@ function relativeParentPath(path: string) {
 
 async function refreshFolderList(subPath = '') {
   const res = await loadFolders(subPath)
-  if (!res) {
-    loadFailed.value = true
-    return
-  }
-  loadFailed.value = false
+  if (!subPath) loadFailed.value = !res
+  if (!res) return
   if (!subPath) {
     basePath.value = res.base
     folders.value = res.folders
@@ -110,11 +109,13 @@ async function refreshFolderList(subPath = '') {
   childrenCache.value = new Map(childrenCache.value)
 }
 
-onMounted(async () => {
+async function reloadRootFolders() {
   loading.value = true
   await refreshFolderList()
   loading.value = false
-})
+}
+
+onMounted(reloadRootFolders)
 
 async function toggleExpand(folder: FolderEntry) {
   if (expandedPaths.value.has(folder.path)) {
@@ -126,15 +127,25 @@ async function toggleExpand(folder: FolderEntry) {
   expandedPaths.value.add(folder.path)
   expandedPaths.value = new Set(expandedPaths.value)
 
-  if (!childrenCache.value.has(folder.path)) {
-    loadingPaths.value.add(folder.path)
-    loadingPaths.value = new Set(loadingPaths.value)
-    const res = await loadFolders(folder.path)
-    childrenCache.value.set(folder.path, res?.folders || [])
+  if (!childrenCache.value.has(folder.path)) await loadChildren(folder)
+}
+
+async function loadChildren(folder: FolderEntry) {
+  loadingPaths.value.add(folder.path)
+  loadingPaths.value = new Set(loadingPaths.value)
+  failedPaths.value.delete(folder.path)
+  failedPaths.value = new Set(failedPaths.value)
+  const res = await loadFolders(folder.path)
+  // A failed request is not cached, so the folder can be retried instead of looking empty.
+  if (res) {
+    childrenCache.value.set(folder.path, res.folders)
     childrenCache.value = new Map(childrenCache.value)
-    loadingPaths.value.delete(folder.path)
-    loadingPaths.value = new Set(loadingPaths.value)
+  } else {
+    failedPaths.value.add(folder.path)
+    failedPaths.value = new Set(failedPaths.value)
   }
+  loadingPaths.value.delete(folder.path)
+  loadingPaths.value = new Set(loadingPaths.value)
 }
 
 function selectFolder(folder: FolderEntry) {
@@ -298,6 +309,7 @@ const flatNodes = computed<FlatNode[]>(() => {
         isExpanded,
         isLoading,
         hasChildren: children ? children.length > 0 : null,
+        loadFailed: failedPaths.value.has(folder.path),
       })
       if (isExpanded && children && children.length > 0) {
         traverse(children, depth + 1)
@@ -387,9 +399,26 @@ const flatNodes = computed<FlatNode[]>(() => {
         >
           <span class="folder-empty-text">{{ t('chat.folderPickerEmpty') }}</span>
         </div>
+        <div
+          v-if="node.isExpanded && !node.isLoading && node.loadFailed"
+          class="folder-item empty folder-load-failed"
+          role="alert"
+          :style="{ paddingInlineStart: `${58 + node.depth * 20}px` }"
+        >
+          <span class="folder-empty-text">{{ t('chat.folderPickerLoadFailed') }}</span>
+          <NButton text size="tiny" type="primary" @click.stop="loadChildren(node.folder)">{{ t('common.retry') }}</NButton>
+        </div>
       </template>
 
-      <div v-if="folders.length === 0 || loadFailed" class="folder-empty">
+      <div v-if="loadFailed" class="folder-empty" role="alert">
+        <FolderIcon open />
+        <span>{{ t('chat.folderPickerLoadFailed') }}</span>
+        <NButton size="small" @click="reloadRootFolders">{{ t('common.retry') }}</NButton>
+      </div>
+      <div v-else-if="folders.length === 0 && basePath" class="folder-item empty" :style="{ paddingInlineStart: '34px' }">
+        <span class="folder-empty-text">{{ t('chat.folderPickerEmpty') }}</span>
+      </div>
+      <div v-else-if="folders.length === 0" class="folder-empty">
         <FolderIcon open />
         <span>{{ t('chat.folderPickerNoFolders') }}</span>
       </div>

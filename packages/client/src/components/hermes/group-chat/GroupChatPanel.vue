@@ -679,6 +679,9 @@ const railMembers = computed<MemberInfo[]>(() => {
     })
 })
 const participantCount = computed(() => railMembers.value.length + store.agents.length)
+const memberCountLabel = computed(() => participantCount.value === 1
+    ? t('groupChat.memberCountOne')
+    : t('groupChat.members', { count: participantCount.value }))
 function agentOwnerMember(agent: RoomAgent): MemberInfo | null {
     if (!agent.ownerMemberId) return null
     return railMembers.value.find(member => member.userId === agent.ownerMemberId) || null
@@ -2338,7 +2341,7 @@ function handleClarifyKeydown(event: KeyboardEvent) {
                         :aria-expanded="showMemberRail"
                         @click="showMemberRail = !showMemberRail"
                     >
-                        <span>{{ t('groupChat.members', { count: participantCount }) }}</span>
+                        <span>{{ memberCountLabel }}</span>
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" :class="{ collapsed: !showMemberRail }" aria-hidden="true">
                             <polyline points="15 18 9 12 15 6" />
                         </svg>
@@ -2357,7 +2360,7 @@ function handleClarifyKeydown(event: KeyboardEvent) {
                 <aside
                     v-if="showMemberRail"
                     class="agent-avatar-rail"
-                    :aria-label="t('groupChat.members', { count: participantCount })"
+                    :aria-label="memberCountLabel"
                 >
                     <div class="agent-avatar-rail-trigger">
                         <NPopover

@@ -236,12 +236,14 @@ describe('keyboard shortcut', () => {
       },
     })
 
-    mount(Dummy)
+    const wrapper = mount(Dummy)
 
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true }))
     await nextTick()
 
     expect(useSessionSearch().sessionSearchOpen.value).toBe(true)
+    // Leaving the listener mounted would let later shortcut tests trigger extra async work.
+    wrapper.unmount()
   })
 
   it.each([
@@ -294,6 +296,50 @@ describe('keyboard shortcut', () => {
 
     expect(apiMocks.routerPushMock).not.toHaveBeenCalledWith({ name: 'hermes.settings' })
     expect(event.defaultPrevented).toBe(false)
+
+    wrapper.unmount()
+  })
+
+  it('creates a new chat on Ctrl+N from a chat page and opens it', async () => {
+    routerCurrentRoute.value = { name: 'hermes.session' }
+    chatStoreMock.newChat.mockReturnValue({ id: 'fresh-1' })
+    const Dummy = defineComponent({
+      setup() {
+        useKeyboard()
+        return () => h('div')
+      },
+    })
+
+    const wrapper = mount(Dummy)
+
+    const event = new KeyboardEvent('keydown', { key: 'n', ctrlKey: true, bubbles: true, cancelable: true })
+    window.dispatchEvent(event)
+
+    expect(event.defaultPrevented).toBe(true)
+    // Wait for the lazily imported store to finish so no import outlives this test file.
+    await vi.waitFor(() => expect(apiMocks.routerPushMock).toHaveBeenCalledWith({ name: 'hermes.session', params: { sessionId: 'fresh-1' } }))
+    expect(chatStoreMock.newChat).toHaveBeenCalledTimes(1)
+
+    wrapper.unmount()
+  })
+
+  it('ignores Ctrl+N outside chat pages', async () => {
+    routerCurrentRoute.value = { name: 'hermes.settings' }
+    const Dummy = defineComponent({
+      setup() {
+        useKeyboard()
+        return () => h('div')
+      },
+    })
+
+    const wrapper = mount(Dummy)
+
+    const event = new KeyboardEvent('keydown', { key: 'n', ctrlKey: true, bubbles: true, cancelable: true })
+    window.dispatchEvent(event)
+    await flushPromises()
+
+    expect(event.defaultPrevented).toBe(false)
+    expect(chatStoreMock.newChat).not.toHaveBeenCalled()
 
     wrapper.unmount()
   })
