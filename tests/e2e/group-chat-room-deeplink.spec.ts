@@ -2055,5 +2055,6 @@ test('group-chat Agent picker only lists installed Agents in catalog order', asy
   await expect(drawer.locator('.agent-form-loading')).toBeHidden()
   await drawer.locator('.n-select').first().click()
   await expect.poll(async () => (await page.locator('.n-base-select-option__content:visible').allTextContents())
-    .map(label => label.split(' · ')[0])).toEqual(['Ekko', 'Codex', 'Qwen Code'])
+    // Qwen reports installed but is not in this build's Agent catalog, so it must stay hidden.
+    .map(label => label.split(' · ')[0])).toEqual(['Ekko', 'Codex'])
 })
