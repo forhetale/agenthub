@@ -314,4 +314,21 @@ describe('JobFormModal deliver targets', () => {
 
     expect(wrapper.get('[data-testid="job-schedule-custom"]').attributes('value')).toBe('every 90m')
   })
+
+  it('keeps the edit form locked when the saved job cannot be loaded', async () => {
+    mockGetJob.mockRejectedValue(new Error('unavailable'))
+    const wrapper = mount(JobFormModal, {
+      props: { jobId: 'job-missing' },
+    })
+
+    await flushPromises()
+
+    expect(mockMessage.error).toHaveBeenCalledWith('jobs.loadFailed: unavailable')
+    // Unlocking here would let Update replace the real job with a blank form's values.
+    expect(wrapper.get('form').attributes('disabled')).toBeDefined()
+    const updateButton = wrapper.findAll('.n-button-stub').find(button => button.text() === 'common.update')!
+    expect(updateButton.attributes('disabled')).toBeDefined()
+    await updateButton.trigger('click')
+    expect(mockJobsStore.updateJob).not.toHaveBeenCalled()
+  })
 })

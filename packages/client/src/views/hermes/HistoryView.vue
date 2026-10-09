@@ -515,7 +515,7 @@ function toggleSessionSelection(session: Session) {
     selectedSessionKeys.value.add(key)
   }
   selectedSessionKeys.value = new Set(selectedSessionKeys.value)
-  if (selectedSessionKeys.value.size === 0) {
+  if (selectedCount.value === 0) {
     showBatchDeleteConfirm.value = false
   }
 }
@@ -539,15 +539,19 @@ function toggleSelectAllSessions() {
   selectedSessionKeys.value = new Set(selectedSessionKeys.value)
 }
 
-// Select-all only covers rows the user can see, so sessions inside collapsed
-// groups are never batch-deleted without being reviewed first.
+// Selection only counts rows the user can see, so sessions inside collapsed
+// groups (even ones selected before the group was collapsed) are never
+// batch-deleted without being reviewed first.
 const visibleSelectableSessions = computed(() => [
   ...pinnedSessions.value,
   ...groupedSessions.value
     .filter(group => !collapsedGroups.value.has(group.source))
     .flatMap(group => group.sessions),
 ])
-const selectedCount = computed(() => selectedSessionKeys.value.size)
+const visibleSelectedSessions = computed(() =>
+  visibleSelectableSessions.value.filter(session => selectedSessionKeys.value.has(sessionSelectionKey(session))),
+)
+const selectedCount = computed(() => visibleSelectedSessions.value.length)
 const canSelectAll = computed(() => visibleSelectableSessions.value.length > 0)
 const allSessionsSelected = computed(() =>
   visibleSelectableSessions.value.length > 0
@@ -824,18 +828,15 @@ async function handleDeleteSession(id: string, profile?: string | null) {
 }
 
 async function handleBatchDelete() {
-  if (selectedSessionKeys.value.size === 0 || isBatchDeleting.value) return
+  if (isBatchDeleting.value) return
 
-  const sessionsByKey = new Map(historySessions.value.map(session => [sessionSelectionKey(session), session]))
-  const targets = Array.from(selectedSessionKeys.value)
-    .map(key => sessionsByKey.get(key))
-    .filter((session): session is Session => Boolean(session))
-    .map(session => ({ id: session.id, profile: session.profile || null }))
+  const selectedSessions = visibleSelectedSessions.value
+  const targets = selectedSessions.map(session => ({ id: session.id, profile: session.profile || null }))
   if (targets.length === 0) return
 
-  const activeWasSelected = historySession.value
-    ? selectedSessionKeys.value.has(sessionSelectionKey(historySession.value))
-    : false
+  const activeKey = historySession.value ? sessionSelectionKey(historySession.value) : null
+  const activeWasSelected = activeKey !== null
+    && selectedSessions.some(session => sessionSelectionKey(session) === activeKey)
 
   isBatchDeleting.value = true
   try {

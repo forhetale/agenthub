@@ -42,6 +42,7 @@ const message = useMessage()
 const showModal = ref(true)
 const loading = ref(false)
 // Editing starts from the saved job; keep the form read-only until it arrives so typed input is not overwritten.
+// If it never arrives the form stays read-only, otherwise Update would replace the job with a blank form's values.
 const jobLoading = ref(Boolean(props.jobId))
 const skillsLoading = ref(false)
 const skillOptions = ref<Array<{ label: string; value: string }>>([])
@@ -262,10 +263,9 @@ onMounted(async () => {
       scheduleMinute.value = parsedSchedule.minute
       scheduleWeekday.value = parsedSchedule.weekday
       scheduleMonthDay.value = parsedSchedule.monthDay
+      jobLoading.value = false
     } catch (e: any) {
       message.error(t('jobs.loadFailed') + ': ' + e.message)
-    } finally {
-      jobLoading.value = false
     }
   }
 })

@@ -44,4 +44,19 @@ describe('FileList layout', () => {
     expect(date.text()).not.toMatch(/:\d{2}:\d{2}/)
     expect(date.attributes('title')).toBe(new Date('2026-06-06T08:00:00.000Z').toLocaleString())
   })
+
+  it('flags a failed refresh that keeps the previous entries on screen', () => {
+    const store = useFilesStore()
+    store.entries = [
+      { name: 'a.txt', path: '/workspace/a.txt', isDir: false, size: 1, modTime: '2026-06-06T08:00:00.000Z' },
+    ]
+    store.loadError = 'permission denied'
+
+    const wrapper = mount(FileList)
+
+    const alert = wrapper.get('.file-list-stale-error')
+    expect(alert.attributes('role')).toBe('alert')
+    expect(alert.text()).toContain('files.loadDirFailed')
+    expect(wrapper.findAll('.file-list-row')).toHaveLength(1)
+  })
 })

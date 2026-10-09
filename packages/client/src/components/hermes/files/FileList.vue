@@ -125,6 +125,11 @@ function retryLoadEntries() {
       </NEmpty>
       <NEmpty v-else-if="!filesStore.loading && filesStore.sortedEntries.length === 0" :description="t('files.emptyDir')" />
       <div v-else class="file-list-items">
+        <!-- A failed refresh keeps the previous entries; say so instead of presenting them as current. -->
+        <div v-if="!filesStore.loading && filesStore.loadError" class="file-list-stale-error" role="alert" :title="filesStore.loadError">
+          <span>{{ t('files.loadDirFailed') }}</span>
+          <NButton size="tiny" @click="retryLoadEntries">{{ t('common.retry') }}</NButton>
+        </div>
         <div class="file-list-header file-list-grid">
           <div class="file-name sort-header" @click="filesStore.setSort('name')">
             {{ t('files.name') }}
@@ -179,6 +184,19 @@ function retryLoadEntries() {
   grid-template-columns: minmax(0, 1fr) 72px 104px 60px;
   align-items: center;
   column-gap: 8px;
+}
+
+.file-list-stale-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+  padding: 6px 12px;
+  border: 1px solid rgba($error, 0.35);
+  border-radius: $radius-sm;
+  font-size: 12px;
+  color: $error;
 }
 
 .file-list-header {
