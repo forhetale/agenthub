@@ -16,8 +16,8 @@ import {
 } from './provider-editor'
 import { getCompatibleCustomProviders } from '../../../studio/contracts/provider-compat'
 import { PROVIDER_PRESETS } from '../../../studio/contracts/providers'
-import { OPENCODE_FREE_PROVIDER } from '../../../studio/contracts/opencode-free'
-import { readConfigYamlForProfile } from '../../../studio/public/profile-config'
+import { readConfigYamlForProfile } from '../../../studio/public/provider-config'
+import { providerProfiles, providerScopeKey } from '../../../studio/public/provider-account'
 
 export interface ProviderModelRefreshDiff {
   added: string[]
@@ -46,7 +46,7 @@ function uniqueModels(models: string[]): string[] {
 }
 
 function lockKey(profile: string, providerId: string): string {
-  return `${profile}::${providerId}`
+  return `${providerScopeKey(profile)}::${providerId}`
 }
 
 function refreshCapability(apiMode: ProviderApiMode | undefined): { supported: boolean; reason?: string } {
@@ -84,13 +84,15 @@ async function currentModelsForProvider(
 
   // Fallback to configured/static models when no cache entry exists yet.
   const config = await readConfigYamlForProfile(profile)
-  if (providerId.startsWith('custom:')) {
-    const custom = getCompatibleCustomProviders(config).find(
-      item => `custom:${String(item.name || '').trim().toLowerCase().replace(/ /g, '-')}` === providerId,
-    )
+  const custom = getCompatibleCustomProviders(config).find(
+    item => item.catalog_provider === providerId || `custom:${String(item.name || '').trim().toLowerCase().replace(/ /g, '-')}` === providerId,
+  )
+  if (custom) {
+    const preset = PROVIDER_PRESETS.find(item => item.value === (custom.runtime_provider || providerId))
     const configured = uniqueModels([
       custom?.model || '',
       ...(custom?.models ? Object.keys(custom.models) : []),
+      ...(preset?.models || []),
     ])
     return { models: configured, freeOnly }
   }
@@ -99,20 +101,21 @@ async function currentModelsForProvider(
 }
 
 async function protectedModels(profile: string, providerId: string, preferredModel: string): Promise<string[]> {
-  const config = await readConfigYamlForProfile(profile)
-  const modelSection = config.model
   const defaults: string[] = []
-  if (typeof modelSection === 'object' && modelSection !== null) {
-    const defaultProvider = String(modelSection.provider || '').trim()
-    const defaultModel = String(modelSection.default || '').trim()
-    if (defaultProvider === providerId && defaultModel) defaults.push(defaultModel)
+  for (const name of new Set([profile, ...providerProfiles()])) {
+    const config = await readConfigYamlForProfile(name)
+    const modelSection = config.model
+    if (typeof modelSection === 'object' && modelSection !== null) {
+      const defaultProvider = String(modelSection.provider || '').trim()
+      const defaultModel = String(modelSection.default || '').trim()
+      if (defaultProvider === providerId && defaultModel) defaults.push(defaultModel)
+    }
   }
   if (preferredModel.trim()) defaults.push(preferredModel.trim())
   return uniqueModels(defaults)
 }
 
 async function preferredModelForProvider(profile: string, providerId: string): Promise<string> {
-  if (providerId === OPENCODE_FREE_PROVIDER) return ''
   try {
     return (await getProviderEditorDetail(profile, providerId)).preferred_model
   } catch (error) {
@@ -253,7 +256,6 @@ async function fetchFullRemoteModels(
   target: ProviderCatalogRefreshTarget,
   apiMode: ProviderApiMode | undefined,
 ): Promise<string[]> {
-  if (target.provider === OPENCODE_FREE_PROVIDER) return fetchProviderCatalogRefreshTargetModels(target)
   if (target.credential_kind === 'api_key' || target.credential_kind === 'none') {
     return fetchProviderCatalogForTest(target.base_url, target.api_key, apiMode)
   }

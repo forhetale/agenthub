@@ -2,7 +2,7 @@ import { existsSync, statSync } from 'fs'
 import { readFile } from 'fs/promises'
 import { join } from 'path'
 import {
-  getEkkoLogSource,
+  getHubAgentLogSource,
   listPrimaryAgentLogFiles,
   readPrimaryAgentLogs,
   type AgentLogLevel,
@@ -65,7 +65,7 @@ function displaySize(bytes: number): string {
   return bytes > 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)}MB` : `${(bytes / 1024).toFixed(1)}KB`
 }
 
-function ekkoLogEntry(record: AgentLogRecord): LogEntry {
+function hubAgentLogEntry(record: AgentLogRecord): LogEntry {
   const timestamp = new Date(record.timestamp).toLocaleString('zh-CN', { hour12: false }).replace(/\//g, '-')
   const level = record.level === 'warn' ? 'WARNING' : record.level.toUpperCase()
   const context = [
@@ -78,7 +78,7 @@ function ekkoLogEntry(record: AgentLogRecord): LogEntry {
   return {
     timestamp,
     level,
-    logger: `ekko-agent/${record.category}`,
+    logger: `hub-agent/${record.category}`,
     message,
     raw: JSON.stringify(record),
   }
@@ -102,11 +102,11 @@ export async function list(ctx: any) {
       files.push({ name: 'bridge', size, modified })
     } catch { }
   }
-  const ekkoReader = getEkkoLogSource(requestedProfile(ctx))
-  if (ekkoReader && existsSync(ekkoReader.filePath)) {
+  const hubAgentReader = getHubAgentLogSource(requestedProfile(ctx))
+  if (hubAgentReader && existsSync(hubAgentReader.filePath)) {
     try {
-      const stat = statSync(ekkoReader.filePath)
-      files.push({ name: 'ekko-agent', size: displaySize(stat.size), modified: stat.mtime.toLocaleString() })
+      const stat = statSync(hubAgentReader.filePath)
+      files.push({ name: 'hub-agent', size: displaySize(stat.size), modified: stat.mtime.toLocaleString() })
     } catch { }
   }
   ctx.body = { files }
@@ -119,12 +119,12 @@ export async function read(ctx: any) {
   const session = (ctx.query.session as string) || undefined
   const since = (ctx.query.since as string) || undefined
 
-  if (logName === 'ekko-agent') {
+  if (logName === 'hub-agent' || logName === 'ekko-agent') {
     try {
-      const ekkoReader = getEkkoLogSource(requestedProfile(ctx))
-      if (!ekkoReader) { ctx.body = { entries: [] }; return }
+      const hubAgentReader = getHubAgentLogSource(requestedProfile(ctx))
+      if (!hubAgentReader) { ctx.body = { entries: [] }; return }
       const normalizedLevel = String(level || '').toLowerCase()
-      const records = ekkoReader.query({
+      const records = hubAgentReader.query({
         sessionId: session,
         runId: (ctx.query.run as string) || undefined,
         category: (ctx.query.category as any) || undefined,
@@ -138,7 +138,7 @@ export async function read(ctx: any) {
         after: since,
         limit: Number.isFinite(lines) && lines > 0 ? lines : 100,
       })
-      ctx.body = { entries: records.map(ekkoLogEntry).reverse() }
+      ctx.body = { entries: records.map(hubAgentLogEntry).reverse() }
     } catch (err: any) {
       ctx.status = 500; ctx.body = { error: err.message }
     }

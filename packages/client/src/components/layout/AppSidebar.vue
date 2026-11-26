@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import PageSidebar from "./PageSidebar.vue";
+import SidebarResizeHandle from "./SidebarResizeHandle.vue";
 import { usePageSidebarState } from "@/composables/usePageSidebar";
 import { computed } from "vue";
 import { useRoute, useRouter } from "vue-router";
@@ -8,6 +9,10 @@ import { useAppStore } from "@/stores/hermes/app";
 import RouteLinkItem from "@/components/common/RouteLinkItem.vue";
 import PageSidebarFooter from "@/components/layout/PageSidebarFooter.vue";
 import { isStoredSuperAdmin } from "@/api/client";
+import { usePluginCatalog, pluginNavigation, pluginPageLocation } from '@/composables/usePluginCatalog';
+import PluginNavigationIcon from '@/components/plugins/PluginNavigationIcon.vue';
+const { snapshot: pluginSnapshot } = usePluginCatalog();
+const pluginSettings = computed(() => pluginSnapshot.value.plugins.filter(plugin => plugin.status === 'active').flatMap(plugin => pluginNavigation(plugin, 'settings').map(view => ({ plugin, view }))));
 
 const { t } = useI18n();
 const route = useRoute();
@@ -18,7 +23,6 @@ const selectedKey = computed(() => {
   return route.name as string;
 });
 const isSuperAdmin = computed(() => isStoredSuperAdmin());
-const isVersionPreview = import.meta.env.VITE_HERMES_PREVIEW === "1";
 const isDesktopShell = computed(
   () =>
     (window as typeof window & { hermesDesktop?: { isDesktop?: boolean } })
@@ -55,6 +59,7 @@ function handleSidebarClick(event: MouseEvent) {
     }"
     @click="handleSidebarClick"
   >
+    <SidebarResizeHandle />
     <nav class="sidebar-nav">
       <RouteLinkItem
         class="nav-item"
@@ -80,27 +85,6 @@ function handleSidebarClick(event: MouseEvent) {
           <polyline points="10 9 9 9 8 9" />
         </svg>
         <span>{{ t("sidebar.logs") }}</span>
-      </RouteLinkItem>
-      <RouteLinkItem
-        class="nav-item"
-        :to="{ name: 'hermes.usage' }"
-        :active="selectedKey === 'hermes.usage'"
-      >
-        <svg
-          width="16"
-          height="16"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.5"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        >
-          <rect x="3" y="12" width="4" height="9" rx="1" />
-          <rect x="10" y="7" width="4" height="14" rx="1" />
-          <rect x="17" y="3" width="4" height="18" rx="1" />
-        </svg>
-        <span>{{ t("sidebar.usage") }}</span>
       </RouteLinkItem>
       <RouteLinkItem
         v-if="isSuperAdmin"
@@ -164,35 +148,6 @@ function handleSidebarClick(event: MouseEvent) {
           <path d="M15 3c2 5 2 13 0 18" />
         </svg>
         <span>{{ t("sidebar.browser") }}</span>
-      </RouteLinkItem>
-      <RouteLinkItem
-        v-if="
-          hasRoute('hermes.versionPreview') && isSuperAdmin && !isVersionPreview
-        "
-        class="nav-item"
-        :to="{ name: 'hermes.versionPreview' }"
-        :active="selectedKey === 'hermes.versionPreview'"
-      >
-        <svg
-          width="16"
-          height="16"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.5"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        >
-          <path
-            d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"
-          />
-          <polyline points="7.5 4.21 12 6.81 16.5 4.21" />
-          <polyline points="7.5 19.79 7.5 14.6 3 12" />
-          <polyline points="21 12 16.5 14.6 16.5 19.79" />
-          <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
-          <line x1="12" y1="22.08" x2="12" y2="12" />
-        </svg>
-        <span>{{ t("sidebar.versionPreview") }}</span>
       </RouteLinkItem>
       <RouteLinkItem
         class="nav-item"
@@ -283,6 +238,9 @@ function handleSidebarClick(event: MouseEvent) {
         </svg>
         <span>{{ t("sidebar.settings") }}</span>
       </RouteLinkItem>
+      <RouteLinkItem v-for="{ plugin, view } in pluginSettings" :key="plugin.manifest.id + ':' + view.id" class="nav-item" :to="pluginPageLocation(plugin, view.id)" :active="route.name === 'studio.pluginSettings' && route.params.pluginId === plugin.manifest.id && route.params.viewId === view.id" :title="view.title">
+        <PluginNavigationIcon :icon="view.icon" /><span>{{ view.title }}</span>
+      </RouteLinkItem>
     </nav>
 
     <PageSidebarFooter :collapsed="appStore.sidebarCollapsed" class="sidebar-account-footer" />
@@ -347,11 +305,11 @@ function handleSidebarClick(event: MouseEvent) {
   min-height: 0;
   align-self: stretch;
   margin: 0;
-  background-color: $bg-sidebar-surface;
-  border-inline-end: 1px solid $border-color;
+  background-color: var(--theme-sidebar-bg, $bg-sidebar-surface);
+  border-inline-end: var(--border-width, 1px) solid $border-color;
   display: flex;
   flex-direction: column;
-  padding: 8px 12px 20px;
+  padding: calc(8px * var(--spacing-scale, 1)) calc(12px * var(--spacing-scale, 1)) calc(20px * var(--spacing-scale, 1));
   overflow: hidden;
   flex-shrink: 0;
   transition: width $transition-normal;
@@ -360,9 +318,9 @@ function handleSidebarClick(event: MouseEvent) {
 .sidebar-nav {
   flex: 1;
   display: flex;
-  padding-top: 8px;
+  padding-top: calc(8px * var(--spacing-scale, 1));
   flex-direction: column;
-  gap: 6px;
+  gap: calc(6px * var(--spacing-scale, 1));
   overflow-y: auto;
   min-height: 0;
   scrollbar-width: none;
@@ -375,14 +333,14 @@ function handleSidebarClick(event: MouseEvent) {
 .nav-item {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 12px;
+  gap: calc(10px * var(--spacing-scale, 1));
+  padding: calc(12px * var(--spacing-scale, 1));
   border: none;
   background: none;
   appearance: none;
   text-decoration: none;
   color: $text-secondary;
-  font-size: 14px;
+  font-size: calc(var(--font-size-base, 14px) * 14 / 14);
   border-radius: $radius-sm;
   cursor: pointer;
   transition: all $transition-fast;
@@ -400,7 +358,7 @@ function handleSidebarClick(event: MouseEvent) {
   }
 
   .beta-tag {
-    font-size: 10px;
+    font-size: calc(var(--font-size-base, 14px) * 10 / 14);
     color: $text-muted;
     margin-inline-start: 2px;
   }
@@ -409,29 +367,30 @@ function handleSidebarClick(event: MouseEvent) {
 .sidebar-top-actions {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: calc(6px * var(--spacing-scale, 1));
   margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px solid $border-color;
+  padding-top: calc(8px * var(--spacing-scale, 1));
+  border-top: var(--border-width, 1px) solid $border-color;
 }
 
 .sidebar-return-tab {
   flex: 1;
   min-width: 0;
-  padding: 8px 10px;
-  font-size: 13px;
+  padding: calc(8px * var(--spacing-scale, 1)) calc(10px * var(--spacing-scale, 1));
+  font-size: calc(var(--font-size-base, 14px) * 13 / 14);
 }
 
 .sidebar-account-footer {
-  padding: 10px 0 0;
-  border-top: 1px solid $border-color;
+  padding: calc(10px * var(--spacing-scale, 1)) 0 0;
+  border-top: var(--border-width, 1px) solid $border-color;
 }
 
 // ─── Collapsed sidebar (icon-rail mode) ─────────────────────────
+.sidebar.collapsed .nav-item :deep(.plugin-icon) { display: inline-grid; }
 
 .sidebar.collapsed {
   width: $sidebar-collapsed-width;
-  padding: 8px 8px 12px;
+  padding: calc(8px * var(--spacing-scale, 1)) calc(8px * var(--spacing-scale, 1)) calc(12px * var(--spacing-scale, 1));
   overflow: hidden;
 
   .collapse-btn {
@@ -441,20 +400,20 @@ function handleSidebarClick(event: MouseEvent) {
 
   .sidebar-top-actions {
     flex-direction: column;
-    gap: 6px;
+    gap: calc(6px * var(--spacing-scale, 1));
     margin-top: 8px;
-    padding-top: 8px;
+    padding-top: calc(8px * var(--spacing-scale, 1));
   }
 
   .sidebar-return-tab {
     width: 100%;
     flex: 0 0 auto;
-    padding: 10px 4px;
+    padding: calc(10px * var(--spacing-scale, 1)) calc(4px * var(--spacing-scale, 1));
   }
 
   .nav-item {
     justify-content: center;
-    padding: 10px 4px;
+    padding: calc(10px * var(--spacing-scale, 1)) calc(4px * var(--spacing-scale, 1));
     gap: 0;
 
     span {

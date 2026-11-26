@@ -1,7 +1,7 @@
 # Tool-Boundary Queue Insertion
 
 Date: 2026-08-06
-Status: Implemented; Hermes/Ekko use tool boundaries, Claude/Codex/Pi use immediate interruption
+Status: Implemented; Hermes/Hub Agent use tool boundaries, Claude/Codex/Pi use immediate interruption
 
 ## Decision Summary
 
@@ -19,7 +19,7 @@ The feature must not send `/steer`, `/queue`, or any other Hermes command. It
 must not append the queued text to a tool result, a system reminder, or the
 currently active turn.
 
-Hermes Agent and Ekko Agent provide strict runtime-owned boundaries. The current
+Hermes Agent and Hub Agent provide strict runtime-owned boundaries. The current
 one-shot Claude Code, Codex, and Pi integrations take the smaller immediate
 interruption path: persist the partial response, terminate the current process,
 wait for its streams to close, and start the selected queued message through the
@@ -77,7 +77,7 @@ conversation.
 - Never issue another model request after a strict runtime reaches the selected
   tool boundary.
 - Submit the dequeued message through the normal run path as a new user turn.
-- Support Hermes Agent and Ekko Agent, including their Global Agent chat
+- Support Hermes Agent and Hub Agent, including their Global Agent chat
   surfaces, through one capability-based server contract. Support Claude Code,
   Codex, and Pi through immediate process interruption and native resume.
 - Keep explicit hard stop behavior available while a boundary stop is waiting.
@@ -109,7 +109,7 @@ when `state.isWorking` is true. `dequeueNextQueuedRun()` removes the head and
 passes it back through `handleRun()`. The queued user message therefore already
 has the correct normal-turn execution path.
 
-Natural completion in Hermes Bridge and Ekko Agent handlers dequeues the next
+Natural completion in Hermes Bridge and Hub Agent handlers dequeues the next
 run. `markAbortCompleted()` also dequeues after an explicit abort. The
 implemented coordinator adds the safe request that ends the active turn at a
 tool boundary after the user clicks the insertion arrow.
@@ -127,9 +127,9 @@ Hermes does have a useful internal boundary. Its conversation loop invokes
 Bridge-owned post-tool-batch hook can set the foreground interrupt state after
 `_execute_tool_calls(...)` returns and before the next provider request.
 
-### Ekko Agent
+### Hub Agent
 
-`packages/ekko-agent/src/runtime/runtime.ts` owns the full loop:
+`packages/hub-agent/src/runtime/runtime.ts` owns the full loop:
 
 ```text
 model request -> assistant tool calls -> execute tool calls -> next loop step
@@ -137,7 +137,7 @@ model request -> assistant tool calls -> execute tool calls -> next loop step
 
 The runtime currently receives an external `AbortSignal`, but it has no
 session-scoped method for requesting a graceful boundary stop. Because Studio
-owns Ekko Agent, this method can be added directly without protocol inference.
+owns Hub Agent, this method can be added directly without protocol inference.
 
 ### Claude Code
 
@@ -199,7 +199,7 @@ interface QueueInsertionControl {
   runId?: string
   runMarker?: string
   queueId: string
-  runtime: 'hermes' | 'ekko' | 'claude-code' | 'codex' | 'pi'
+  runtime: 'hermes' | 'hub-agent' | 'claude-code' | 'codex' | 'pi'
   guarantee: QueueInsertionGuarantee
   phase:
     | 'requesting'
@@ -245,14 +245,14 @@ requestBoundaryInterrupt(
 ```
 
 The method name describes the behavior, not the underlying runtime mechanism.
-Hermes, Ekko, and Coding Agent managers implement it independently.
+Hermes, Hub Agent, and Coding Agent managers implement it independently.
 
 ### Queue Trigger
 
 When the insertion arrow is clicked for a normal queued message:
 
 1. Validate that the queue item is a visible user/command item and the active
-   runtime is Hermes, Ekko, Claude Code, Codex, or Pi.
+   runtime is Hermes, Hub Agent, Claude Code, Codex, or Pi.
 2. Promote the selected item to the queue head and emit the authoritative
    `run.queued` snapshot to every page in the session room.
 3. Create `QueueInsertionControl` if the active run has no insertion request.
@@ -289,7 +289,7 @@ For a boundary stop, emit the existing terminal event with explicit metadata:
 }
 ```
 
-For Hermes and Ekko, the old run is not a failure. Any assistant text and
+For Hermes and Hub Agent, the old run is not a failure. Any assistant text and
 completed tool results that existed before the boundary remain in history. The
 one-shot coding-agent adapter uses the existing `run.failed` terminal channel
 with `interrupted: true`, `stop_reason: "queue_insertion"`, and
@@ -388,14 +388,14 @@ performs the immediate stop. If the request wins first, the wrapper consumes
 the latch before the next model request. TypeScript `tool.completed` polling is
 used only for display and persistence, never as the control signal.
 
-### Ekko Agent: Strict Internal Method
+### Hub Agent: Strict Internal Method
 
-Implement the capability in the Ekko package and expose it through a thin
+Implement the capability in the Hub Agent package and expose it through a thin
 Studio adapter:
 
 ```ts
 AgentRuntime.requestBoundaryInterrupt({ sessionId, expectedRunId? })
-GlobalEkkoAgent.requestBoundaryInterrupt({ sessionId, expectedRunId? })
+GlobalHubAgent.requestBoundaryInterrupt({ sessionId, expectedRunId? })
 ```
 
 `AgentRuntime` should own an active-run registry keyed by foreground session and
@@ -406,19 +406,19 @@ run ID. Each entry tracks:
 - the pending boundary generation;
 - whether a boundary result has already been emitted.
 
-The current `toolCalls` array is one batch. Even though Ekko executes its calls
+The current `toolCalls` array is one batch. Even though Hub Agent executes its calls
 sequentially today, a pending boundary is checked after the entire array is
 resolved and before the next `for (step...)` iteration starts. This makes the
-behavior stable if Ekko later adds parallel tool execution.
+behavior stable if Hub Agent later adds parallel tool execution.
 
 At the boundary, return a graceful run result with the runtime-owned finish
 reason `boundary_interrupt`, and emit `run.completed` rather than treating the
 stop as a model or tool failure. If the phase is `model`, abort the internal
 provider request immediately and convert that known internal abort into the
-same graceful boundary result. Queue ownership remains outside Ekko Agent;
-Hermes Studio maps `boundary_interrupt` to its own `queue_insertion` policy.
+same graceful boundary result. Queue ownership remains outside Hub Agent;
+Studio maps `boundary_interrupt` to its own `queue_insertion` policy.
 
-Only the matching foreground run is affected. Detached Ekko subagents remain
+Only the matching foreground run is affected. Detached Hub Agent subagents remain
 running. A foreground `delegate_task` that is part of the current batch is
 allowed to finish like any other foreground tool.
 
@@ -510,7 +510,7 @@ the run as `queue_insertion`.
 | Runtime | Control point | Initial guarantee | Fallback |
 | --- | --- | --- | --- |
 | Hermes Agent | Python Bridge post-tool-batch wrapper | Strict | Disable automatic insertion if the runtime hook is incompatible |
-| Ekko Agent | Internal runtime method before the next model step | Strict | None; fail the capability test in development |
+| Hub Agent | Internal runtime method before the next model step | Strict | None; fail the capability test in development |
 | Claude Code | Current child-process interruption | Immediate, not tool-safe | Future `PreToolUse` + `PostToolBatch` hook boundary |
 | Codex | Current child-process interruption | Immediate, not tool-safe | Future atomic App Server or blocking boundary |
 | Pi | Current RPC-process interruption | Immediate, not tool-safe | Future runtime-owned boundary |
@@ -632,11 +632,11 @@ Do not log queued message text or hook capability tokens.
 
 ## Implementation Phases
 
-### Phase 1: Shared Coordinator And Ekko Agent — Complete
+### Phase 1: Shared Coordinator And Hub Agent — Complete
 
 - Add `QueueInsertionControl` and the runtime adapter contract.
 - Extract safe boundary terminalization/dequeue behavior.
-- Add Ekko's internal `requestBoundaryInterrupt()` implementation.
+- Add Hub Agent's internal `requestBoundaryInterrupt()` implementation.
 - Add socket state and client queue-state rendering.
 
 This establishes the contract in a runtime Studio fully owns.
@@ -700,7 +700,7 @@ or resume semantics.
 - Duplicate and stale Bridge actions are no-ops.
 - Runtime upgrade/callable mismatch disables the feature clearly.
 
-### Ekko Agent Tests
+### Hub Agent Tests
 
 - `requestBoundaryInterrupt()` during the model phase aborts the provider call.
 - The method during a tool batch allows all current calls to finish.
@@ -755,7 +755,7 @@ Chat-chain implementation must run the focused validation set specified in
 
 ## Acceptance Criteria
 
-- On Hermes and Ekko, clicking the arrow during a tool batch causes zero
+- On Hermes and Hub Agent, clicking the arrow during a tool batch causes zero
   subsequent model requests in the old turn.
 - No active tool is cancelled by explicit queue insertion.
 - When no tool is active, the old turn begins stopping immediately.
@@ -774,17 +774,17 @@ Likely implementation touchpoints:
 - `packages/server/src/modules/studio/services/chat-run/types.ts`
 - `packages/server/src/modules/studio/services/chat-run/abort.ts`
 - `packages/server/src/modules/studio/services/chat-run/handle-bridge-run.ts`
-- `packages/server/src/modules/studio/services/chat-run/handle-ekko-agent-run.ts`
+- `packages/server/src/modules/studio/services/chat-run/handle-hub-agent-run.ts`
 - `packages/server/src/modules/hermes/services/bridge/client.ts`
 - `packages/server/src/modules/hermes/services/bridge/python/bridge_server.py`
 - `packages/server/src/modules/hermes/services/bridge/python/bridge_broker.py`
 - `packages/server/src/modules/hermes/services/bridge/python/bridge_pool.py`
-- `packages/ekko-agent/src/runtime/runtime.ts`
-- `packages/server/src/modules/ekko/services/manager.ts`
+- `packages/hub-agent/src/runtime/runtime.ts`
+- `packages/server/src/modules/hub-agent/services/manager.ts`
 - `packages/server/src/modules/coding-agents/runtime/run-manager.ts`
 - `packages/client/src/stores/hermes/chat.ts`
 - queue-related client components and every locale file
-- server, Ekko runtime, Bridge Python, client, and end-to-end tests
+- server, Hub Agent runtime, Bridge Python, client, and end-to-end tests
 
 ## References
 

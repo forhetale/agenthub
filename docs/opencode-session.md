@@ -4,7 +4,7 @@ Studio's Node provider requests send `x-opencode-session` to OpenCode Zen,
 Go, and Free. Custom providers using an `opencode.ai` host are also detected.
 Named OpenCode providers retain this behavior when configured through a proxy.
 
-Ekko derives an opaque key from the runtime conversation context, so turns,
+Hub Agent derives an opaque key from the runtime conversation context, so turns,
 tool loops, retries, and background skill reviews keep the same key. Direct
 model-client callers should pass `metadata.session_id` on each request in a
 conversation. Requests without a session get an independent temporary scope.

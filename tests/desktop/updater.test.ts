@@ -1,8 +1,29 @@
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { isCustomBuildWebUi, isWindowsUpdaterLockError, pendingUpdateDirectories } from '../../packages/desktop/src/main/updater-helpers'
+import {
+  isCustomBuildWebUi,
+  isWindowsUpdaterLockError,
+  pendingUpdateDirectories,
+} from '../../packages/desktop/src/main/updater-helpers'
+import {
+  desktopUpdateChannel,
+  resolveDesktopUpdateSource,
+  validateTestUpdateUrl,
+} from '../../packages/desktop/src/main/updater-source'
+
+const desktopRequire = createRequire(new URL('../../packages/desktop/package.json', import.meta.url))
+
+function resolveDesktopModule(specifier: string): string {
+  try {
+    return desktopRequire.resolve(specifier)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'MODULE_NOT_FOUND') throw error
+    return specifier
+  }
+}
 
 const tempRoots: string[] = []
 
@@ -26,20 +47,30 @@ async function loadUpdater(bundledWebUiVersion: string) {
     quitAndInstall: vi.fn(),
   }
 
-  vi.resetModules()
-  vi.doMock('electron', () => ({
+  const electronMock = () => ({
     app: {
       isPackaged: true,
-      getVersion: () => '0.7.21',
+      getVersion: () => '0.8.32',
       getLocale: () => 'en',
-      getName: () => 'Ekko Studio',
+      getName: () => 'AgentHub',
       getPath: () => webuiRoot,
       getAppPath: () => webuiRoot,
     },
     dialog: { showMessageBox },
     autoUpdater: { on: vi.fn() },
-  }))
-  vi.doMock('electron-updater', () => ({ autoUpdater }))
+  })
+  const electronUpdaterMock = () => ({
+    autoUpdater,
+    CancellationToken: class { cancelled = false; cancel() { this.cancelled = true } },
+  })
+
+  vi.resetModules()
+  for (const id of new Set(['electron', resolveDesktopModule('electron')])) {
+    vi.doMock(id, electronMock)
+  }
+  for (const id of new Set(['electron-updater', resolveDesktopModule('electron-updater')])) {
+    vi.doMock(id, electronUpdaterMock)
+  }
   vi.doMock('../../packages/desktop/src/main/paths', () => ({ defaultWebuiDir: () => webuiRoot }))
 
   const updater = await import('../../packages/desktop/src/main/updater')
@@ -48,8 +79,12 @@ async function loadUpdater(bundledWebUiVersion: string) {
 
 describe('desktop updater custom-build guard', () => {
   afterEach(() => {
-    vi.doUnmock('electron')
-    vi.doUnmock('electron-updater')
+    for (const id of new Set(['electron', resolveDesktopModule('electron')])) {
+      vi.doUnmock(id)
+    }
+    for (const id of new Set(['electron-updater', resolveDesktopModule('electron-updater')])) {
+      vi.doUnmock(id)
+    }
     vi.doUnmock('../../packages/desktop/src/main/paths')
     vi.unstubAllEnvs()
     vi.resetModules()
@@ -57,10 +92,9 @@ describe('desktop updater custom-build guard', () => {
   })
 
   it('detects custom builds from the bundled Web UI package version', () => {
-    expect(isCustomBuildWebUi(createWebUiRoot(JSON.stringify({ version: '0.7.29-agenthub.1' })))).toBe(true)
+    expect(isCustomBuildWebUi(createWebUiRoot(JSON.stringify({ version: '0.8.32-agenthub.1' })))).toBe(true)
     expect(isCustomBuildWebUi(createWebUiRoot(JSON.stringify({ version: '0.7.21-tatin.5' })))).toBe(true)
-    expect(isCustomBuildWebUi(createWebUiRoot(JSON.stringify({ version: '0.7.29' })))).toBe(false)
-    expect(isCustomBuildWebUi(createWebUiRoot(JSON.stringify({ version: '0.7.21' })))).toBe(false)
+    expect(isCustomBuildWebUi(createWebUiRoot(JSON.stringify({ version: '0.8.32' })))).toBe(false)
     expect(isCustomBuildWebUi(createWebUiRoot('not json'))).toBe(false)
     expect(isCustomBuildWebUi(createWebUiRoot(null))).toBe(false)
     // In development the desktop app bundles the repository root as its Web UI.
@@ -68,7 +102,7 @@ describe('desktop updater custom-build guard', () => {
   })
 
   it('refuses to download or install upstream desktop updates on a custom build', async () => {
-    const { updater, autoUpdater } = await loadUpdater('0.7.29-agenthub.1')
+    const { updater, autoUpdater } = await loadUpdater('0.8.32-agenthub.1')
 
     expect(() => updater.downloadDesktopUpdate()).toThrow('Custom builds do not download upstream desktop updates')
     await expect(updater.installDesktopUpdate()).resolves.toMatchObject({ status: updater.getDesktopUpdateState().status })
@@ -89,7 +123,7 @@ describe('desktop updater custom-build guard', () => {
 
   it('never contacts the upstream update feed from a custom build', async () => {
     vi.stubEnv('HERMES_DESKTOP_ENABLE_AUTO_UPDATE', '')
-    const { updater, autoUpdater, showMessageBox } = await loadUpdater('0.7.29-agenthub.1')
+    const { updater, autoUpdater, showMessageBox } = await loadUpdater('0.8.32-agenthub.1')
 
     updater.initAutoUpdater()
     await updater.checkForDesktopUpdates(false)
@@ -105,67 +139,65 @@ describe('desktop updater custom-build guard', () => {
     }))
   })
 
-  it('keeps checking the update feed for upstream builds', async () => {
+  it('keeps checking the non-commercial feed for non-custom builds', async () => {
     vi.stubEnv('HERMES_DESKTOP_ENABLE_AUTO_UPDATE', '')
-    const { updater, autoUpdater } = await loadUpdater('0.7.21')
+    const { updater, autoUpdater } = await loadUpdater('0.8.32')
 
     updater.initAutoUpdater()
 
     await vi.waitFor(() => expect(autoUpdater.checkForUpdates).toHaveBeenCalledOnce())
-    expect(autoUpdater.setFeedURL).toHaveBeenCalledWith({ provider: 'generic', url: 'https://download.ekkolearnai.com/latest' })
+    expect(autoUpdater.setFeedURL).toHaveBeenCalledWith({
+      provider: 'generic',
+      url: 'https://github.com/forhetale/agenthub/releases/latest/download',
+      channel: desktopUpdateChannel(),
+    })
   })
 })
 
-describe('desktop updater helpers', () => {
-  it('detects Squirrel locked-exe update failures', async () => {
+describe('desktop updater helpers and source policy', () => {
+  it('resolves non-commercial release feeds and rejects production URLs as test feeds', () => {
+    expect(resolveDesktopUpdateSource({ name: 'hermes-studio', version: '0.8.32' })).toEqual({
+      channel: 'stable',
+      url: 'https://github.com/forhetale/agenthub/releases/latest/download',
+      fallbackUrl: 'https://github.com/forhetale/agenthub/releases/latest/download',
+    })
+    expect(() => validateTestUpdateUrl('https://github.com/forhetale/agenthub/releases/latest/download')).toThrow()
+    expect(() => validateTestUpdateUrl('https://example.com/feed/latest.yml')).toThrow()
+    expect(validateTestUpdateUrl('https://example.com/test-feed')).toBe('https://example.com/test-feed/')
+  })
+
+  it('detects Squirrel locked-exe update failures', () => {
     expect(isWindowsUpdaterLockError(new Error('Failed to uninstall old application files. Please try running the installer again.: 2'))).toBe(true)
     expect(isWindowsUpdaterLockError(new Error('Squirrel update failed with code 2'))).toBe(true)
     expect(isWindowsUpdaterLockError(new Error('network timeout'))).toBe(false)
   })
 
-  it('includes local and roaming pending update cache directories', async () => {
+  it('includes local and roaming pending update cache directories', () => {
     const local = 'C:\\Users\\A\\AppData\\Local'
     const roaming = 'C:\\Users\\A\\AppData\\Roaming'
     expect(pendingUpdateDirectories({
       appDataPath: roaming,
       localAppData: local,
-      appName: 'Ekko Studio',
+      appName: 'AgentHub',
     })).toEqual(expect.arrayContaining([
-      join(local, 'Ekko Studio-updater', 'pending'),
-      join(local, 'ekko-studio-updater', 'pending'),
+      join(local, 'AgentHub-updater', 'pending'),
+      join(local, 'agenthub-updater', 'pending'),
       join(local, 'Hermes Studio-updater', 'pending'),
       join(local, 'hermes-studio-updater', 'pending'),
       join(roaming, 'hermes-studio-updater', 'pending'),
     ]))
   })
 
-  it('checks on startup and from the tray without forcing an update', () => {
+  it('checks on startup without forcing auto-download or auto-install', () => {
     const updaterSource = readFileSync(resolve('packages/desktop/src/main/updater.ts'), 'utf-8')
     const mainSource = readFileSync(resolve('packages/desktop/src/main/index.ts'), 'utf-8')
 
     expect(mainSource).toContain('checkForDesktopUpdates(true)')
     expect(updaterSource).toContain('checkForDesktopUpdates(false)')
     expect(updaterSource).toContain('autoUpdater.autoDownload = false')
-    expect(updaterSource).toContain('autoUpdater.autoInstallOnAppQuit = true')
+    expect(updaterSource).toContain('autoUpdater.autoInstallOnAppQuit = false')
     expect(updaterSource).toContain("buttons: [t('update.download'), t('update.later')]")
     expect(updaterSource).toContain('if (response === 0) downloadDesktopUpdate()')
     expect(updaterSource).not.toContain('setInterval(')
-  })
-
-  it('gracefully stops the current app before starting a downloaded update', () => {
-    const updaterSource = readFileSync(resolve('packages/desktop/src/main/updater.ts'), 'utf-8')
-    const mainSource = readFileSync(resolve('packages/desktop/src/main/index.ts'), 'utf-8')
-
-    expect(mainSource).toContain('async function prepareAppShutdown(): Promise<void>')
-    expect(mainSource).toContain('await stopWebUiServer().catch(() => undefined)')
-    expect(mainSource).toContain('beforeQuitAndInstall: prepareAppShutdown,')
-    expect(mainSource).toContain('try {\n      await prepareAppShutdown()\n    } finally {\n      appLifecycle.finalizeExit(0)')
-
-    const prepareCurrentInstance = updaterSource.indexOf('await options.beforeQuitAndInstall?.()')
-    const stopOtherInstances = updaterSource.indexOf('await stopOtherWindowsAppInstances()', prepareCurrentInstance)
-    const startInstaller = updaterSource.indexOf('autoUpdater.quitAndInstall()', stopOtherInstances)
-    expect(prepareCurrentInstance).toBeGreaterThan(-1)
-    expect(stopOtherInstances).toBeGreaterThan(prepareCurrentInstance)
-    expect(startInstaller).toBeGreaterThan(stopOtherInstances)
   })
 })

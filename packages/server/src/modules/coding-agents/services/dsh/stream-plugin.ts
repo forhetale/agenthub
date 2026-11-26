@@ -1,10 +1,10 @@
-export const DSH_STREAM_METHOD = '_ekko/assistant_stream'
-export const DSH_USAGE_METHOD = '_ekko/model_usage'
+export const DSH_STREAM_METHOD = '_agenthub/assistant_stream'
+export const DSH_USAGE_METHOD = '_agenthub/model_usage'
 
 /** Loaded only in Studio's private ACP profile, never in the user's DSH install. */
 export const DSH_STREAM_PLUGIN = `
 import { randomUUID } from 'node:crypto'
-export const name = 'ekko-studio-assistant-stream'
+export const name = 'agenthub-assistant-stream'
 export function apply(ctx) {
   // Includes compaction and child model calls, with the same disjoint buckets
   // as DSH's TokenUsage contract. Never forward prompts, content or credentials.

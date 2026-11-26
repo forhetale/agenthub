@@ -1,8 +1,12 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-const PRIMARY_FEED = 'https://download.ekkolearnai.com/latest'
-const FALLBACK_FEED = 'https://github.com/EKKOLearnAI/ekko-studio/releases/latest/download'
+const PRIMARY_FEED = 'https://github.com/forhetale/agenthub/releases/latest/download'
+const FALLBACK_FEED = 'https://github.com/forhetale/agenthub/releases/latest/download'
+
+export function desktopUpdateChannel(platform = process.platform, arch = process.arch): string {
+  return platform === 'win32' && arch === 'arm64' ? 'latest-arm64' : 'latest'
+}
 
 export type DesktopUpdateSource =
   | { channel: 'stable'; url: string; fallbackUrl: string }
@@ -21,8 +25,7 @@ export function validateTestUpdateUrl(value: unknown): string {
   if (path.endsWith('.yml') || path.endsWith('.yaml')) {
     throw new Error('Use the feed directory URL, not the update manifest URL')
   }
-  if ((url.hostname === 'download.ekkolearnai.com' && (!path || path === '/latest' || path.startsWith('/latest/')))
-    || (url.hostname === 'github.com' && path.startsWith('/ekkolearnai/ekko-studio/releases'))) {
+  if (url.hostname === 'github.com' && path.startsWith('/forhetale/agenthub/releases')) {
     throw new Error('The production update source cannot be used for test builds')
   }
   url.pathname = `${url.pathname.replace(/\/+$/, '')}/`

@@ -42,5 +42,5 @@ export interface StudioAgentLogDependencies {
     session?: string,
     since?: string,
   ): Promise<string>
-  getEkkoLogSource(profile: string): StructuredAgentLogSource | null
+  getHubAgentLogSource(profile: string): StructuredAgentLogSource | null
 }

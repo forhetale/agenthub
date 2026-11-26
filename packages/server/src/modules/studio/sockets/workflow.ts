@@ -1,5 +1,8 @@
-import { publishAppState, stateEvent } from '../services/webhooks/app-event-state'
+import type { PendingWorkflowApprovals } from '../../../../../shared/pending-interactions'
+import { AccountPendingInbox, isAccountPendingInbox } from './account-pending-inbox'
+import { registerAppEventState, publishAppState, stateEvent } from '../services/webhooks/app-event-state'
 import { publishDomainEvent } from '../services/webhooks/domain-events'
+import { publishPluginObservation } from '../services/plugins/event-source'
 import type { Server, Socket } from 'socket.io'
 import { authenticateUserToken, isAuthEnabled, type AuthenticatedUser } from '../public/auth'
 import { listUserProfiles } from '../repositories/users-store'
@@ -63,11 +66,19 @@ export class WorkflowSocketServer {
   private readonly nsp: ReturnType<Server['of']>
   private readonly manager: WorkflowManager
   private readonly removeStatusListener: () => void
+  private readonly removeAppState: () => void
+  private readonly approvalInbox = new AccountPendingInbox<PendingWorkflowApprovals>()
+  private readonly workflowsWithApprovals = new Set<string>()
   private readonly notifiedRuns = new Set<string>()
+  private readonly observedRunTransitions = new Set<string>()
 
   constructor(io: Server, manager: WorkflowManager = getWorkflowManager()) {
     this.manager = manager
     this.nsp = io.of(WORKFLOW_NAMESPACE)
+    this.removeAppState = registerAppEventState('workflow', (user, profile) => this.manager.listRuntimeStatuses()
+      .filter(status => ['queued', 'running', 'pending_approval'].includes(status.status)
+        && (this.manager.get(status.workflowId)?.profile || 'default') === profile && canAccessProfile(user, profile))
+      .map(status => this.appState(this.statusWithEvidence(status))))
     this.removeStatusListener = this.manager.onRuntimeStatus(status => this.emitRuntimeStatus(status))
   }
 
@@ -79,6 +90,7 @@ export class WorkflowSocketServer {
 
   close(): void {
     this.removeStatusListener()
+    this.removeAppState()
   }
 
   private async authMiddleware(socket: Socket, next: (err?: Error) => void): Promise<void> {
@@ -105,6 +117,16 @@ export class WorkflowSocketServer {
   }
 
   private onConnection(socket: Socket): void {
+    if (isAccountPendingInbox(socket)) {
+      this.approvalInbox.attach(socket, user => this.manager.listRuntimeStatuses().flatMap(status => {
+        if (!status.pendingApprovals.length) return []
+        const pending = this.approvalStatus(status)
+        if (!pending || !canAccessProfile(user, pending.profile)) return []
+        this.workflowsWithApprovals.add(status.workflowId)
+        return [pending]
+      }))
+      return
+    }
     socket.on('workflows.list', (request: WorkflowListRequest | Ack<{ workflows: WorkflowRecord[] }> | undefined, ack?: Ack<{ workflows: WorkflowRecord[] }>) => {
       const callback = typeof request === 'function' ? request : ack
       const payload = typeof request === 'function' ? {} : request || {}
@@ -202,10 +224,35 @@ export class WorkflowSocketServer {
           node_sessions: snapshot.run.node_sessions.map(node => ({ session_id: node.session_id, profile: node.profile, status: node.status })) } : null } })
   }
 
+  private approvalStatus(status: WorkflowRuntimeStatus): PendingWorkflowApprovals | undefined {
+    const workflow = this.manager.get(status.workflowId)
+    if (!workflow) return
+    return {
+      workflowId: workflow.id, title: workflow.name, profile: workflow.profile || 'default',
+      runId: status.runId, pendingApprovals: status.pendingApprovals,
+    }
+  }
+
   private emitRuntimeStatus(status: WorkflowRuntimeStatus): void {
+    // Also follow workflows created after the Studio shell connected.
+    if (status.pendingApprovals.length || this.workflowsWithApprovals.delete(status.workflowId)) {
+      if (status.pendingApprovals.length) this.workflowsWithApprovals.add(status.workflowId)
+      const pending = this.approvalStatus(status)
+      if (pending) this.approvalInbox.publish(pending, user => canAccessProfile(user, pending.profile))
+    }
     try {
       const snapshot = this.statusWithEvidence(status)
       publishAppState(this.appState(snapshot))
+      if (status.runId && snapshot.run?.status === status.status && ['running', 'canceled'].includes(status.status)) {
+        const key = `${status.runId}:${status.status}`
+        if (!this.observedRunTransitions.has(key)) {
+          this.observedRunTransitions.add(key)
+          if (this.observedRunTransitions.size > 2000) this.observedRunTransitions.delete(this.observedRunTransitions.values().next().value!)
+          const event = this.appState(snapshot)
+          publishPluginObservation(status.status === 'running' ? 'workflow.run.started' : 'workflow.run.stopped',
+            event.profile, 'workflow', event.subject, event.payload)
+        }
+      }
       this.nsp.to(this.workflowRoom(status.workflowId)).emit('workflow.status.updated', snapshot)
       if (!status.runId || !snapshot.run || !['completed', 'failed'].includes(status.status)
         || snapshot.run.status !== status.status || this.notifiedRuns.has(status.runId)) return

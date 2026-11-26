@@ -1,15 +1,15 @@
 # 桌面端真机更新测试
 
-使用独立的公开 GitHub 测试仓库和两份测试安装包，完整验证 A → B 的下载、取消、校验、安装和重启。测试工作流自动上传到 `EKKOLearnAI/ekko-studio-update-test` 的预发布 Release，同时保留 Actions 附件。正式打包工作流、正式 Release 和正式更新源均不变。
+使用独立的公开 GitHub 测试仓库和两份测试安装包，完整验证 A → B 的下载、取消、校验、安装和重启。测试工作流自动上传到 `forhetale/agenthub-update-test` 的预发布 Release，同时保留 Actions 附件。正式打包工作流、正式 Release 和正式更新源均不变。
 
 ## 1. 一次性配置上传权限
 
-测试仓库已经提供 HTTPS 文件下载，无需搭建服务器或填写更新链接。GitHub 默认 `GITHUB_TOKEN` 只授权当前仓库，因此跨仓库上传需在**源仓库** `EKKOLearnAI/ekko-studio` 配置专用 Actions secret：
+测试仓库已经提供 HTTPS 文件下载，无需搭建服务器或填写更新链接。GitHub 默认 `GITHUB_TOKEN` 只授权当前仓库，因此跨仓库上传需在**源仓库** `forhetale/agenthub` 配置专用 Actions secret：
 
 1. 在 [GitHub fine-grained tokens](https://github.com/settings/personal-access-tokens/new) 创建 token，设置合适的过期时间。
-2. Resource owner 选择 `EKKOLearnAI`，Repository access 选择 **Only select repositories**，只勾选 `ekko-studio-update-test`。
+2. Resource owner 选择 `forhetale`，Repository access 选择 **Only select repositories**，只勾选 `agenthub-update-test`。
 3. Repository permissions 中设置 **Contents: Read and write**；Metadata 自动为只读。不需要给源仓库写权限。
-4. 打开 [源仓库 Actions secrets](https://github.com/EKKOLearnAI/ekko-studio/settings/secrets/actions/new)，Name 填 `DESKTOP_UPDATE_TEST_TOKEN`，Secret 填新 token。不要把 token 写进代码、日志或聊天。
+4. 打开 [源仓库 Actions secrets](https://github.com/forhetale/agenthub/settings/secrets/actions/new)，Name 填 `DESKTOP_UPDATE_TEST_TOKEN`，Secret 填新 token。不要把 token 写进代码、日志或聊天。
 
 工作流只在上传预检和上传步骤注入此 token，内置 token 保持 `contents: read`。缺少 secret 会在构建 Web UI/签名安装包之前失败。预检验证认证和仓库可访问性，真正的写权限由上传操作验证；过期或权限不足时修复 secret 后重试。
 
@@ -17,19 +17,20 @@
 
 | 目标 | 更新目录 | 清单 |
 | --- | --- | --- |
-| macOS Apple Silicon | `https://github.com/EKKOLearnAI/ekko-studio-update-test/releases/download/update-test-darwin-arm64/` | `latest-mac.yml` |
-| macOS Intel | `https://github.com/EKKOLearnAI/ekko-studio-update-test/releases/download/update-test-darwin-x64/` | `latest-mac.yml` |
-| Windows x64 | `https://github.com/EKKOLearnAI/ekko-studio-update-test/releases/download/update-test-win32-x64/` | `latest.yml` |
-| Linux x64 | `https://github.com/EKKOLearnAI/ekko-studio-update-test/releases/download/update-test-linux-x64/` | `latest-linux.yml` |
-| Linux arm64 | `https://github.com/EKKOLearnAI/ekko-studio-update-test/releases/download/update-test-linux-arm64/` | `latest-linux-arm64.yml` |
+| macOS Apple Silicon | `https://github.com/forhetale/agenthub-update-test/releases/download/update-test-darwin-arm64/` | `latest-mac.yml` |
+| macOS Intel | `https://github.com/forhetale/agenthub-update-test/releases/download/update-test-darwin-x64/` | `latest-mac.yml` |
+| Windows x64 | `https://github.com/forhetale/agenthub-update-test/releases/download/update-test-win32-x64/` | `latest.yml` |
+| Windows ARM64 | `https://github.com/forhetale/agenthub-update-test/releases/download/update-test-win32-arm64/` | `latest-arm64.yml` |
+| Linux x64 | `https://github.com/forhetale/agenthub-update-test/releases/download/update-test-linux-x64/` | `latest-linux.yml` |
+| Linux arm64 | `https://github.com/forhetale/agenthub-update-test/releases/download/update-test-linux-arm64/` | `latest-linux-arm64.yml` |
 
-目录地址由工作流写进测试包。浏览下载页请打开[测试仓库 Releases](https://github.com/EKKOLearnAI/ekko-studio-update-test/releases)，目录地址本身不是网页。五个目标独立发布，避免不同架构的清单互相覆盖；不要把这些测试 Release 改为正式版、latest 或 immutable。默认 token 的权限范围见 [GitHub 认证文档](https://docs.github.com/en/actions/security-for-github-actions/security-guides/automatic-token-authentication)。
+目录地址由工作流写进测试包。浏览下载页请打开[测试仓库 Releases](https://github.com/forhetale/agenthub-update-test/releases)，目录地址本身不是网页。五个目标独立发布，避免不同架构的清单互相覆盖；不要把这些测试 Release 改为正式版、latest 或 immutable。默认 token 的权限范围见 [GitHub 认证文档](https://docs.github.com/en/actions/security-for-github-actions/security-guides/automatic-token-authentication)。
 
 ## 2. 构建 A 和 B
 
 在 GitHub Actions 运行 **Desktop Update Test Build**（`desktop-update-test.yml`），选择包含新更新逻辑的分支，填写：
 
-- `target`：测试机器的系统和架构：`darwin-arm64`、`darwin-x64`、`win32-x64`、`linux-x64`、`linux-arm64`。
+- `target`：测试机器的系统和架构：`darwin-arm64`、`darwin-x64`、`win32-x64`、`win32-arm64`、`linux-x64`、`linux-arm64`。
 - `version`：纯数字 `X.Y.Z`，例如 A=`0.7.900`、B=`0.7.901`。必须 B > A，不使用 `-beta` 等预发布后缀。
 - `runtime_release_tag`：可选的现有运行时版本，A 和 B 保持一致，以便只测试桌面更新。
 
@@ -47,6 +48,9 @@ Linux 两种架构均使用 AppImage 验证应用内更新，分别使用原生 
 
 ## 3. 在测试机器完成 A → B
 
+Windows ARM64 使用 `win32-arm64` 目标；其更新清单为 `latest-arm64.yml`，
+与 Windows x64 的 `latest.yml` 分开。两种架构分别构建、安装和验收。
+
 测试包保留正式应用身份，可能覆盖同机正式安装、共用本地数据和命令入口。使用专用测试机、虚拟机快照或独立系统用户，不要在日常工作的正式安装上试升级。
 
 1. 构建 A，确认工作流上传成功；从测试 Release 下载 A 的 DMG/EXE 并正常安装应用。Linux 则下载对应架构的 AppImage，按下文赋予执行权限并启动。
@@ -60,8 +64,8 @@ Linux 两种架构均使用 AppImage 验证应用内更新，分别使用原生 
 Linux 请将 AppImage 放在当前用户有写权限的目录，并以普通用户从 AppImage 启动，例如 x64：
 
 ```sh
-chmod +x Ekko.Studio-0.7.900-x86_64.AppImage
-./Ekko.Studio-0.7.900-x86_64.AppImage
+chmod +x AgentHub-0.7.900-x86_64.AppImage
+./AgentHub-0.7.900-x86_64.AppImage
 ```
 
 x64 的文件名使用 `x86_64`，arm64 使用 `arm64`。需要安装发行版提供的 FUSE 2 兼容库时，按系统提示安装（Ubuntu 22.04 为 `libfuse2`）。AppImage 启动器会设置更新器所需的 `APPIMAGE` 环境变量；直接运行解压后的程序或改用 DEB 不属于这个测试链路。AppImage 更新会替换原文件，文件名带版本时可能变成 B 的文件名；检查重启后的版本和桌面快捷方式仍能正确启动。下载完成后的“稍后”、普通退出和“重启更新”均需在测试机验证。
@@ -77,7 +81,7 @@ x64 的文件名使用 `x86_64`，arm64 使用 `arm64`。需要安装发行版�
 ```sh
 DESKTOP_UPDATE_TEST_TARGET=darwin-arm64 \
 DESKTOP_UPDATE_TEST_VERSION=0.7.900 \
-DESKTOP_UPDATE_TEST_URL=https://github.com/EKKOLearnAI/ekko-studio-update-test/releases/download/update-test-darwin-arm64/ \
+DESKTOP_UPDATE_TEST_URL=https://github.com/forhetale/agenthub-update-test/releases/download/update-test-darwin-arm64/ \
 npm --prefix packages/desktop run dist:update-test
 ```
 
@@ -85,10 +89,4 @@ npm --prefix packages/desktop run dist:update-test
 
 本地构建不会自动上传。需要上传时，先用 `gh auth login` 登录具有测试仓库写权限的账号，再设置相同 target/version 运行 `node packages/desktop/scripts/publish-update-test.mjs`；`--check` 只检查配置和仓库访问。本地构建仍可指定其他独立 HTTPS 目录，但 GitHub 上传命令只接受上表的固定地址。
 
-```sh
-npm ci --prefix packages/desktop --include=dev
-npm --prefix packages/desktop run test:updater
-npm run test -- tests/desktop/updater-source.test.ts tests/desktop/updater-download.test.ts
-```
-
-自动化验证覆盖配置隔离、真实 HTTP 下载/取消/重试、AppImage 内嵌 blockmap 差分下载、包内容校验、跨仓库上传顺序和失败恢复；不能代替 macOS/Windows/Linux 测试机上的实际覆盖安装和重启。
+旧版自动化测试集已清空，`test:updater` 及其工作流调用已删除。新增更新功能时再补对应的小范围测试；打包仍校验配置隔离、签名和产物，发布前仍需在 macOS/Windows/Linux 测试机上验证实际覆盖安装和重启。

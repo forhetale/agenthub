@@ -8,14 +8,20 @@ import { useI18n } from 'vue-i18n'
 import AuxiliaryModelsPanel from '@/components/hermes/models/AuxiliaryModelsPanel.vue'
 import CombinationModelsPanel from '@/components/hermes/models/CombinationModelsPanel.vue'
 import JevSettingsPanel from '@/components/hermes/models/JevSettingsPanel.vue'
+import ModelApiPanel from '@/components/hermes/models/ModelApiPanel.vue'
 import ProvidersPanel from '@/components/hermes/models/ProvidersPanel.vue'
 import ProviderFormModal from '@/components/hermes/models/ProviderFormModal.vue'
+import ProviderImportModal from '@/components/hermes/models/ProviderImportModal.vue'
+import { pendingProviderImport, type ProviderImport } from '@/utils/provider-import'
+import ProviderVisibilityModal from '@/components/hermes/models/ProviderVisibilityModal.vue'
+import ModelCatalogNotice from '@/components/hermes/models/ModelCatalogNotice.vue'
 import VoiceSettings from '@/components/hermes/settings/VoiceSettings.vue'
 import { useModelsStore } from '@/stores/hermes/models'
 import { useAppStore } from '@/stores/hermes/app'
 import { useProfilesStore } from '@/stores/hermes/profiles'
 import { fetchProfiles, type HermesProfile } from '@/api/hermes/profiles'
 import { checkCopilotToken } from '@/api/hermes/copilot-auth'
+import { provideModelCatalogNotice } from '@/composables/useModelCatalogNotice'
 
 const { t } = useI18n()
 const modelsStore = useModelsStore()
@@ -25,12 +31,51 @@ const message = useMessage()
 const route = useRoute()
 const router = useRouter()
 const showModal = ref(false)
+const importDraft = ref<ProviderImport | null>(null)
+const importRevision = ref(0)
+watch(pendingProviderImport, pending => {
+  if (!pending) return
+  pendingProviderImport.value = null
+  if (pending.invalid) message.error(t('models.importInvalid'))
+  else if (pending.draft) {
+    importRevision.value++
+    importDraft.value = pending.draft
+  }
+}, { immediate: true })
+
+async function handleImportSaved(profile: string) {
+  importDraft.value = null
+  await router.replace({ query: { ...route.query, modelProfile: profile } })
+  await modelsStore.fetchProviders()
+  await appStore.reloadModels({ preserveSelection: true })
+}
+const showLargeCatalogNotice = ref(false)
+const visibilityProviderId = ref('')
+const largeCatalogProviders = computed(() => modelsStore.providers.filter(provider => provider.models.length > 100))
+const visibilityProvider = computed(() => {
+  const providerId = visibilityProviderId.value
+  return modelsStore.providers.find(provider => provider.provider === providerId)
+})
 const profiles = ref<HermesProfile[]>([])
 const selectedProfile = ref(typeof route.query.modelProfile === 'string' ? route.query.modelProfile : profilesStore.activeProfileName || 'default')
 const profileOptions = computed(() => profiles.value.map(profile => ({ label: profile.name, value: profile.name })))
 const profileLoading = ref(true)
 let profilesReady = false
 let loadId = 0
+let catalogLoaded = false
+const catalogBusy = provideModelCatalogNotice(checkLargeCatalog)
+
+function checkLargeCatalog() {
+  if (catalogLoaded) showLargeCatalogNotice.value = largeCatalogProviders.value.length > 0
+}
+
+watch(() => modelsStore.providers, () => {
+  if (!profileLoading.value) {
+    catalogLoaded = true
+    checkLargeCatalog()
+  }
+})
+watch(() => [modelsStore.defaultModel, modelsStore.defaultProvider], checkLargeCatalog)
 
 function handleProfileUpdate(profile: string) {
   if (profileLoading.value || !profiles.value.some(item => item.name === profile)) return
@@ -44,9 +89,9 @@ watch(() => route.query.modelProfile, profile => {
   showModal.value = false
   void loadProvidersForProfile()
 })
-type ModelsTab = 'general' | 'auxiliary' | 'combination' | 'stt' | 'tts' | 'jev'
+type ModelsTab = 'general' | 'auxiliary' | 'combination' | 'stt' | 'tts' | 'jev' | 'api'
 
-const MODELS_TABS = new Set<ModelsTab>(['general', 'auxiliary', 'combination', 'stt', 'tts', 'jev'])
+const MODELS_TABS = new Set<ModelsTab>(['general', 'auxiliary', 'combination', 'stt', 'tts', 'jev', 'api'])
 const activeTab = ref<ModelsTab>('general')
 
 function normalizeTab(value: unknown): ModelsTab {
@@ -68,13 +113,27 @@ function handleTabUpdate(tab: ModelsTab) {
 async function loadProvidersForProfile() {
   const currentLoad = ++loadId
   profileLoading.value = true
+  catalogLoaded = false
+  showLargeCatalogNotice.value = false
+  visibilityProviderId.value = ''
   try {
     try { await checkCopilotToken() } catch { /* ignore */ }
     if (currentLoad !== loadId) return
+    const previousProviders = modelsStore.providers
     await modelsStore.fetchProviders()
+    // Do not warn using another Profile's stale catalog after a failed load.
+    if (currentLoad === loadId && modelsStore.providers !== previousProviders) {
+      catalogLoaded = true
+      checkLargeCatalog()
+    }
   } finally {
     if (currentLoad === loadId) profileLoading.value = false
   }
+}
+
+function manageLargeCatalog(provider: string) {
+  showLargeCatalogNotice.value = false
+  visibilityProviderId.value = provider
 }
 
 onMounted(async () => {
@@ -92,24 +151,7 @@ onMounted(async () => {
   }
 })
 
-let catalogPoll: ReturnType<typeof setInterval> | undefined
-let pollingCatalog = false
-onMounted(() => {
-  catalogPoll = setInterval(async () => {
-    const freeProvider = modelsStore.providers.find(group => group.provider === 'opencode-free')
-    if (profileLoading.value || pollingCatalog || !freeProvider || !['loading', 'error'].includes(freeProvider.catalog_status || '')) return
-    pollingCatalog = true
-    try {
-      await modelsStore.fetchProviders({ background: true })
-      if (modelsStore.providers.find(group => group.provider === 'opencode-free')?.catalog_status === 'ready') {
-        await appStore.reloadModels({ preserveSelection: true })
-      }
-    } finally {
-      pollingCatalog = false
-    }
-  }, 3000)
-})
-onUnmounted(() => { loadId++; if (catalogPoll) clearInterval(catalogPoll) })
+onUnmounted(() => { loadId++ })
 
 function openCreateModal() {
   showModal.value = true
@@ -160,7 +202,7 @@ async function handleRefreshModelCache() {
 </script>
 
 <template>
-  <PageLoading :show="profileLoading || modelsStore.refreshingModelCache || (modelsStore.loading && modelsStore.providers.length === 0)" class="models-view">
+  <PageLoading :show="activeTab !== 'jev' && (profileLoading || modelsStore.refreshingModelCache || (modelsStore.loading && modelsStore.providers.length === 0))" class="models-view">
     <PageHeader>
     <header class="page-header">
       <div class="models-header-left">
@@ -168,6 +210,7 @@ async function handleRefreshModelCache() {
       </div>
       <div class="header-actions">
         <NSelect
+          v-if="activeTab !== 'api' && activeTab !== 'jev'"
           class="models-profile-select"
           data-testid="models-profile-select"
           :value="selectedProfile"
@@ -212,14 +255,17 @@ async function handleRefreshModelCache() {
     </PageHeader>
 
     <div class="models-content">
-      <div v-if="profileLoading" class="models-profile-loading" role="status" aria-live="polite">
+      <div v-if="profileLoading && activeTab !== 'jev'" class="models-profile-loading" role="status" aria-live="polite">
 
       </div>
-      <NTabs v-else-if="selectedProfile" :key="selectedProfile" v-model:value="activeTab" type="line" animated @update:value="handleTabUpdate">
+      <NTabs v-else-if="selectedProfile || activeTab === 'api' || activeTab === 'jev'" :key="activeTab === 'api' || activeTab === 'jev' ? activeTab : selectedProfile" v-model:value="activeTab" type="line" animated @update:value="handleTabUpdate">
         <NTabPane name="general" :tab="t('models.generalTitle')">
           <div>
             <ProvidersPanel />
           </div>
+        </NTabPane>
+        <NTabPane name="api" :tab="t('modelApi.title')">
+          <ModelApiPanel />
         </NTabPane>
         <NTabPane name="auxiliary" :tab="t('models.auxiliaryTitle')">
           <AuxiliaryModelsPanel />
@@ -228,7 +274,7 @@ async function handleRefreshModelCache() {
           <CombinationModelsPanel />
         </NTabPane>
         <NTabPane name="jev" tab="JEV">
-          <JevSettingsPanel :profile="selectedProfile" />
+          <JevSettingsPanel />
         </NTabPane>
         <NTabPane name="stt" :tab="t('settings.voice.sttProvidersTitle')">
           <VoiceSettings :key="`stt-${selectedProfile}`" kind="stt" />
@@ -243,6 +289,22 @@ async function handleRefreshModelCache() {
       v-if="showModal && !profileLoading"
       @close="handleModalClose"
       @saved="handleSaved"
+    />
+    <ProviderImportModal v-if="importDraft && !profileLoading && selectedProfile"
+      :key="importRevision"
+      :draft="importDraft" :profile="selectedProfile" :profiles="profiles"
+      @close="importDraft = null" @saved="handleImportSaved" />
+    <ModelCatalogNotice
+      v-if="activeTab !== 'api' && largeCatalogProviders.length > 0 && !profileLoading && !modelsStore.loading && !modelsStore.refreshingModelCache && !showModal && !visibilityProvider && !catalogBusy"
+      v-model:show="showLargeCatalogNotice"
+      :providers="largeCatalogProviders"
+      @manage="manageLargeCatalog"
+    />
+    <ProviderVisibilityModal
+      v-if="visibilityProvider && !profileLoading"
+      :key="`${selectedProfile}:${visibilityProvider.provider}`"
+      :provider="visibilityProvider"
+      @close="visibilityProviderId = ''"
     />
   </PageLoading>
 </template>
@@ -261,7 +323,7 @@ async function handleRefreshModelCache() {
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: calc(8px * var(--spacing-scale, 1));
 }
 
 .models-content {
@@ -270,7 +332,7 @@ async function handleRefreshModelCache() {
   display: flex;
   flex-direction: column;
   overflow-y: auto;
-  padding: 20px;
+  padding: calc(20px * var(--spacing-scale, 1));
 }
 
 .models-profile-loading {
@@ -288,7 +350,7 @@ async function handleRefreshModelCache() {
 .header-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: calc(8px * var(--spacing-scale, 1));
   flex-wrap: wrap;
   justify-content: flex-end;
 }

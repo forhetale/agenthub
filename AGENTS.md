@@ -10,9 +10,11 @@ and keep this file small enough to fit into every task context.
 - `docs/harness/README.md` - how this repository is prepared for agent work.
 - `docs/harness/validation.md` - which checks to run for each change type.
 - `docs/harness/worktree-runbook.md` - isolated local dev and test setup.
+- `docs/harness/task-artifacts.md` - external task/report directories, checks and safe cleanup.
 - `docs/harness/pr-review.md` - self-review checklist before pushing.
 - `docs/harness/server-module-boundaries.md` - target backend modules, ownership, and dependency rules.
 - `docs/harness/jev-integrations.md` - required switches, frontend configuration and registration for JEV consumers.
+- `docs/harness/frontend-ui.md` - required theme surfaces, UI exceptions and automatic checks.
 
 ## Common Commands
 
@@ -24,24 +26,28 @@ npm run test:e2e
 npm run build
 ```
 
-Use the smallest relevant check while iterating. Before a broad PR, run
-`npm run harness:check`, `npm run test:coverage`, `npm run test:e2e`, and
-`npm run build`.
+The legacy test suite has been removed. Every new feature must include small,
+focused tests; new browser journeys must include Playwright coverage. Do not
+restore blanket coverage or browser sweeps. See `tests/README.md`.
+For PRs, run `npm run harness:check` and `npm run build`, plus tests for any new
+feature introduced by the change. Independent Test and E2E workflows run Vitest
+and Playwright automatically; Build runs the harness and production build.
+Empty suites are allowed during the reset; this does not waive new-feature tests.
 
 ## Code Ownership Map
 
 - `packages/client/src` - Vue 3 client, stores, routes, i18n, API helpers.
 - `packages/server/src` - Koa API, Socket.IO, persistence, Hermes integration.
-- `packages/ekko-agent` - canonical Ekko runtime, profiles, providers, tools, memory, skills, and package docs.
+- `packages/hub-agent` - canonical Hub Agent runtime, profiles, providers, tools, memory, skills, and package docs.
 - `packages/desktop` - Electron wrapper, bundled Python/Hermes runtime, release artifacts.
-- `tests/client`, `tests/server`, `tests/shared` - Vitest coverage.
-- `tests/e2e` - Playwright browser coverage with mocked backend services.
+- `tests` - focused Vitest tests for new features, organized by area.
+- `tests/e2e` - focused Playwright tests for new browser features.
 - `.github/workflows` - CI, release, Docker, and desktop packaging automation.
 
 ## Hard Rules
 
 - Keep routes thin: put request handling in controllers and reusable behavior in services.
-- Put new server code under `modules/studio`, `modules/hermes`, `modules/ekko`, or `modules/coding-agents`; compose modules only from `bootstrap`.
+- Put new server code under `modules/studio`, `modules/hermes`, `modules/hub-agent`, or `modules/coding-agents`; compose modules only from `bootstrap`.
 - Keep Web UI state under `HERMES_WEB_UI_HOME` or `HERMES_WEBUI_STATE_DIR`.
 - Keep Hermes Agent state separate from Web UI state.
 - Register local API routes before proxy catch-all routes.
@@ -49,6 +55,9 @@ Use the smallest relevant check while iterating. Before a broad PR, run
 - Add user-facing strings to every locale file.
 - Register every JEV business integration with its own switch and frontend configuration entry; explicitly register any enabled Studio default, keep standalone defaults off, and run `npm run harness:check`.
 - Do not mix unrelated refactors into a bug fix.
+- When changing plugin SDK/context/return structures, directly update the relevant Markdown in `packages/plugin-sdk/docs` in the same change. These guides ship with new plugins; see `docs/harness/validation.md`.
+- Keep one-off reports, temporary probes and test evidence outside all checkouts; use `npm run artifacts:new -- <task>` and `npm run artifacts:check`.
+- New UI must follow the theme surface contract in `docs/harness/frontend-ui.md`; do not expand the legacy style baseline to bypass checks.
 
 ## When The Agent Gets Stuck
 

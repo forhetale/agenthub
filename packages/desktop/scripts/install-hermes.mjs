@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { pythonBuildEnvironment, pythonDependencyBuildArgs } from './python-build-env.mjs'
 // Install the checked-out Hermes Agent source into python/venv and prepare its
 // bundled browser and frontend assets. The Git checkout remains clean and is
 // retained so the upstream `hermes update` command can update it in place.
@@ -17,6 +18,7 @@ import { fileURLToPath } from 'node:url'
 import { spawnSync } from 'node:child_process'
 import { platform as osPlatform, arch as osArch, homedir as osHomedir, tmpdir } from 'node:os'
 import { hermesSource } from './runtime-config.mjs'
+import { hermesInstalledVersionScript } from './hermes-version.mjs'
 import { venvPythonPath } from './python-runtime-layout.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -59,6 +61,8 @@ const NODE_DIR = resolve(ROOT, 'resources', 'node', `${OS_LABEL}-${TARGET_ARCH}`
 const NODE_PREFIX = resolve(PY_DIR, 'node')
 const AGENT_BROWSER_HOME = resolve(PY_DIR, 'agent-browser')
 const PLAYWRIGHT_BROWSERS_PATH = resolve(PY_DIR, 'ms-playwright')
+const USE_HERMES_PM_BROWSER = existsSync(resolve(PY_DIR, 'tools', 'browser_launcher.py'))
+  && existsSync(resolve(PY_DIR, 'hermes_cli', 'browser_runtime.py'))
 
 const pyBin = venvPythonPath(VENV_DIR, TARGET_OS)
 
@@ -110,12 +114,7 @@ function optionalRunInvocation(invocation, args, options = {}) {
 }
 
 function pythonBuildEnv() {
-  if (TARGET_OS !== 'darwin') return process.env
-
-  const env = { ...process.env }
-  if (!env.AR && existsSync('/usr/bin/ar')) env.AR = '/usr/bin/ar'
-  if (!env.RANLIB && existsSync('/usr/bin/ranlib')) env.RANLIB = '/usr/bin/ranlib'
-  return env
+  return pythonBuildEnvironment(process.env, TARGET_OS, TARGET_ARCH)
 }
 
 function installHermesPythonRuntime() {
@@ -154,6 +153,7 @@ function installHermesPythonRuntime() {
       '--require-hashes',
       '--no-deps',
       '--requirement', requirementsPath,
+      ...pythonDependencyBuildArgs(TARGET_OS, TARGET_ARCH),
     ], { cwd: PY_DIR, env })
 
     console.log('→ Installing Hermes source as a relocatable editable project')
@@ -453,6 +453,15 @@ function installBrowserRuntime() {
     console.warn('! Skipping bundled browser runtime because HERMES_SKIP_BROWSER_RUNTIME is set')
     return
   }
+  if (USE_HERMES_PM_BROWSER) {
+    console.log('→ Preparing Chromium with the Hermes package manager')
+    run(pyBin, [
+      resolve(__dirname, 'prepare-hermes-browser.py'),
+      '--source', PY_DIR,
+      '--target', `${TARGET_OS}-${TARGET_ARCH}`,
+    ], { env: { ...pythonBuildEnv(), HERMES_DISABLE_LAZY_INSTALLS: '1' } })
+    return
+  }
   if (BROWSER_PACKAGES.length === 0) {
     console.warn('! Skipping bundled browser runtime because HERMES_BROWSER_PACKAGES is empty')
     return
@@ -541,15 +550,36 @@ buildHermesFrontends()
 run(pyBin, [
   '-c',
   [
-    'import importlib.metadata as metadata',
     'import importlib.util',
     'import mcp',
     'import tools.mcp_tool as t',
-    `assert metadata.version("hermes-agent") == ${JSON.stringify(HERMES_VERSION)}`,
-    'assert t._MCP_AVAILABLE',
+    'assert t._ensure_mcp_sdk(), "Hermes MCP SDK could not be initialized"',
     'assert importlib.util.find_spec("websockets") is not None',
   ].join('; '),
 ])
+run(pyBin, ['-c', [
+  hermesInstalledVersionScript,
+  `assert version == ${JSON.stringify(HERMES_VERSION)}, version`,
+].join('\n')])
+
+if (TARGET_OS === 'win32' && TARGET_ARCH === 'arm64') {
+  run(pyBin, ['-c', [
+    'import platform',
+    'from winpty import PtyProcess',
+    'assert platform.machine().lower() in ("arm64", "aarch64"), platform.machine()',
+    'child = PtyProcess.spawn("cmd.exe /c echo ARM64_PTY_OK")',
+    'output = ""',
+    'try:',
+    '    while "ARM64_PTY_OK" not in output:',
+    '        output += child.read(4096)',
+    'except EOFError:',
+    '    pass',
+    'finally:',
+    '    child.close(force=True)',
+    'assert "ARM64_PTY_OK" in output, output',
+    'print("Native ARM64 Python and ConPTY smoke test passed")',
+  ].join('\n')], { timeout: 30_000 })
+}
 
 const hermesBin = TARGET_OS === 'win32'
   ? resolve(VENV_DIR, 'Scripts', 'hermes.cmd')
@@ -633,22 +663,33 @@ run(hermesCheckCommand, hermesCheckArgs)
 }
 
 if (!SKIP_BROWSER_RUNTIME) {
-  run(pyBin, [
-    '-c',
-    [
-      'import importlib, importlib.util, os, shutil',
-      `os.environ["PLAYWRIGHT_BROWSERS_PATH"] = ${JSON.stringify(PLAYWRIGHT_BROWSERS_PATH)}`,
-      // Hermes 0.21.3 moved browser installation checks into a separate module.
-      'module = "tools.browser_tool_install" if importlib.util.find_spec("tools.browser_tool_install") else "tools.browser_tool"',
-      '_chromium_installed = importlib.import_module(module)._chromium_installed',
-      'assert shutil.which("agent-browser") is not None',
-      'assert _chromium_installed()',
-    ].join('; '),
-  ], { env: browserRuntimeEnv() })
+  if (USE_HERMES_PM_BROWSER) {
+    run(pyBin, ['-c', [
+      'from pathlib import Path',
+      'from hermes_cli.browser_runtime import chromium_executable',
+      'from tools.browser_use_cli import browser_exec_available',
+      'assert browser_exec_available(), "Hermes browser_exec engine is unavailable"',
+      'executable = chromium_executable(allow_override=False)',
+      `assert executable and Path(executable).resolve().is_relative_to(Path(${JSON.stringify(PY_DIR)}).resolve() / "runtime-tools"), executable`,
+    ].join('\n')], { env: { ...pythonBuildEnv(), HERMES_DISABLE_LAZY_INSTALLS: '1' } })
+  } else {
+    run(pyBin, [
+      '-c',
+      [
+        'import importlib, importlib.util, os, shutil',
+        `os.environ["PLAYWRIGHT_BROWSERS_PATH"] = ${JSON.stringify(PLAYWRIGHT_BROWSERS_PATH)}`,
+        // Older Hermes releases install the browser through agent-browser.
+        'module = "tools.browser_tool_install" if importlib.util.find_spec("tools.browser_tool_install") else "tools.browser_tool"',
+        '_chromium_installed = importlib.import_module(module)._chromium_installed',
+        'assert shutil.which("agent-browser") is not None',
+        'assert _chromium_installed()',
+      ].join('; '),
+    ], { env: browserRuntimeEnv() })
+  }
 }
 
 if (SKIP_BROWSER_RUNTIME) {
   console.log('✓ hermes Python, MCP, and websockets checks passed; browser runtime skipped')
 } else {
-  console.log('✓ hermes Python, MCP, websockets, agent-browser, and Chromium checks passed')
+  console.log('✓ hermes Python, MCP, websockets, browser engine, and bundled Chromium checks passed')
 }

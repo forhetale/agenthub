@@ -68,7 +68,7 @@ export function selectProfilesForGatewayAutostart(
   policy?: GatewayAutoStartConfig,
 ): string[] {
   const known = new Set(profiles)
-  if (policy?.enabled === false) return []
+  if (policy?.enabled !== true) return []
 
   const hasIncludePolicy = Array.isArray(policy?.include)
   const include = normalizedProfileList(policy?.include).filter(name => known.has(name))
@@ -684,7 +684,7 @@ export async function restartGatewayForProfile(profile: string): Promise<{
 
 export async function ensureProfileGatewaysRunning(): Promise<void> {
   const { gatewayAutoStart } = await readAppConfig()
-  if (gatewayAutoStart?.enabled === false) return
+  if (gatewayAutoStart?.enabled !== true) return
 
   await recoverWindowsDesktopGatewayOrphansOnce()
 

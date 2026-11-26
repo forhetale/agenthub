@@ -6,6 +6,8 @@ import { useRoute } from 'vue-router'
 import { useAccountStore } from '@/stores/account'
 import ProfileAvatar from '@/components/hermes/profiles/ProfileAvatar.vue'
 import SidebarAccountControls from './SidebarAccountControls.vue'
+import { useNavigationStore } from '@/stores/navigation'
+import { useMobileNavigation } from '@/composables/usePageSidebar'
 import { useNavigationRail } from '@/composables/useNavigationRail'
 
 const props = defineProps<{ collapsed?: boolean; rail?: boolean }>()
@@ -15,6 +17,8 @@ const route = useRoute()
 const { t } = useI18n()
 const accountStore = useAccountStore()
 const showMenu = ref(false)
+const navigation = useNavigationStore()
+const mobileNavigation = useMobileNavigation()
 const footer = ref<HTMLElement | null>(null)
 const sidebarWidth = ref<number>()
 let sidebarObserver: ResizeObserver | undefined
@@ -47,6 +51,12 @@ watch(hasNavigationRail, () => { showMenu.value = false })
 
 function closeMenu() {
   showMenu.value = false
+}
+
+function openNavigationSettings() {
+  closeMenu()
+  if (mobileNavigation) mobileNavigation.open.value = false
+  navigation.settingsOpen = true
 }
 
 function handleEscape() {
@@ -112,7 +122,7 @@ async function focusMenu() {
             <span class="account-label">{{ t('settings.tabs.account') }}</span>
           </div>
         </div>
-        <SidebarAccountControls @open-modal="closeMenu" />
+        <SidebarAccountControls @open-modal="closeMenu" @open-navigation-settings="openNavigationSettings" />
       </section>
     </NPopover>
   </div>
@@ -124,7 +134,7 @@ async function focusMenu() {
 .page-sidebar-bottom {
   --account-menu-width: #{$sidebar-width};
   flex-shrink: 0;
-  padding: 10px 12px;
+  padding: calc(10px * var(--spacing-scale, 1)) calc(12px * var(--spacing-scale, 1));
 }
 
 .page-sidebar-account-btn {
@@ -136,12 +146,12 @@ async function focusMenu() {
   color: $text-secondary;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
+  gap: calc(10px * var(--spacing-scale, 1));
+  padding: calc(8px * var(--spacing-scale, 1)) calc(10px * var(--spacing-scale, 1));
   cursor: pointer;
   text-align: start;
   font: inherit;
-  font-size: 13px;
+  font-size: calc(var(--font-size-base, 14px) * 13 / 14);
   transition: background-color $transition-fast, color $transition-fast;
 
   &:hover,
@@ -161,7 +171,7 @@ async function focusMenu() {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 13px;
+  font-size: calc(var(--font-size-base, 14px) * 13 / 14);
   font-weight: 500;
   color: $text-primary;
 }
@@ -173,7 +183,7 @@ async function focusMenu() {
 .is-collapsed {
   padding-inline: 0;
 
-  .page-sidebar-account-btn { justify-content: center; padding-inline: 4px; }
+  .page-sidebar-account-btn { justify-content: center; padding-inline: calc(4px * var(--spacing-scale, 1)); }
   .account-name,
   .account-chevron { display: none; }
 }
@@ -182,19 +192,19 @@ async function focusMenu() {
   max-height: calc(100dvh - 88px);
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 8px;
+  padding: calc(8px * var(--spacing-scale, 1));
   outline: none;
 }
 
 .account-menu-heading {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 12px 14px;
+  gap: calc(10px * var(--spacing-scale, 1));
+  padding: calc(8px * var(--spacing-scale, 1)) calc(12px * var(--spacing-scale, 1)) calc(14px * var(--spacing-scale, 1));
   margin-bottom: 12px;
-  border-bottom: 1px solid $border-color;
+  border-bottom: var(--border-width, 1px) solid $border-color;
 }
 
-.account-menu-identity { display: flex; flex-direction: column; min-width: 0; gap: 2px; }
-.account-label { font-size: 11px; color: $text-muted; }
+.account-menu-identity { display: flex; flex-direction: column; min-width: 0; gap: calc(2px * var(--spacing-scale, 1)); }
+.account-label { font-size: calc(var(--font-size-base, 14px) * 11 / 14); color: $text-muted; }
 </style>

@@ -13,7 +13,7 @@ const pkgDir = resolve(__dirname, '..')
 const pkg = JSON.parse(readFileSync(resolve(pkgDir, 'package.json'), 'utf-8'))
 const VERSION = pkg.version
 const PACKAGE_NAME = pkg.name
-const CLI_NAME = PACKAGE_NAME === 'ekko-studio' ? 'ekko-studio-web' : 'hermes-web-ui'
+const CLI_NAME = 'hermes-web-ui'
 const WEB_UI_HOME = process.env.HERMES_WEB_UI_HOME?.trim()
   ? resolve(process.env.HERMES_WEB_UI_HOME.trim())
   : resolve(homedir(), '.hermes-web-ui')
@@ -24,9 +24,6 @@ const TOKEN_FILE = join(PID_DIR, '.token')
 const LOGIN_LOCK_FILE = join(WEB_UI_HOME, '.login-lock.json')
 const WEB_UI_DB_FILE = join(WEB_UI_HOME, 'hermes-web-ui.db')
 const DEFAULT_PORT = 8648
-const PREVIEW_BACKEND_PORT = 8650
-const PREVIEW_FRONTEND_PORT = 8651
-const PREVIEW_AGENT_BRIDGE_PORT = 18650
 const DEFAULT_USERNAME = 'admin'
 const DEFAULT_PASSWORD = '123456'
 const DEFAULT_RESTART_GRACE_MS = 5000
@@ -306,37 +303,6 @@ function killListeningPids(port, pids = getListeningPids(port)) {
   } catch {}
 }
 
-function stopPreviewRuntimeFromCli() {
-  const previewPorts = [
-    PREVIEW_BACKEND_PORT,
-    PREVIEW_FRONTEND_PORT,
-    ...(process.platform === 'win32' ? [PREVIEW_AGENT_BRIDGE_PORT] : []),
-  ]
-  const pids = [...new Set(previewPorts.flatMap(port => getListeningPids(port)))]
-  if (!pids.length) return 0
-
-  console.log(`  ⏹ Stopping preview runtime (PID(s): ${pids.join(' ')})...`)
-  for (const pid of pids) {
-    try {
-      if (process.platform === 'win32') {
-        execFileSync('taskkill.exe', ['/PID', String(pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true })
-      } else {
-        execSync(`kill -TERM -${pid}`, { stdio: 'ignore' })
-      }
-    } catch {
-      try {
-        if (process.platform === 'win32') {
-          execFileSync('taskkill.exe', ['/PID', String(pid), '/F'], { stdio: 'ignore', windowsHide: true })
-        } else {
-          execSync(`kill -9 ${pid}`, { stdio: 'ignore' })
-        }
-      } catch {}
-    }
-  }
-
-  return pids.length
-}
-
 function recoverPidFromPort() {
   const port = getPortFromArgs() ?? DEFAULT_PORT
   for (const pid of getListeningPids(port)) {
@@ -503,7 +469,6 @@ function startDaemon(port) {
 
 function stopDaemon(options = {}) {
   const { restart = false } = options
-  const stoppedPreviewPids = stopPreviewRuntimeFromCli()
   let pidFromFile = readPidFile()
   let cleanedStalePid = false
   if (pidFromFile && !isRunning(pidFromFile)) {
@@ -516,10 +481,6 @@ function stopDaemon(options = {}) {
   const pid = pidFromFile ?? recoverPidFromPort()
   if (!pid) {
     if (cleanedStalePid) return
-    if (stoppedPreviewPids) {
-      console.log(`  ✓ hermes-web-ui preview stopped`)
-      return
-    }
     console.log('  ✗ hermes-web-ui is not running')
     process.exit(1)
   }
@@ -671,6 +632,7 @@ Commands:
   stop               Stop the server
   restart [port]     Restart the server
   status             Show server status
+  plugins            Create, register and debug standalone plugins
   clear-login-locks  Delete the login IP lock file
   reset-default-login Create or reset the default login (${DEFAULT_USERNAME} / ${DEFAULT_PASSWORD})
   update             Update to latest version and restart
@@ -688,6 +650,9 @@ Options:
   }
 
   switch (command) {
+    case 'plugins':
+      await (await import('./plugin-development.mjs')).runPluginCommand(process.argv.slice(3))
+      break
     case 'start':
       startDaemon(getPort())
       break
@@ -753,8 +718,8 @@ function doUpdate() {
     process.exitCode = 1
     return
   }
-  if (!['ekko-studio', 'hermes-web-ui'].includes(PACKAGE_NAME)) {
-    throw new Error(`Unsupported Studio npm package: ${PACKAGE_NAME}`)
+  if (!['agenthub', 'hermes-web-ui'].includes(PACKAGE_NAME)) {
+    throw new Error(`Unsupported AgentHub npm package: ${PACKAGE_NAME}`)
   }
   console.log(`  ⬆ Updating ${PACKAGE_NAME}...`)
 
@@ -818,9 +783,9 @@ if (process.argv[1] && realpathSync(resolve(process.argv[1])) === __filename) {
 }
 
 export {
+  doUpdate,
   clearLoginLocks,
   commandExists,
-  doUpdate,
   getDaemonStopGraceMs,
   getListeningPids,
   getRestartArgs,

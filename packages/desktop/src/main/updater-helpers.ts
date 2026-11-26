@@ -34,8 +34,8 @@ function updateCacheNames(appName: string): string[] {
   }
   names.add('hermes-studio-updater')
   names.add('Hermes Studio-updater')
-  names.add('ekko-studio-updater')
-  names.add('Ekko Studio-updater')
+  names.add('agenthub-updater')
+  names.add('AgentHub-updater')
   return [...names]
 }
 
@@ -50,6 +50,6 @@ export function pendingUpdateDirectories(options: {
   if (localAppData) bases.add(localAppData)
   if (appDataPath) bases.add(appDataPath)
   if (!bases.size) return []
-  return [...bases].flatMap(base => updateCacheNames(options.appName || 'Ekko Studio')
+  return [...bases].flatMap(base => updateCacheNames(options.appName || 'AgentHub')
     .map(name => join(base, name, 'pending')))
 }

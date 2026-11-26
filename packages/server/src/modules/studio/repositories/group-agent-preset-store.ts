@@ -2,8 +2,16 @@ import { randomUUID } from 'node:crypto'
 import { getDb } from '../infrastructure/database'
 import { GC_AGENT_PRESETS_TABLE } from '../infrastructure/database/schemas'
 
-export type GroupAgentPresetAgent = 'hermes' | 'ekko' | 'codex' | 'claude' | 'pi' | 'grok' | 'opencode' | 'dsh' | 'cursor' | 'antigravity'
+export type GroupAgentPresetAgent = `plugin:${string}/${string}` | 'hermes' | 'hub' | 'codex' | 'claude' | 'pi' | 'grok' | 'opencode' | 'dsh' | 'cursor' | 'antigravity' | 'qwen' | 'kimi' | 'codebuddy' | 'qoder' | 'copilot' | 'zcode'
 export const GROUP_AGENT_PRESET_NAME_CONFLICT = 'GROUP_AGENT_PRESET_NAME_CONFLICT'
+
+function normalizeGroupAgentPresetAgent(value: unknown): GroupAgentPresetAgent {
+  const agent = String(value || 'hermes').trim()
+  if (agent === 'ekko' || agent === 'ekko-agent' || agent === 'ekko_agent' || agent === 'hub-agent' || agent === 'hub_agent') {
+    return 'hub'
+  }
+  return agent as GroupAgentPresetAgent
+}
 
 export interface GroupAgentPresetRecord {
   id: string
@@ -52,7 +60,7 @@ function row(value: any): GroupAgentPresetRecord {
   return {
     id: String(value.id),
     ownerUserId: Number(value.ownerUserId),
-    agent: String(value.agent || 'hermes') as GroupAgentPresetAgent,
+    agent: normalizeGroupAgentPresetAgent(value.agent),
     agentMode: value.agentMode === 'global' ? 'global' : 'scoped',
     priorAgentMode: storedPriorAgentMode(value.priorAgentMode),
     profile: String(value.profile),

@@ -9,7 +9,7 @@ sender identity, so concurrent Agents and separate turns stay distinct.
 
 ## Event and storage path
 
-- Coding Agents and Ekko emit `plan.updated` through `ChatRunSocket`. The group
+- Coding Agents and Hub Agent emit `plan.updated` through `ChatRunSocket`. The group
   executor serializes the snapshot into the existing group `message` transport
   with `role: tool` and `tool_name: task_plan`. The deterministic message ID hashes
   room, Agent session, and plan identity; `run_id` maps to the group response run.

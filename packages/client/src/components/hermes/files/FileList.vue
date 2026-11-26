@@ -176,35 +176,35 @@ function retryLoadEntries() {
 @use '@/styles/variables' as *;
 
 .file-list {
-  padding: 8px 16px;
+  padding: calc(8px * var(--spacing-scale, 1)) calc(16px * var(--spacing-scale, 1));
 }
 
 .file-list-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 72px 104px 60px;
   align-items: center;
-  column-gap: 8px;
+  column-gap: calc(8px * var(--spacing-scale, 1));
 }
 
 .file-list-stale-error {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 6px;
-  padding: 6px 12px;
-  border: 1px solid rgba($error, 0.35);
+  gap: calc(8px * var(--spacing-scale, 1));
+  margin-bottom: calc(6px * var(--spacing-scale, 1));
+  padding: calc(6px * var(--spacing-scale, 1)) calc(12px * var(--spacing-scale, 1));
+  border: var(--border-width, 1px) solid rgba($error, 0.35);
   border-radius: $radius-sm;
-  font-size: 12px;
+  font-size: calc(var(--font-size-base, 14px) * 12 / 14);
   color: $error;
 }
 
 .file-list-header {
-  padding: 6px 12px;
-  font-size: 12px;
+  padding: calc(6px * var(--spacing-scale, 1)) calc(12px * var(--spacing-scale, 1));
+  font-size: calc(var(--font-size-base, 14px) * 12 / 14);
   font-weight: 500;
   color: $text-muted;
-  border-bottom: 1px solid $border-light;
+  border-bottom: var(--border-width, 1px) solid $border-light;
   margin-bottom: 4px;
   user-select: none;
 }
@@ -219,7 +219,7 @@ function retryLoadEntries() {
 
 .sort-indicator {
   margin-inline-start: 2px;
-  font-size: 11px;
+  font-size: calc(var(--font-size-base, 14px) * 11 / 14);
 }
 
 .file-actions-placeholder {
@@ -227,10 +227,10 @@ function retryLoadEntries() {
 }
 
 .file-list-row {
-  padding: 8px 12px;
+  padding: calc(8px * var(--spacing-scale, 1)) calc(12px * var(--spacing-scale, 1));
   border-radius: $radius-sm;
   cursor: pointer;
-  font-size: 13px;
+  font-size: calc(var(--font-size-base, 14px) * 13 / 14);
 
   &:hover,
   &:focus-within {
@@ -257,7 +257,7 @@ function retryLoadEntries() {
 .file-name {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: calc(8px * var(--spacing-scale, 1));
   min-width: 0;
 }
 
@@ -286,7 +286,7 @@ function retryLoadEntries() {
   transition: opacity $transition-fast;
   display: flex;
   justify-content: flex-end;
-  gap: 4px;
+  gap: calc(4px * var(--spacing-scale, 1));
 }
 
 @media (max-width: $breakpoint-mobile) {

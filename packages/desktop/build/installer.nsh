@@ -1,15 +1,22 @@
 !macro stopStudioExecutable EXE_NAME LABEL
   IfFileExists "$INSTDIR\${EXE_NAME}" 0 studioStopDone_${LABEL}
     DetailPrint "Stopping AgentHub..."
-    nsExec::ExecToLog '"$INSTDIR\${EXE_NAME}" --quit'
-    Pop $0
-
     InitPluginsDir
     FileOpen $0 "$PLUGINSDIR\stop-hermes-studio.ps1" w
     FileWrite $0 "$$ErrorActionPreference = 'SilentlyContinue'$\r$\n"
     FileWrite $0 "$$target = [System.IO.Path]::GetFullPath($$env:HERMES_STUDIO_EXE)$\r$\n"
     FileWrite $0 "$$installDir = [System.IO.Path]::GetFullPath($$env:HERMES_STUDIO_INSTALL_DIR)$\r$\n"
     FileWrite $0 "$$webUiHome = Join-Path $$env:USERPROFILE '.hermes-web-ui'$\r$\n"
+    ; Older Desktop versions can show an installation warning even for --quit.
+    ; Bound that helper's lifetime wait before continuing the existing cleanup.
+    FileWrite $0 "function Request-StudioQuit {$\r$\n"
+    FileWrite $0 "  try {$\r$\n"
+    FileWrite $0 "    $$quitProcess = Start-Process -FilePath $$target -ArgumentList '--quit' -PassThru -ErrorAction Stop$\r$\n"
+    FileWrite $0 "    try {$\r$\n"
+    FileWrite $0 "      if (-not $$quitProcess.WaitForExit(5000)) { Write-Output 'Quit helper is still running; continuing process cleanup.' }$\r$\n"
+    FileWrite $0 "    } finally { $$quitProcess.Dispose() }$\r$\n"
+    FileWrite $0 "  } catch { Write-Output 'Could not send the quit request; continuing process cleanup.' }$\r$\n"
+    FileWrite $0 "}$\r$\n"
     FileWrite $0 "function Normalize-Path([string]$$path) {$\r$\n"
     FileWrite $0 "  try { if ($$path) { return [System.IO.Path]::GetFullPath($$path) } } catch {}$\r$\n"
     FileWrite $0 "  return ''$\r$\n"
@@ -65,11 +72,12 @@
     FileWrite $0 "    if ($$exe -and $$exe -ieq $$target) { return $$true }$\r$\n"
     FileWrite $0 "    if ($$cmd -and $$cmd.IndexOf($$installDir, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) { return $$true }$\r$\n"
     FileWrite $0 "    foreach ($$root in $$runtimeRoots) {$\r$\n"
-    FileWrite $0 "      if ((Test-UnderPath $$exe $$root) -and ($$cmd -match '(?:ekko|hermes)-studio-mcp|hermes_bridge\.py|hermes_cli\.main gateway run')) { return $$true }$\r$\n"
+    FileWrite $0 "      if ((Test-UnderPath $$exe $$root) -and ($$cmd -match '(?:agenthub|hermes-studio)-mcp|ekko-studio-mcp|hermes_bridge\.py|hermes_cli\.main gateway run')) { return $$true }$\r$\n"
     FileWrite $0 "    }$\r$\n"
     FileWrite $0 "    return $$false$\r$\n"
     FileWrite $0 "  }$\r$\n"
     FileWrite $0 "}$\r$\n"
+    FileWrite $0 "Request-StudioQuit$\r$\n"
     FileWrite $0 "Get-HermesStudioProcess | ForEach-Object {$\r$\n"
     FileWrite $0 "  try {$\r$\n"
     FileWrite $0 "    $$process = Get-Process -Id $$_.ProcessId$\r$\n"
@@ -105,7 +113,7 @@
 !macroend
 
 !macro stopHermesStudioProcesses
-  ; Close the current and legacy installed product names across the rename.
+  ; Close current and legacy installed product names when upgrading across renames.
   !insertmacro stopStudioExecutable "AgentHub.exe" agenthub
   !insertmacro stopStudioExecutable "Ekko Studio.exe" ekko
   !insertmacro stopStudioExecutable "Hermes Studio.exe" hermes

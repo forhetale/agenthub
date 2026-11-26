@@ -8,8 +8,8 @@ interface ManagedMcpOverrides {
 }
 
 function canonicalManagedName(name: string): string {
-  if (name === 'ekko-studio-plan') return 'ekko-studio-interaction'
-  return name.replace(/^hermes-studio-(api|browser|use)$/, 'ekko-studio-$1')
+  if (name === 'agenthub-plan' || name === 'ekko-studio-plan' || name === 'hermes-studio-plan') return 'agenthub-interaction'
+  return name.replace(/^(?:hermes-studio|ekko-studio)-(api|plugins|browser|devices|use|interaction)$/, 'agenthub-$1')
 }
 
 function overridesPath(): string {
@@ -52,7 +52,7 @@ function writeOverrides(value: ManagedMcpOverrides): void {
 
 export function getDisabledManagedMcpServers(id: string, profile = 'default'): Set<string> {
   const values = readOverrides().disabled?.[id]?.[profile] || []
-  return new Set(values.map(String).filter(Boolean))
+  return new Set(values.map(value => canonicalManagedName(String(value))).filter(Boolean))
 }
 
 export function getManagedMcpServerOverride(

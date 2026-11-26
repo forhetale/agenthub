@@ -14,7 +14,7 @@ const { t } = useI18n()
 <template>
   <NDrawer
     :show="show"
-    :width="hasSidebar ? 'var(--studio-drawer-width)' : 64"
+    :width="hasSidebar ? 'min(380px, 90vw)' : 64"
     placement="left"
     display-directive="show"
     class="studio-mobile-drawer"
@@ -39,9 +39,7 @@ const { t } = useI18n()
   display: flex;
   height: 100%;
   min-height: 0;
-  background: $bg-sidebar-surface;
-  border-top-right-radius: 5px;
-  border-bottom-right-radius: 5px;
+  background: var(--theme-sidebar-bg, $bg-sidebar-surface);
   overflow: hidden;
 
   :deep(.studio-navigation-rail) {
@@ -58,7 +56,7 @@ const { t } = useI18n()
   min-height: 0;
   padding-top: env(safe-area-inset-top, 0px);
   padding-bottom: env(safe-area-inset-bottom, 0px);
-  border-inline-start: 1px solid $border-color;
+  border-inline-start: var(--border-width, 1px) solid $border-color;
 }
 .studio-mobile-navigation__close {
   display: grid;
@@ -108,7 +106,8 @@ const { t } = useI18n()
   :deep(.workflow-sidebar-close),
   :deep(.collapse-btn),
   :deep(.hermes-config-collapse),
-  :deep(.ekko-config-collapse),
-  :deep(.coding-agent-config-collapse) { display: none; }
+  :deep(.hub-agent-config-collapse),
+  :deep(.coding-agent-config-collapse),
+  :deep(.plugin-config-collapse) { display: none; }
 }
 </style>

@@ -27,23 +27,24 @@ export interface ChatAgentRuntimeDependencies {
   startCodingAgentRun(...args: any[]): any
   handleCodingAgentSessionCommand(...args: any[]): Promise<any>
   parseCodingAgentSessionCommand(...args: any[]): any
-  getEkkoAgent(profile: string): any
-  abortEkkoBackgroundTasks(...args: any[]): Promise<any>
-  hasEkkoBackgroundTasks(...args: any[]): boolean
-  createEkkoModelClient(...args: any[]): any
-  resolveEkkoModelProviderConfigs(...args: any[]): any
-  ekkoModelRequestTimeoutMs: number
-  ekkoAgentReasoningText(...args: any[]): string
-  normalizeEkkoAgentReasoning(...args: any[]): any
-  serializeEkkoAgentReasoningDetails(...args: any[]): any
-  waitForEkkoToolApproval(...args: any[]): Promise<any>
-  waitForEkkoClarification(...args: any[]): Promise<any>
+  getHubAgent(profile: string): any
+  abortHubAgentBackgroundTasks(...args: any[]): Promise<any>
+  hasHubAgentBackgroundTasks(...args: any[]): boolean
+  createHubAgentModelClient(...args: any[]): any
+  resolveHubAgentModelProviderConfigs(...args: any[]): any
+  hubAgentModelRequestTimeoutMs: number
+  hubAgentReasoningText(...args: any[]): string
+  normalizeHubAgentReasoning(...args: any[]): any
+  serializeHubAgentReasoningDetails(...args: any[]): any
+  pendingHubAgentInteractions(sessionId: string): Array<{ event: string; data: any }>
+  waitForHubAgentToolApproval(...args: any[]): Promise<any>
+  waitForHubAgentClarification(...args: any[]): Promise<any>
   getCodingAgentMcpServers(id: string, profile: string): Record<string, unknown>
-  resolveEkkoMcpServers(...args: any[]): any
-  resolveEkkoProviderRuntimeConfig(...args: any[]): Promise<any>
-  createEkkoAuthorizedProviderFetch(...args: any[]): any
-  respondToEkkoToolApproval(...args: any[]): any
-  respondToEkkoClarification(...args: any[]): any
+  resolveHubAgentMcpServers(...args: any[]): any
+  resolveHubAgentProviderRuntimeConfig(...args: any[]): Promise<any>
+  createHubAgentAuthorizedProviderFetch(...args: any[]): any
+  respondToHubAgentToolApproval(...args: any[]): any
+  respondToHubAgentClarification(...args: any[]): any
 }
 
 let dependencies: ChatAgentRuntimeDependencies | null = null
@@ -73,6 +74,7 @@ export const redactPrimaryAgentBridgeError = (
 ) => configured().redactPrimaryAgentBridgeError(error, endpoint, replacement)
 
 export const chatCodingAgentRunManager = {
+  waitForSessionExit: (...args: any[]) => configured().codingAgentRunManager.waitForSessionExit(...args),
   hasSession: (...args: any[]) => configured().codingAgentRunManager.hasSession(...args),
   stop: (...args: any[]) => configured().codingAgentRunManager.stop(...args),
   isSessionLaunchCompatible: (...args: any[]) => configured().codingAgentRunManager.isSessionLaunchCompatible(...args),
@@ -88,21 +90,23 @@ export const startChatCodingAgentRun = (...args: any[]) => configured().startCod
 export const handleChatCodingAgentSessionCommand = (...args: any[]) => configured().handleCodingAgentSessionCommand(...args)
 export const parseChatCodingAgentSessionCommand = (...args: any[]) => configured().parseCodingAgentSessionCommand(...args)
 
-export const getChatEkkoAgent = (profile: string) => configured().getEkkoAgent(profile)
-export const abortChatEkkoBackgroundTasks = (...args: any[]) => configured().abortEkkoBackgroundTasks(...args)
-export const hasChatEkkoBackgroundTasks = (...args: any[]) => configured().hasEkkoBackgroundTasks(...args)
-export const createChatEkkoModelClient = (...args: any[]) => configured().createEkkoModelClient(...args)
-export const resolveChatEkkoModelProviderConfigs = (...args: any[]) => configured().resolveEkkoModelProviderConfigs(...args)
-export const getChatEkkoModelRequestTimeoutMs = () => configured().ekkoModelRequestTimeoutMs
-export const chatEkkoAgentReasoningText = (...args: any[]) => configured().ekkoAgentReasoningText(...args)
-export const normalizeChatEkkoAgentReasoning = (...args: any[]) => configured().normalizeEkkoAgentReasoning(...args)
-export const serializeChatEkkoAgentReasoningDetails = (...args: any[]) => configured().serializeEkkoAgentReasoningDetails(...args)
-export const waitForChatEkkoToolApproval = (...args: any[]) => configured().waitForEkkoToolApproval(...args)
-export const waitForChatEkkoClarification = (...args: any[]) => configured().waitForEkkoClarification(...args)
-export const resolveChatEkkoMcpServers = (...args: any[]) => configured().resolveEkkoMcpServers(...args)
-export const resolveChatEkkoProviderRuntimeConfig = (...args: any[]) => configured().resolveEkkoProviderRuntimeConfig(...args)
-export const createChatEkkoAuthorizedProviderFetch = (...args: any[]) => configured().createEkkoAuthorizedProviderFetch(...args)
-export const respondToChatEkkoToolApproval = (...args: any[]) => configured().respondToEkkoToolApproval(...args)
-export const respondToChatEkkoClarification = (...args: any[]) => configured().respondToEkkoClarification(...args)
+export const getChatHubAgent = (profile: string) => configured().getHubAgent(profile)
+export const abortChatHubAgentBackgroundTasks = (...args: any[]) => configured().abortHubAgentBackgroundTasks(...args)
+export const hasChatHubAgentBackgroundTasks = (...args: any[]) => configured().hasHubAgentBackgroundTasks(...args)
+export const createChatHubAgentModelClient = (...args: any[]) => configured().createHubAgentModelClient(...args)
+export const resolveChatHubAgentModelProviderConfigs = (...args: any[]) => configured().resolveHubAgentModelProviderConfigs(...args)
+export const getChatHubAgentModelRequestTimeoutMs = () => configured().hubAgentModelRequestTimeoutMs
+export const chatHubAgentReasoningText = (...args: any[]) => configured().hubAgentReasoningText(...args)
+export const normalizeChatHubAgentReasoning = (...args: any[]) => configured().normalizeHubAgentReasoning(...args)
+export const serializeChatHubAgentReasoningDetails = (...args: any[]) => configured().serializeHubAgentReasoningDetails(...args)
+export const waitForChatHubAgentToolApproval = (...args: any[]) => configured().waitForHubAgentToolApproval(...args)
+export const waitForChatHubAgentClarification = (...args: any[]) => configured().waitForHubAgentClarification(...args)
+export const resolveChatHubAgentMcpServers = (...args: any[]) => configured().resolveHubAgentMcpServers(...args)
+export const resolveChatHubAgentProviderRuntimeConfig = (...args: any[]) => configured().resolveHubAgentProviderRuntimeConfig(...args)
+export const createChatHubAgentAuthorizedProviderFetch = (...args: any[]) => configured().createHubAgentAuthorizedProviderFetch(...args)
+export const respondToChatHubAgentToolApproval = (...args: any[]) => configured().respondToHubAgentToolApproval(...args)
+export const respondToChatHubAgentClarification = (...args: any[]) => configured().respondToHubAgentClarification(...args)
 
 export const getChatCodingAgentMcpServers = (id: string, profile: string) => configured().getCodingAgentMcpServers(id, profile)
+
+export const pendingChatHubAgentInteractions = (sessionId: string): Array<{ event: string; data: any }> => configured().pendingHubAgentInteractions(sessionId)

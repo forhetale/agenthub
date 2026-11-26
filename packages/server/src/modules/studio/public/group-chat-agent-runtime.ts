@@ -5,14 +5,14 @@ export type GroupPrimaryAgentBridgeOutput = any
 
 export interface GroupChatAgentRuntimeDependencies {
   createPrimaryAgentBridge(options?: Record<string, unknown>): GroupPrimaryAgentBridge
-  cancelEkkoClarification(...args: any[]): any
-  respondToEkkoToolApproval(...args: any[]): any
-  respondToEkkoClarification(...args: any[]): any
-  createEkkoModelClient(...args: any[]): any
-  resolveEkkoModelProviderConfigs(...args: any[]): any
-  getEkkoAgent(profile: string): any
-  resolveEkkoProviderRuntimeConfig(...args: any[]): Promise<any>
-  createEkkoAuthorizedProviderFetch(...args: any[]): any
+  cancelHubAgentClarification(...args: any[]): any
+  respondToHubAgentToolApproval(...args: any[]): any
+  respondToHubAgentClarification(...args: any[]): any
+  createHubAgentModelClient(...args: any[]): any
+  resolveHubAgentModelProviderConfigs(...args: any[]): any
+  getHubAgent(profile: string): any
+  resolveHubAgentProviderRuntimeConfig(...args: any[]): Promise<any>
+  createHubAgentAuthorizedProviderFetch(...args: any[]): any
   drainPrimaryAgentSessions(profile: string): Promise<any>
   getAvailableModelGroups(profile: string): Promise<any[]>
 }
@@ -29,13 +29,13 @@ function configured(): GroupChatAgentRuntimeDependencies {
 }
 
 export const createGroupPrimaryAgentBridge = (options?: Record<string, unknown>) => configured().createPrimaryAgentBridge(options)
-export const cancelGroupEkkoClarification = (...args: any[]) => configured().cancelEkkoClarification(...args)
-export const respondToGroupEkkoToolApproval = (...args: any[]) => configured().respondToEkkoToolApproval(...args)
-export const respondToGroupEkkoClarification = (...args: any[]) => configured().respondToEkkoClarification(...args)
-export const createGroupEkkoModelClient = (...args: any[]) => configured().createEkkoModelClient(...args)
-export const resolveGroupEkkoModelProviderConfigs = (...args: any[]) => configured().resolveEkkoModelProviderConfigs(...args)
-export const getGroupEkkoAgent = (profile: string) => configured().getEkkoAgent(profile)
-export const resolveGroupEkkoProviderRuntimeConfig = (...args: any[]) => configured().resolveEkkoProviderRuntimeConfig(...args)
-export const createGroupEkkoAuthorizedProviderFetch = (...args: any[]) => configured().createEkkoAuthorizedProviderFetch(...args)
+export const cancelGroupHubAgentClarification = (...args: any[]) => configured().cancelHubAgentClarification(...args)
+export const respondToGroupHubAgentToolApproval = (...args: any[]) => configured().respondToHubAgentToolApproval(...args)
+export const respondToGroupHubAgentClarification = (...args: any[]) => configured().respondToHubAgentClarification(...args)
+export const createGroupHubAgentModelClient = (...args: any[]) => configured().createHubAgentModelClient(...args)
+export const resolveGroupHubAgentModelProviderConfigs = (...args: any[]) => configured().resolveHubAgentModelProviderConfigs(...args)
+export const getGroupHubAgent = (profile: string) => configured().getHubAgent(profile)
+export const resolveGroupHubAgentProviderRuntimeConfig = (...args: any[]) => configured().resolveHubAgentProviderRuntimeConfig(...args)
+export const createGroupHubAgentAuthorizedProviderFetch = (...args: any[]) => configured().createHubAgentAuthorizedProviderFetch(...args)
 export const drainGroupPrimaryAgentSessions = (profile: string) => configured().drainPrimaryAgentSessions(profile)
 export const getGroupAvailableModelGroups = (profile: string) => configured().getAvailableModelGroups(profile)

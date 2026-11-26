@@ -1,11 +1,11 @@
-import { isTatinBuild } from '../public/custom-build'
 import { readStudioPackageInfo } from './package-info'
+import { isCustomBuild } from '../public/custom-build'
 import type { StudioHealthDependencies } from '../contracts/health'
 
 declare const __APP_VERSION__: string
 
 function isUpdateCheckDisabled(): boolean {
-  if (isTatinBuild()) return true
+  if (isCustomBuild()) return true
   const raw = (process.env.HERMES_WEB_UI_DISABLE_UPDATE_CHECK || '').trim().toLowerCase()
   return raw === 'true' || raw === '1' || raw === 'on' || raw === 'yes'
 }

@@ -35,8 +35,11 @@ describe('session push notifications', () => {
     expect(formatSessionPushContent('bridge', 'run.completed', 'zh')).toBe(
       'Hermes 有一条已完成消息，请到 AgentHub 查看',
     )
+    expect(formatSessionPushContent('hub-agent', 'approval.requested', 'zh')).toBe(
+      'Hub Agent 有一条待授权消息，请到 AgentHub 授权',
+    )
     expect(formatSessionPushContent('ekko', 'approval.requested', 'zh')).toBe(
-      'Ekko 有一条待授权消息，请到 AgentHub 授权',
+      'Hub Agent 有一条待授权消息，请到 AgentHub 授权',
     )
     expect(formatSessionPushContent('claude-code', 'clarify.requested', 'zh')).toBe(
       'Claude 有一条待回答消息，请到 AgentHub 回答',

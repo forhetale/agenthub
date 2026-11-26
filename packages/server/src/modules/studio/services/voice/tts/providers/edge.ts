@@ -6,8 +6,8 @@ import { logger } from '../../../../public/logging'
 function edgeOutputFormat(opts: OpenaiTtsProviderOptions): { outputFormat?: string; contentType: string } {
   const format = String(opts.format || '').trim().toLowerCase()
   if (format === 'pcm' || format === 'raw' || format === 's16le') {
-    // Edge raw PCM synthesis can hang with node-edge-tts. Return MP3 instead;
-    // callers that need raw audio can transcode it with ffmpeg.
+    // Edge raw PCM synthesis can hang with node-edge-tts. Return MP3 and let
+    // callers transcode it to PCM with ffmpeg when needed.
     return {
       outputFormat: undefined,
       contentType: 'audio/mpeg',

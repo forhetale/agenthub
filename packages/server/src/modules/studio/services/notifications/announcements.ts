@@ -1,18 +1,8 @@
-// AgentHub does not read the upstream Ekko Studio announcement feed. The endpoint and the
-// prompt stay so a deployment can publish its own feed with the same response shape.
-
-function announcementsUrl(env: NodeJS.ProcessEnv): URL | null {
-  const raw = (env.HERMES_WEB_UI_ANNOUNCEMENTS_URL || '').trim()
-  if (!raw) return null
-  const url = new URL(raw)
-  if (url.protocol !== 'https:' && url.protocol !== 'http:') throw new Error('invalid_announcement_url')
-  return url
-}
-
-export async function fetchStudioAnnouncements(localeInput: unknown, env: NodeJS.ProcessEnv = process.env): Promise<unknown> {
-  const url = announcementsUrl(env)
-  if (!url) return { ok: true, platform: 'desktop', list: [] }
+export async function fetchStudioAnnouncements(localeInput: unknown): Promise<unknown> {
+  const endpoint = (process.env.HERMES_WEB_UI_ANNOUNCEMENTS_URL || '').trim()
+  if (!endpoint) return { ok: true, platform: 'desktop', list: [] }
   const locale = /^zh(?:[-_]|$)/i.test(String(localeInput || 'en')) ? 'zh-CN' : 'en'
+  const url = new URL(endpoint)
   url.searchParams.set('locale', locale)
   const response = await fetch(url.toString(), {
     headers: { Accept: 'application/json' },

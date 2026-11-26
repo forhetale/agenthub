@@ -29,8 +29,7 @@ and timestamps. It contains no configuration contents or credentials.
 ## Adding a task
 
 1. Append a task with a permanent, descriptive ID such as
-   `2026-10-03-hermes-example-cleanup-v1`. Do not rename or reuse an executed
-   ID; retired IDs stay listed in the registry comment so they are not reused.
+   `2026-09-12-hermes-apikey-domain-v1`. Do not rename or reuse an executed ID.
 2. Set `scope` to the data directory or another stable data identity. Use the
    Hermes root directory for Hermes operations and `config.appHome` for Studio
    operations. Changing data directories then creates a separate completion
@@ -45,9 +44,15 @@ and timestamps. It contains no configuration contents or credentials.
 5. Add focused tests for the operation and run the startup-task runner tests,
    `npm run harness:check`, and `npm run build`.
 
-The registry is currently empty; retired IDs are listed in the registry comment
-and are never reused. Completion is recorded per scope, not per item inside it:
-a Hermes task scoped to the Hermes root directory is not rerun for profiles
-imported into that same root later. Changes that must run again need a new task
-ID or an explicit import upgrade step, rather than changing the implementation
-behind a completed ID.
+The initial registered task replaces old apikey domains in existing Hermes
+profiles. Completion is scoped to the Hermes root directory, not each profile.
+Once completed, later imports of old profiles into that same root are not
+rescanned. Changes that must run again need a new task ID or an explicit import
+upgrade step, rather than changing the implementation behind a completed ID.
+
+`2026-11-17-legacy-model-target-index-v1` imports the old shared Coding Agent
+proxy credentials into account-owned model-target records and applies the old
+Pi MCP upgrade once. It is scoped to the Studio data home. Later launches skip
+the old runtime-directory scans; saved credentials are loaded individually when
+used. A shared legacy Profile without one unambiguous owner is not assigned to
+an arbitrary account. Normal session continuation prepares its own credential.

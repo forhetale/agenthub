@@ -1,7 +1,7 @@
 ARG BASE_IMAGE=nousresearch/hermes-agent:latest
-FROM ${BASE_IMAGE}
+FROM ${BASE_IMAGE} AS runtime
 
-ARG NODE_VERSION=24.15.0
+ARG NODE_VERSION=24.22.1
 
 USER root
 
@@ -27,6 +27,7 @@ RUN ARCH=$(dpkg --print-architecture) \
 
 WORKDIR /app
 
+FROM runtime AS build
 COPY package*.json ./
 # Increase Node.js memory limit to prevent OOM during build
 ENV NODE_OPTIONS=--max-old-space-size=4096
@@ -36,6 +37,14 @@ COPY . .
 
 RUN npm run build && npm prune --omit=dev
 RUN npm run verify:sharp-runtime
+
+FROM runtime
+COPY --from=build /app/package.json ./package.json
+COPY --from=build /app/bin ./bin
+COPY --from=build /app/dist ./dist
+COPY --from=build /app/config ./config
+COPY --from=build /app/plugins ./plugins
+COPY --from=build /app/node_modules ./node_modules
 
 ENV NODE_ENV=production
 ENV HOME=/home/agent

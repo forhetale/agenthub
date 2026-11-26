@@ -5,7 +5,26 @@ import { normalizeNotificationLocale, type NotificationLocale } from './locale'
 import { notificationPreview } from './notification-preview'
 
 export type SessionPushEvent = 'run.completed' | 'approval.requested' | 'clarify.requested'
-export type SessionPushAgent = 'bridge' | 'ekko' | 'claude-code' | 'codex' | 'pi' | 'grok' | 'opencode' | 'dsh' | 'cursor' | 'antigravity'
+export type SessionPushAgent =
+  | 'bridge'
+  | 'hub'
+  | 'hub-agent'
+  | 'claude-code'
+  | 'codex'
+  | 'pi'
+  | 'grok'
+  | 'opencode'
+  | 'dsh'
+  | 'cursor'
+  | 'antigravity'
+  | 'qwen'
+  | 'kimi'
+  | 'codebuddy'
+  | 'qoder'
+  | 'copilot'
+  | 'zcode'
+  | `plugin:${string}/${string}`
+  | (string & {})
 
 export interface SessionPushDetails {
   /** Final reply text of a completed run; read only when the user enabled content previews. */
@@ -43,8 +62,11 @@ const MAX_PREVIEW_LENGTH = 1_200
 const AGENT_DISPLAY_NAMES: Record<string, string> = {
   bridge: 'Hermes',
   hermes: 'Hermes',
-  ekko: 'Ekko',
-  'ekko-agent': 'Ekko',
+  hub: 'Hub Agent',
+  'hub-agent': 'Hub Agent',
+  // Legacy agent identifier compatibility
+  ekko: 'Hub Agent',
+  'ekko-agent': 'Hub Agent',
   claude: 'Claude',
   'claude-code': 'Claude',
   codex: 'Codex',
@@ -54,6 +76,12 @@ const AGENT_DISPLAY_NAMES: Record<string, string> = {
   dsh: 'DeepSeek Harness',
   cursor: 'Cursor',
   antigravity: 'Antigravity',
+  qwen: 'Qwen Code',
+  kimi: 'Kimi CLI',
+  codebuddy: 'CodeBuddy',
+  qoder: 'Qoder',
+  copilot: 'GitHub Copilot',
+  zcode: 'ZCode',
 }
 
 const SESSION_PUSH_MESSAGES: Record<NotificationLocale, Record<SessionPushEvent, string>> = {

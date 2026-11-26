@@ -5,6 +5,7 @@ import { getActiveProfileName, getProfileDir, listProfileNamesFromDisk } from '.
 import { readConfigYamlForProfile } from '../public/media-profile-config'
 import { config } from '../public/config'
 import { getCompatibleCustomProviders } from '../contracts/provider-compat'
+import { canChooseMediaOutputPath } from '../services/auth/media-output-access'
 
 const XAI_VIDEO_GENERATIONS_URL = 'https://api.x.ai/v1/videos/generations'
 const XAI_VIDEO_STATUS_URL = 'https://api.x.ai/v1/videos'
@@ -36,8 +37,6 @@ const MINIMAX_VIDEO_REGIONS = {
   },
 } as const
 type MiniMaxVideoRegion = keyof typeof MINIMAX_VIDEO_REGIONS
-const APIKEY_IMAGE_MODEL = 'gpt-image-2'
-const APIKEY_IMAGE_TO_IMAGE_MODEL = 'gpt-5.4-mini'
 const MAX_IMAGE_BYTES = 25 * 1024 * 1024
 const MINIMAX_MAX_IMAGE_BYTES = 20 * 1024 * 1024
 const DEFAULT_POLL_INTERVAL_MS = 5000
@@ -102,9 +101,20 @@ function readJsonFile(path: string): any {
 }
 
 function buildApiUrl(baseUrl: string, pathWithV1: string): string {
-  const base = baseUrl.replace(/\/+$/, '')
+  const base = String(baseUrl || '').trim().replace(/\/+$/, '')
+  if (!base) throw Object.assign(new Error('Image provider base_url is not configured'), { status: 400, code: 'image_provider_not_configured' })
   const apiPath = pathWithV1.startsWith('/') ? pathWithV1 : `/${pathWithV1}`
-  if (base.endsWith('/v1') && apiPath.startsWith('/v1/')) return `${base}${apiPath.slice(3)}`
+  if (!apiPath.startsWith('/v1/')) return `${base}${apiPath}`
+
+  const providerPath = apiPath.slice(3)
+  if (base.endsWith('/v1')) return `${base}${providerPath}`
+  try {
+    const pathname = new URL(base).pathname.replace(/\/+$/, '')
+    // Match provider catalog API roots; plain proxy prefixes still need /v1.
+    if (/\/(?:v\d+(?:beta)?|openai)$/.test(pathname)) return `${base}${providerPath}`
+  } catch {
+    // Keep the legacy /v1 default for non-standard base URL strings.
+  }
   return `${base}${apiPath}`
 }
 
@@ -119,7 +129,8 @@ function canonicalCustomProviderName(value: unknown): string {
 }
 
 function requestedApiKeyImageProviderName(body: any): string {
-  // resolveApiKeyImageProvider falls back to the profile's configured provider.
+  // No fallback to the built-in name here: resolveApiKeyImageProvider consults
+  // the profile's configured provider before reaching for the constant.
   return normalizeCustomProviderName(body?.provider || body?.provider_name || body?.custom_provider)
 }
 
@@ -127,9 +138,9 @@ function requestedApiKeyImageProviderName(body: any): string {
  * Image generation and editing had their provider and models fixed in code, so
  * a profile pointed at a different image API could not be reached at all. The
  * values now come from the `auxiliary` section of the profile's config.yaml —
- * the same place every other per-task model lives. The model constants stay as
- * the last resort; the provider has no built-in default and must be configured
- * or requested.
+ * the same place every other per-task model lives — and the constants stay as
+ * the last resort, so a profile that configures nothing behaves exactly as it
+ * did before.
  */
 type AuxiliaryImageSettings = { provider: string; model: string; timeoutMs?: number }
 
@@ -537,13 +548,17 @@ async function requestApiKeyImage(
   }
 
   let res: Response
+  const resolvedGenModel = body.model || models.generation || provider.model
+  const resolvedEditModel = body.model || models.edit || provider.model
+  const resolvedImageToolModel = body.image_model || models.generation || provider.model
   if (mode === 'text') {
+    if (!resolvedGenModel) throw Object.assign(new Error('Image generation model is not configured'), { status: 400, code: 'image_provider_not_configured' })
     res = await fetch(buildApiUrl(provider.baseUrl, '/v1/images/generations'), {
       method: 'POST',
       headers: { ...headers, 'Content-Type': 'application/json' },
       signal: AbortSignal.timeout(timeoutMs),
       body: JSON.stringify({
-        model: body.model || models.generation || APIKEY_IMAGE_MODEL,
+        model: resolvedGenModel,
         prompt,
         n,
         size: body.size || '1024x1024',
@@ -553,12 +568,13 @@ async function requestApiKeyImage(
       }),
     })
   } else if (mode === 'image') {
+    if (!resolvedEditModel || !resolvedImageToolModel) throw Object.assign(new Error('Image edit model is not configured'), { status: 400, code: 'image_provider_not_configured' })
     res = await fetch(buildApiUrl(provider.baseUrl, '/v1/responses'), {
       method: 'POST',
       headers: { ...headers, 'Content-Type': 'application/json' },
       signal: AbortSignal.timeout(timeoutMs),
       body: JSON.stringify({
-        model: body.model || models.edit || provider.model || APIKEY_IMAGE_TO_IMAGE_MODEL,
+        model: resolvedEditModel,
         store: false,
         stream: true,
         input: [{
@@ -570,7 +586,7 @@ async function requestApiKeyImage(
         }],
         tools: [{
           type: 'image_generation',
-          model: body.image_model || models.generation || APIKEY_IMAGE_MODEL,
+          model: resolvedImageToolModel,
           size: body.size || '1024x1024',
           quality: body.quality || 'auto',
           output_format: body.output_format || 'png',
@@ -579,13 +595,14 @@ async function requestApiKeyImage(
       }),
     })
   } else {
+    if (!resolvedGenModel) throw Object.assign(new Error('Image edit model is not configured'), { status: 400, code: 'image_provider_not_configured' })
     const image = await normalizeImageFile(body)
     const imageBytes = new Uint8Array(image.buffer.byteLength)
     imageBytes.set(image.buffer)
     const form = new FormData()
     form.append('image', new Blob([imageBytes.buffer], { type: image.mime }), image.name)
     form.append('prompt', prompt)
-    form.append('model', body.model || models.generation || APIKEY_IMAGE_MODEL)
+    form.append('model', resolvedGenModel)
     form.append('n', String(n))
     form.append('quality', body.quality || 'auto')
     form.append('size', body.size || '1024x1024')
@@ -627,6 +644,18 @@ function saveGeneratedImages(images: string[], requestedOutputPath?: string): st
   })
 }
 
+function requestedMediaOutputPath(ctx: Context, value: unknown): string {
+  const path = typeof value === 'string' ? value.trim() : ''
+  // Choosing a server filesystem destination is a privileged write, just as
+  // files/write is. Other users can still generate into Studio's media store.
+  if (path && !canChooseMediaOutputPath(ctx.state)) {
+    throw Object.assign(new Error('Only super admins can choose a media output path'), {
+      status: 403, code: 'media_output_path_forbidden',
+    })
+  }
+  return path
+}
+
 export async function apiKeyImageGenerate(ctx: Context) {
   let profile: string
   try {
@@ -639,6 +668,7 @@ export async function apiKeyImageGenerate(ctx: Context) {
 
   try {
     const body = ctx.request.body as any
+    const requestedOutputPath = requestedMediaOutputPath(ctx, body.output_path)
     const mode = normalizeImageMode(body.mode)
     const hermesConfig = await readConfigYamlForProfile(profile)
     const generationSettings = auxiliaryImageSettings(hermesConfig, 'image_generation')
@@ -653,19 +683,19 @@ export async function apiKeyImageGenerate(ctx: Context) {
       || (mode === 'image' ? generationSettings.provider : editSettings.provider)
     const providerName = requestedApiKeyImageProviderName(body)
     const resolution = resolveApiKeyImageProvider(hermesConfig, providerName, configuredProvider)
-    if (!resolution.attemptedName) {
-      ctx.status = 400
-      ctx.body = {
-        error: `No image provider is configured for profile "${profile}": set auxiliary.image_generation.provider in config.yaml to a custom provider (auto and main do not name one), or pass a provider.`,
-        code: 'image_provider_not_configured',
-      }
-      return
-    }
     if (!resolution.provider) {
+      if (!resolution.attemptedName) {
+        ctx.status = 400
+        ctx.body = {
+          error: `Image generation provider is not configured for profile "${profile}".`,
+          code: 'image_provider_not_configured',
+        }
+        return
+      }
       ctx.status = 401
       ctx.body = {
         error: `Missing ${resolution.attemptedName} provider in profile "${profile}" config.yaml.`,
-        code: 'missing_apikey_image_provider',
+        code: 'missing_image_provider',
       }
       return
     }
@@ -678,7 +708,6 @@ export async function apiKeyImageGenerate(ctx: Context) {
       { generation: generationSettings.model, edit: editSettings.model },
       activeSettings.timeoutMs,
     )
-    const requestedOutputPath = typeof body.output_path === 'string' ? body.output_path.trim() : ''
     const outputPaths = saveGeneratedImages(images, requestedOutputPath || undefined)
     ctx.body = {
       ok: true,
@@ -859,6 +888,7 @@ export async function miniMaxImageToVideo(ctx: Context) {
       timeout_ms?: number
     } | undefined
     const body = input || {}
+    const requestedOutputPath = requestedMediaOutputPath(ctx, body.output_path)
     const model = typeof body.model === 'string' && body.model.trim() ? body.model.trim() : MINIMAX_VIDEO_DEFAULT_MODEL
     const tokenInfo = await resolveMiniMaxToken(profile, body.region)
     if (!tokenInfo.token) {
@@ -883,7 +913,6 @@ export async function miniMaxImageToVideo(ctx: Context) {
     const timeoutMs = Number.isFinite(rawTimeoutMs)
       ? Math.max(10000, Math.min(rawTimeoutMs, 30 * 60 * 1000))
       : DEFAULT_TIMEOUT_MS
-    const requestedOutputPath = typeof body.output_path === 'string' ? body.output_path.trim() : ''
     const requestBody = miniMaxV1ImageRequest(body, prompt, image, model, region)
 
     const started = await requestMiniMaxJson(urls.generateUrl, tokenInfo.token, {
@@ -945,14 +974,17 @@ export async function miniMaxImageToVideo(ctx: Context) {
     }
   } catch (err: any) {
     ctx.status = err.status || 500
-    ctx.body = { error: err.message || String(err) }
+    ctx.body = { error: err.message || String(err), ...(err.code ? { code: err.code } : {}) }
   }
 }
 
 export async function grokImageToVideo(ctx: Context) {
   let profile: string
+  let requestedOutputPath: string
+  const body = ctx.request.body as any
   try {
     profile = resolveMediaProfile(ctx)
+    requestedOutputPath = requestedMediaOutputPath(ctx, body.output_path)
   } catch (err: any) {
     ctx.status = err.status || 400
     ctx.body = { error: err.message || String(err), code: err.code || 'invalid_profile' }
@@ -969,7 +1001,6 @@ export async function grokImageToVideo(ctx: Context) {
     return
   }
 
-  const body = ctx.request.body as any
   const prompt = typeof body.prompt === 'string' ? body.prompt.trim() : ''
   if (!prompt) {
     ctx.status = 400
@@ -984,7 +1015,6 @@ export async function grokImageToVideo(ctx: Context) {
     const timeoutMs = Number.isFinite(rawTimeoutMs)
       ? Math.max(10000, Math.min(rawTimeoutMs, 30 * 60 * 1000))
       : DEFAULT_TIMEOUT_MS
-    const requestedOutputPath = typeof body.output_path === 'string' ? body.output_path.trim() : ''
 
     const started = await requestXaiJson(XAI_VIDEO_GENERATIONS_URL, tokenInfo.token, {
       method: 'POST',

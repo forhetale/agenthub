@@ -1,3 +1,7 @@
+import { withSocketProviderAccount } from '../../public/provider-account'
+import { studioModelReasoningEffort } from '../../public/model-reasoning-effort'
+import { studioSessionAccount } from '../../contracts/runs/usage'
+import { isNativeCodingAgent, isGlobalOnlyCodingAgent } from '../../contracts/agents/native-coding-agents'
 import { codingAgentId } from './types'
 import { studioMcpCapabilities, type StudioMcpCapabilities } from '../../public/runs/mcp-capabilities'
 import { clarificationTurnInstruction } from '../clarification-runs'
@@ -54,7 +58,7 @@ export interface CodingAgentRunSocketData {
   group_agent_id?: string
 }
 
-export async function handleCodingAgentRun(
+async function handleCodingAgentRunImpl(
   nsp: ReturnType<Server['of']>,
   socket: Socket,
   data: CodingAgentRunSocketData,
@@ -91,15 +95,21 @@ export async function handleCodingAgentRun(
   }
 
   let runId = codingAgentRunManager.runIdForSession(sessionId)
-  const mode = agentId === 'cursor' || data.mode === 'global' ? 'global' : 'scoped'
+  const mode = isGlobalOnlyCodingAgent(agentId) || data.mode === 'global' ? 'global' : 'scoped'
   const storedSession = getSession(sessionId)
   if (storedSession && !storedSession.user_id && socketUser?.id != null) {
     updateSession(sessionId, { user_id: String(socketUser.id) })
   }
+  if (storedSession && !storedSession.studio_user_id && socketUser?.id != null) {
+    updateSession(sessionId, { studio_user_id: studioSessionAccount(storedSession) || String(socketUser.id) })
+  }
   const launchProvider = data.provider || (mode === 'scoped' ? storedSession?.provider || undefined : undefined)
-  const launchModel = data.model || (mode === 'scoped' ? storedSession?.model || undefined : undefined)
+  const launchModel = data.model ?? (storedSession?.model || undefined)
   const launchApiMode = data.apiMode || data.api_mode || (mode === 'scoped' ? storedSession?.api_mode || undefined : undefined)
-  const launchReasoningEffort = data.reasoning_effort ?? (mode === 'scoped' ? storedSession?.reasoning_effort || undefined : undefined)
+  const selectedReasoningEffort = data.reasoning_effort ?? (storedSession?.reasoning_effort || undefined)
+  const launchReasoningEffort = mode === 'global' ? selectedReasoningEffort : studioModelReasoningEffort({
+    provider: launchProvider, model: launchModel, baseUrl: data.baseUrl || data.base_url, reasoningEffort: selectedReasoningEffort,
+  })
   const groupSystemPrompt = String(data.group_system_prompt || '').trim()
   const groupRoomId = String(data.group_room_id || '').trim()
   const groupAgentId = String(data.group_agent_id || '').trim()
@@ -144,6 +154,9 @@ export async function handleCodingAgentRun(
   if (persistedSession && !persistedSession.user_id && socketUser?.id != null) {
     updateSession(sessionId, { user_id: String(socketUser.id) })
   }
+  if (persistedSession && !persistedSession.studio_user_id && socketUser?.id != null) {
+    updateSession(sessionId, { studio_user_id: studioSessionAccount(persistedSession) || String(socketUser.id) })
+  }
 
   if (data.category_id !== undefined) {
     updateSession(sessionId, { category_id: data.category_id })
@@ -167,14 +180,14 @@ export async function handleCodingAgentRun(
   try {
     const codingInput = convertContentBlocksForCodingAgent(data.input)
     if (!data.studio_mcp_token_file) await writeModelRunProfileToken(socketUser, profile)
-    const includeBaseSystemPrompt = agentId === 'claude-code' || agentId === 'codex' || agentId === 'pi' || agentId === 'grok' || (agentId === 'cursor' || agentId === 'antigravity') || (agentId === 'opencode' || agentId === 'dsh')
+    const includeBaseSystemPrompt = agentId === 'claude-code' || agentId === 'codex' || agentId === 'pi' || agentId === 'grok' || (agentId === 'cursor' || agentId === 'antigravity' || isNativeCodingAgent(agentId)) || (agentId === 'opencode' || agentId === 'dsh')
     const runPrompt = [
       groupSystemPrompt
         ? [groupSystemPrompt, studioMcpUsageGuidelines(mcpCapabilities)].filter(Boolean).join('\n\n')
         : (includeBaseSystemPrompt ? getSystemPrompt(undefined, { source: data.session_source || data.source, mcpCapabilities }) : ''),
       String(data.instructions || '').trim() === groupSystemPrompt ? '' : String(data.instructions || '').trim(),
     ].filter(Boolean).join('\n')
-    const plannedInput = withTaskPlanTurnContext(codingInput.text, taskPlanContext) as string
+    const plannedInput = withTaskPlanTurnContext(codingInput.text, taskPlanContext, !['group_chat', 'workflow', 'global_agent'].includes(data.session_source || data.source || '')) as string
     const runtimeInput = interactionContext
       ? `${plannedInput}\n\n${clarificationTurnInstruction(interactionContext)}`
       : plannedInput
@@ -209,3 +222,5 @@ export async function handleCodingAgentRun(
     throw err
   }
 }
+
+export const handleCodingAgentRun = withSocketProviderAccount(handleCodingAgentRunImpl)

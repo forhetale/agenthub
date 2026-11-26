@@ -1,3 +1,12 @@
+import { desktopBrowserRoutes } from '../modules/studio/routes/desktop-browser'
+import { studioPluginRoutes } from '../modules/studio/routes/plugins'
+import './provider-store-adapter'
+import './model-gateway-adapter'
+import { modelGatewayMiddleware } from '../modules/studio/middleware/model-gateway'
+import { providerAccountMiddleware } from '../modules/studio/middleware/provider-account'
+import { legacyProviderCredentials } from '../modules/studio/middleware/legacy-provider-credentials'
+import './plugin-agent-adapter'
+import { studioAgentRoutes } from '../modules/studio/routes/agents'
 import type { Context, Next } from 'koa'
 import './hermes-ops-adapter'
 import './agent-log-adapter'
@@ -5,16 +14,15 @@ import './workflow-runtime-adapter'
 import './chat-agent-runtime-adapter'
 import './group-chat-agent-runtime-adapter'
 import './session-agent-runtime-adapter'
+import './person-runtime-adapter'
+import { personRoutes } from '../modules/studio/routes/person'
 import { apiDocsRoutes } from '../modules/studio'
 import { healthRoutes } from './health'
 import { updateRoutes } from './update'
 import { themeRoutes } from '../modules/studio/routes/theme'
+import { navigationRoutes } from '../modules/studio/routes/navigation'
 import { announcementRoutes } from '../modules/studio/routes/announcements'
-import { notificationRoutes } from '../modules/studio/routes/notifications'
-import './system-info'
 import {
-  claudeCodeProxyRoutes,
-  codexProxyRoutes,
   codingAgentRoutes,
 } from './coding-agents'
 
@@ -23,6 +31,8 @@ import { uploadRoutes } from '../modules/studio/routes/upload'
 import { authPublicRoutes, authProtectedRoutes } from '../modules/studio/routes/auth'
 
 import { sessionRoutes } from '../modules/studio/routes/sessions'
+import { modelApiRoutes } from '../modules/studio/routes/model-api'
+import { notificationRoutes } from '../modules/studio/routes/notifications'
 import { profileRoutes } from '../modules/hermes/routes/profiles'
 import { skillRoutes } from '../modules/hermes/routes/skills'
 import { skillBundleRoutes } from '../modules/hermes/routes/skill-bundles'
@@ -59,13 +69,12 @@ import { runtimeVersionRoutes } from '../modules/hermes/routes/runtime-versions'
 import { legacyDataMigrationRoutes } from '../modules/hermes/routes/legacy-data-migration'
 import { agentStatusRoutes } from '../modules/studio/routes/agent-status'
 import { writeGateRoutes } from '../modules/hermes/routes/write-gate'
-import { ekkoMemoryRoutes } from '../modules/ekko/routes/memory'
-import { ekkoSkillRoutes } from '../modules/ekko/routes/skills'
-import { ekkoMcpRoutes } from '../modules/ekko/routes/mcp'
-import { ekkoConfigRoutes } from '../modules/ekko/routes/config'
+import { hubAgentMemoryRoutes } from '../modules/hub-agent/routes/memory'
+import { hubAgentSkillRoutes } from '../modules/hub-agent/routes/skills'
+import { hubAgentMcpRoutes } from '../modules/hub-agent/routes/mcp'
+import { hubAgentConfigRoutes } from '../modules/hub-agent/routes/config'
 import { petdexPublicRoutes, petdexRoutes } from '../modules/studio/routes/petdex'
 import { petRoutes } from '../modules/studio/routes/pets'
-import { legacyAppApiCompatibility } from '../modules/studio/middleware/legacy-app-api'
 
 /**
  * Register all routes on the Koa app.
@@ -73,13 +82,10 @@ import { legacyAppApiCompatibility } from '../modules/studio/middleware/legacy-a
  * then all protected routes.
  */
 export function registerRoutes(app: any, authMiddleware: Array<(ctx: Context, next: Next) => Promise<void>>) {
-  app.use(legacyAppApiCompatibility)
-
   // --- Public routes (no auth required) ---
+  app.use(modelGatewayMiddleware)
   app.use(healthRoutes.routes())
   app.use(authPublicRoutes.routes())
-  app.use(claudeCodeProxyRoutes.routes())
-  app.use(codexProxyRoutes.routes())
   app.use(ttsRoutes.routes())
   app.use(apiDocsRoutes.routes())
   app.use(petdexPublicRoutes.routes())
@@ -88,22 +94,30 @@ export function registerRoutes(app: any, authMiddleware: Array<(ctx: Context, ne
 
   // --- Auth middleware: all routes below require authentication ---
   authMiddleware.forEach((middleware) => app.use(middleware))
+  app.use(legacyProviderCredentials)
+  app.use(providerAccountMiddleware)
 
   // --- Protected routes (auth required) ---
   app.use(authProtectedRoutes.routes())
+  app.use(studioAgentRoutes.routes())
+  app.use(studioPluginRoutes.routes())
+  app.use(desktopBrowserRoutes.routes())
   app.use(uploadRoutes.routes())
   app.use(updateRoutes.routes())           // Must be before proxy (proxy catch-all matches everything)
   app.use(codingAgentRoutes.routes())
   app.use(agentStatusRoutes.routes())
   app.use(themeRoutes.routes())
+  app.use(navigationRoutes.routes())
   app.use(announcementRoutes.routes())
-  app.use(notificationRoutes.routes())       // Per-user Bark push settings
   app.use(sessionRoutes.routes())
+  app.use(modelApiRoutes.routes())
+  app.use(notificationRoutes.routes())
+  app.use(personRoutes.routes())
   app.use(profileRoutes.routes())
-  app.use(ekkoMemoryRoutes.routes())
-  app.use(ekkoSkillRoutes.routes())
-  app.use(ekkoMcpRoutes.routes())
-  app.use(ekkoConfigRoutes.routes())
+  app.use(hubAgentMemoryRoutes.routes())
+  app.use(hubAgentSkillRoutes.routes())
+  app.use(hubAgentMcpRoutes.routes())
+  app.use(hubAgentConfigRoutes.routes())
   app.use(skillRoutes.routes())
   app.use(skillBundleRoutes.routes())
   app.use(pluginRoutes.routes())

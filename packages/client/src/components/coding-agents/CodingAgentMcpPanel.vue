@@ -384,11 +384,11 @@ usePageLoadingTask(() => loading.value && servers.value.length === 0)
             <strong>{{ summary.total }}</strong>
           </div>
           <div class="summary-card success">
-            <span class="summary-label">{{ t('ekkoConfig.enabledServers') }}</span>
+            <span class="summary-label">{{ t('hubAgentConfig.enabledServers') }}</span>
             <strong>{{ summary.enabled }}</strong>
           </div>
           <div class="summary-card warning">
-            <span class="summary-label">{{ t('ekkoConfig.managed') }}</span>
+            <span class="summary-label">{{ t('hubAgentConfig.managed') }}</span>
             <strong>{{ summary.managed }}</strong>
           </div>
           <div class="summary-card info">
@@ -425,7 +425,7 @@ usePageLoadingTask(() => loading.value && servers.value.length === 0)
             :allow-readonly-edit="true"
             :allow-readonly-toggle="true"
             :allow-readonly-remove="true"
-            :context-label="server.managed ? t('ekkoConfig.managed') : t('ekkoConfig.custom')"
+            :context-label="server.managed ? t('hubAgentConfig.managed') : t('hubAgentConfig.custom')"
             :testing="testingServers.has(server.name)"
             @edit="openEdit(server)"
             @test="testServer(server)"

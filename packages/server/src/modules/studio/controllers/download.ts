@@ -122,7 +122,7 @@ export async function download(ctx: any) {
       backend_error: 502,
       backend_timeout: 504,
     }
-    ctx.status = statusMap[code] || 500
+    ctx.status = Number(err.status) || statusMap[code] || 500
     ctx.body = { error: err.message, code }
   }
 }

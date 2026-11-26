@@ -2,7 +2,7 @@
 name: hyperframes
 description: "Create AI videos with HyperFrames in Hermes using HTML, CSS, and JavaScript compositions, then validate and render them to MP4. Use for short video intros, cinematic trailers, product promos, subtitle animations, HUD/tech visuals, web-to-video work, and motion graphics."
 version: 1.0.0
-author: Ekko
+author: AgentHub
 license: MIT
 platforms: [linux, macos, windows]
 metadata:

@@ -1,7 +1,7 @@
 # Generated File Preview Plan
 
 Date: 2026-07-17
-Issue: https://github.com/EKKOLearnAI/ekko-studio/issues/2103
+Upstream Issue: https://github.com/EKKOLearnAI/ekko-studio/issues/2103
 
 ## Context
 

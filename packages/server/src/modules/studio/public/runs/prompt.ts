@@ -18,6 +18,7 @@ export const AI_OUTPUT_FORMAT_GUIDELINES = `
 
 ## 路径规则
 
+- 所有本地文件链接都直接使用绝对路径，省略 \`file://\` 前缀。列出改动或评审代码时引用的源码文件也遵循这条规则。
 - Unix/macOS/WSL：使用 \`/path/to/file\`，例如 \`/tmp/screenshot.png\`
 - Windows：使用盘符绝对路径，并把反斜杠 \`\\\` 转成正斜杠 \`/\`，例如 \`C:/Users/Administrator/Desktop/screenshot.png\`
 - Windows 路径必须用尖括号包住链接目标，避免盘符冒号或特殊字符被 Markdown 误解析，例如 \`<C:/Users/Administrator/Desktop/screenshot.png>\`
@@ -41,14 +42,14 @@ export const AI_OUTPUT_FORMAT_GUIDELINES = `
 \`\`\`
 [屏幕录制](/tmp/screen-recording.mp4)
 [操作演示](/tmp/demo.webm)
-[录屏2026-05-08 15.19.46](/Users/ekko/Desktop/录屏2026-05-08%2015.19.46.mov)
-[录屏2026-05-08 15.19.46](</Users/ekko/Desktop/录屏2026-05-08 15.19.46.mov>)
+[录屏2026-05-08 15.19.46](/Users/agenthub/Desktop/录屏2026-05-08%2015.19.46.mov)
+[录屏2026-05-08 15.19.46](</Users/agenthub/Desktop/录屏2026-05-08 15.19.46.mov>)
 [Windows 录屏](<C:/Users/Administrator/Desktop/screen recording.mov>)
 \`\`\`
 
 错误示例：
 \`\`\`
-[录屏2026-05-08 15.19.46](/Users/ekko/Desktop/录屏2026-05-08 15.19.46.mov)
+[录屏2026-05-08 15.19.46](/Users/agenthub/Desktop/录屏2026-05-08 15.19.46.mov)
 ![桌面截图](C:\\Users\\Administrator\\Desktop\\screenshot.png)
 \`\`\`
 
@@ -57,6 +58,7 @@ export const AI_OUTPUT_FORMAT_GUIDELINES = `
 使用 Markdown 链接语法：
 
 \`\`\`
+[src/app.ts](/workspace/src/app.ts)
 [下载报告](/tmp/monthly-report.pdf)
 [下载报告](<C:/Users/Administrator/Desktop/monthly-report.pdf>)
 \`\`\`
@@ -82,6 +84,7 @@ When your response includes an image, video, or file reference, use Markdown and
 
 ## Path rules
 
+- Use the absolute path directly in every local file link and omit the \`file://\` prefix. This includes source files linked in change summaries and code reviews.
 - Unix/macOS/WSL: use \`/path/to/file\`, for example \`/tmp/screenshot.png\`
 - Windows: use an absolute drive-letter path and replace backslashes \`\\\` with forward slashes \`/\`, for example \`C:/Users/Administrator/Desktop/screenshot.png\`
 - Wrap Windows link targets in angle brackets so the drive-letter colon and special characters are parsed correctly, for example \`<C:/Users/Administrator/Desktop/screenshot.png>\`
@@ -105,14 +108,14 @@ Use Markdown link syntax for video files. Supported formats are .mp4, .webm, and
 \`\`\`
 [Screen recording](/tmp/screen-recording.mp4)
 [Demo](/tmp/demo.webm)
-[Recording 2026-05-08 15.19.46](/Users/ekko/Desktop/recording%202026-05-08%2015.19.46.mov)
-[Recording 2026-05-08 15.19.46](</Users/ekko/Desktop/recording 2026-05-08 15.19.46.mov>)
+[Recording 2026-05-08 15.19.46](/Users/agenthub/Desktop/recording%202026-05-08%2015.19.46.mov)
+[Recording 2026-05-08 15.19.46](</Users/agenthub/Desktop/recording 2026-05-08 15.19.46.mov>)
 [Windows recording](<C:/Users/Administrator/Desktop/screen recording.mov>)
 \`\`\`
 
 Incorrect examples:
 \`\`\`
-[Recording 2026-05-08 15.19.46](/Users/ekko/Desktop/recording 2026-05-08 15.19.46.mov)
+[Recording 2026-05-08 15.19.46](/Users/agenthub/Desktop/recording 2026-05-08 15.19.46.mov)
 ![Desktop screenshot](C:\\Users\\Administrator\\Desktop\\screenshot.png)
 \`\`\`
 
@@ -121,6 +124,7 @@ Incorrect examples:
 Use Markdown link syntax:
 
 \`\`\`
+[src/app.ts](/workspace/src/app.ts)
 [Download report](/tmp/monthly-report.pdf)
 [Download report](<C:/Users/Administrator/Desktop/monthly-report.pdf>)
 \`\`\`
@@ -140,26 +144,29 @@ When the user asks you to send, share, or deliver a file, return its path in one
 `;
 
 /**
- * Stable Ekko Studio MCP usage guidance. This intentionally avoids runtime
+ * Stable AgentHub MCP usage guidance. This intentionally avoids runtime
  * values such as profile names or bearer tokens; those are supplied by MCP
  * server configuration and profile-scoped token files.
  */
 export const HERMES_MCP_USAGE_GUIDELINES = [
-  'Ekko Studio MCP usage: when the user asks to read/check the operation manual, API docs, endpoint docs, 接口文档, 接口手册, or 操作手册, immediately call ekko_studio_api_openapi_get without filters to list API module outlines.',
-  'Use the module purpose and keywords from ekko_studio_api_openapi_get to choose the right module, then call it again with a tag, path, or method filter before calling unfamiliar Web UI endpoints.',
-  'Use ekko_studio_api_request with method, relative path, and JSON body/query fields that match the OpenAPI requestBody and parameters. Do not call full URLs.',
-  'When the user asks to use the Ekko Studio MCP browser (including 内置浏览器, MCP浏览器, Studio browser, or built-in browser) and ekko_studio_browser_toolset is available, prefer that toolset. The separate browser_navigate/browser_click tools use a different browser environment and do not share Studio tabs or login state. Use that environment only when explicitly requested or Studio browser is unavailable. For the Studio toolset, call it with action=list to discover operations, action=describe for each needed schema, then action=call. Browser MCP exposes a compact toolset rather than resources; an empty list_mcp_resources or list_mcp_resource_templates result does not mean the browser toolset is unavailable. For large pages use local selector/query/interactive_only and nextOffset; these work without JEV. After actions inspect observation, selection/value states, changed text and openedTabs. Completed means dispatched, not that the goal was achieved. If repeated actions show no relevant change, inspect a fresh region or screenshot and change strategy instead of repeating the same click.',
+  'AgentHub MCP usage: when the user asks to read/check the operation manual, API docs, endpoint docs, 接口文档, 接口手册, or 操作手册, immediately call agenthub_api_openapi_get without filters to list API module outlines.',
+  'Use the module purpose and keywords from agenthub_api_openapi_get to choose the right module, then call it again with a tag, path, or method filter before calling unfamiliar Web UI endpoints.',
+  'Use agenthub_api_request with method, relative path, and JSON body/query fields that match the OpenAPI requestBody and parameters. Do not call full URLs.',
+  'When the user asks to use the AgentHub MCP browser (including 内置浏览器, MCP浏览器, Studio browser, or built-in browser) and agenthub_browser_toolset is available, prefer that toolset. Hermes native browser tools use a different browser environment and do not share Studio tabs or login state. Use that environment only when explicitly requested or Studio browser is unavailable, and use only the browser tools actually offered by the current runtime: browser_exec on newer Hermes releases. Never assume legacy browser tools exist. For the Studio toolset, call it with action=list to discover operations, action=describe for each needed schema, then action=call. Browser MCP exposes a compact toolset rather than resources; an empty list_mcp_resources or list_mcp_resource_templates result does not mean the browser toolset is unavailable. For large pages use local selector/query/interactive_only and nextOffset; these work without JEV. After actions inspect observation, selection/value states, changed text and openedTabs. Completed means dispatched, not that the goal was achieved. If repeated actions show no relevant change, inspect a fresh region or screenshot and change strategy instead of repeating the same click.',
   'Authentication and the configured Hermes profile are provided by the MCP server; do not add Authorization headers or copy tokens into tool arguments.',
-  'Do not use ekko_studio_use_chat_run, Ekko Studio session tools, /api/studio/chat-run/*, or /api/studio/sessions/* as an internal delegation mechanism. In delegate_task, subtask, or workflow-node contexts, do not create, rename, delete, or continue Ekko Studio sessions unless the user explicitly asked to operate Ekko Studio sessions; return the delegated result in the current task instead.',
+  'Do not use agenthub_use_chat_run, AgentHub session tools, /api/studio/chat-run/*, or /api/studio/sessions/* as an internal delegation mechanism. In delegate_task, subtask, or workflow-node contexts, do not create, rename, delete, or continue AgentHub sessions unless the user explicitly asked to operate AgentHub sessions; return the delegated result in the current task instead.',
+  'AgentHub session lookup: when the user provides a session id (for example a value like "muy...") or asks to read, inspect, or summarize a previous Studio conversation, use the agenthub_use_toolset MCP tool - call it with action=describe then action=call for agenthub_use_session_get or agenthub_use_session_messages, passing session_id (and profile when the id is not in the current profile). Read the transcript through that toolset instead of guessing local SQLite file paths or opening the Web UI in a browser, both of which fail silently behind the login wall.',
 ];
 
 export function studioMcpUsageGuidelines(capabilities?: StudioMcpCapabilities): string {
   if (!capabilities) return ''
   const rules: string[] = []
   if (capabilities.api) rules.push(...HERMES_MCP_USAGE_GUIDELINES.slice(0, 3))
+  if (capabilities.plugins) rules.push('Studio plugin tools are provided by the shared agenthub-plugins MCP server or a dedicated MCP server named by the plugin. Discover available tools and follow their descriptions and input schemas; tool names identify the plugin and operation, for example notebook__append.')
   if (capabilities.browser) rules.push(HERMES_MCP_USAGE_GUIDELINES[3])
   if (Object.values(capabilities).some(Boolean)) rules.push(HERMES_MCP_USAGE_GUIDELINES[4])
   if (capabilities.api || capabilities.use) rules.push(HERMES_MCP_USAGE_GUIDELINES[5])
+  if (capabilities.use) rules.push(HERMES_MCP_USAGE_GUIDELINES[6])
   return rules.join('\n')
 }
 

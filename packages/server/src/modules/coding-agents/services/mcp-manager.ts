@@ -1,3 +1,4 @@
+import { isNativeCodingAgent } from '../../studio/contracts/agents/native-coding-agents'
 import { parseAntigravityConfig } from './antigravity/config'
 import { readDshMcpServers, updateDshMcpServer, validateDshMcpServer, assertDshMcpProbeIsLiteral } from './dsh/config'
 import { readdir, readFile, writeFile } from 'node:fs/promises'
@@ -14,26 +15,38 @@ import {
 import { setManagedMcpServerEnabled, setManagedMcpServerOverride } from './mcp-overrides'
 import { getWebUiHome } from '../../studio/public/config'
 import { probeCodingAgentMcpConfig } from './mcp-runtime-isolation'
+import { isPluginMcpServerName, mergePluginMcpServers } from '../../studio/public/plugin-mcp'
 
-const CODING_AGENT_IDS = new Set(['claude-code', 'codex', 'pi', 'grok', 'opencode', 'dsh', 'cursor', 'antigravity'])
-const STUDIO_MANAGED_NAMES = new Set([
+const CODING_AGENT_IDS = new Set(['claude-code', 'codex', 'pi', 'grok', 'opencode', 'dsh', 'cursor', 'antigravity', 'qwen', 'kimi', 'codebuddy', 'qoder', 'copilot', 'zcode'])
+const LEGACY_STUDIO_MANAGED_NAMES = new Set([
   'hermes-studio-api',
   'hermes-studio-browser',
+  'hermes-studio-devices',
   'hermes-studio-use',
   'ekko-studio-api',
+  'ekko-studio-plugins',
   'ekko-studio-browser',
+  'ekko-studio-devices',
   'ekko-studio-use',
   'ekko-studio-plan',
   'ekko-studio-interaction',
+  'agenthub-plan',
 ])
-// Retired Studio toolsets are no longer injected, but stale copies are still
-// stripped whenever a persisted agent config is rewritten.
-const STRIPPED_STUDIO_NAMES = new Set([
-  ...STUDIO_MANAGED_NAMES,
-  'hermes-studio-devices',
-  'ekko-studio-devices',
+const STUDIO_MANAGED_NAMES = new Set([
+  'agenthub-api',
+  'agenthub-plugins',
+  'agenthub-browser',
+  'agenthub-use',
+  'agenthub-interaction',
+  ...LEGACY_STUDIO_MANAGED_NAMES,
 ])
 const MANAGED_ENV_KEY = 'HERMES_WEB_UI_MANAGED_MCP'
+const isManagedName = (name: string) => STUDIO_MANAGED_NAMES.has(name) || isPluginMcpServerName(name)
+const canonicalManagedMcpName = (name: string) => {
+  const trimmed = name.trim()
+  if (trimmed === 'agenthub-plan' || trimmed === 'ekko-studio-plan' || trimmed === 'hermes-studio-plan') return 'agenthub-interaction'
+  return trimmed.replace(/^(?:hermes-studio|ekko-studio)-(api|plugins|browser|devices|use|interaction)$/, 'agenthub-$1')
+}
 
 export interface CodingAgentMcpServer {
   name: string
@@ -295,7 +308,7 @@ async function readServers(id: string, scope: CodingAgentConfigScope): Promise<{
   assertAgentId(id)
   const file = await readCodingAgentConfigFile(id, configKey(id), scope)
   let servers: Map<string, Record<string, any>>
-  if (id === 'claude-code' || id === 'pi' || (id === 'cursor' || id === 'antigravity')) {
+  if (isNativeCodingAgent(id) || id === 'claude-code' || id === 'pi' || (id === 'cursor' || id === 'antigravity')) {
     servers = parseJsonDocument(id === 'antigravity' ? JSON.stringify(parseAntigravityConfig(file.content)) : file.content).servers
   } else if (id === 'dsh') {
     servers = readDshMcpServers(file.content)
@@ -305,11 +318,9 @@ async function readServers(id: string, scope: CodingAgentConfigScope): Promise<{
     servers = parseTomlServers(file.content)
   }
 
-  servers.delete('ekko-studio-plan')
+  for (const legacyName of LEGACY_STUDIO_MANAGED_NAMES) servers.delete(legacyName)
   const managed = getCodingAgentManagedMcpServerConfigs(id as CodingAgentId, scope.profile)
-  for (const [name, config] of Object.entries(managed)) {
-    servers.set(name, normalizeConfig(config))
-  }
+  servers = new Map(Object.entries(mergePluginMcpServers(Object.fromEntries(servers), managed)).map(([name, config]) => [name, normalizeConfig(config)]))
   return {
     content: file.content,
     servers,
@@ -327,10 +338,10 @@ async function writeServer(
     await writeCodingAgentConfigFile(id, configKey(id), updateDshMcpServer(originalContent, name, config), scope)
     return
   }
-  if (id === 'claude-code' || id === 'pi' || (id === 'cursor' || id === 'antigravity')) {
+  if (isNativeCodingAgent(id) || id === 'claude-code' || id === 'pi' || (id === 'cursor' || id === 'antigravity')) {
     const { root } = parseJsonDocument(id === 'antigravity' ? JSON.stringify(parseAntigravityConfig(originalContent)) : originalContent)
-    const persistedServers = isRecord(root.mcpServers) ? { ...root.mcpServers } : {}
-    for (const managedName of STRIPPED_STUDIO_NAMES) delete persistedServers[managedName]
+    const persistedServers = mergePluginMcpServers(isRecord(root.mcpServers) ? root.mcpServers : {}, {})
+    for (const managedName of STUDIO_MANAGED_NAMES) delete persistedServers[managedName]
     if (config) {
       const native = { ...config }
       if (id === 'antigravity') {
@@ -346,8 +357,8 @@ async function writeServer(
   }
   if (id === 'opencode') {
     const { root } = parseOpenCodeDocument(originalContent)
-    const persistedServers = isRecord(root.mcp) ? { ...root.mcp } : {}
-    for (const managedName of STRIPPED_STUDIO_NAMES) delete persistedServers[managedName]
+    const persistedServers = mergePluginMcpServers(isRecord(root.mcp) ? root.mcp : {}, {})
+    for (const managedName of STUDIO_MANAGED_NAMES) delete persistedServers[managedName]
     if (config) persistedServers[name] = serializeOpenCodeConfig(config)
     else delete persistedServers[name]
     root.mcp = persistedServers
@@ -355,7 +366,7 @@ async function writeServer(
     return
   }
   const { other, blocks } = splitTomlDocument(originalContent)
-  for (const managedName of STRIPPED_STUDIO_NAMES) blocks.delete(managedName)
+  for (const [managedName, block] of blocks) if (STUDIO_MANAGED_NAMES.has(managedName) || block.includes(MANAGED_ENV_KEY)) blocks.delete(managedName)
   if (config) blocks.set(name, serializeTomlServer(name, config))
   else blocks.delete(name)
   const mcp = [...blocks.values()].join('\n\n')
@@ -365,7 +376,7 @@ async function writeServer(
 
 function removeServerFromContent(id: string, content: string, name: string): string | null {
   if (id === 'dsh') return readDshMcpServers(content).has(name) ? updateDshMcpServer(content, name, null) : null
-  if (id === 'claude-code' || id === 'pi' || (id === 'cursor' || id === 'antigravity')) {
+  if (isNativeCodingAgent(id) || id === 'claude-code' || id === 'pi' || (id === 'cursor' || id === 'antigravity')) {
     const { root } = parseJsonDocument(content)
     const persistedServers = isRecord(root.mcpServers) ? { ...root.mcpServers } : {}
     if (!Object.prototype.hasOwnProperty.call(persistedServers, name)) return null
@@ -390,7 +401,7 @@ function removeServerFromContent(id: string, content: string, name: string): str
 
 async function pruneScopedServerCopies(id: string, name: string): Promise<number> {
   const modelRoot = join(getWebUiHome(), 'coding-agent', 'model')
-  const fileName = id === 'dsh' ? 'cordis.patch.yml' : id === 'claude-code' || id === 'pi' || (id === 'cursor' || id === 'antigravity')
+  const fileName = id === 'dsh' ? 'cordis.patch.yml' : isNativeCodingAgent(id) || id === 'claude-code' || id === 'pi' || (id === 'cursor' || id === 'antigravity')
     ? 'mcp.json'
     : id === 'opencode'
       ? 'opencode.json'
@@ -479,13 +490,13 @@ export async function upsertCodingAgentMcpServer(
   scope: CodingAgentConfigScope = {},
 ): Promise<{ ok: true; name: string }> {
   assertAgentId(id)
-  const normalizedName = name.trim().replace(/^hermes-studio-(api|browser|use)$/, 'ekko-studio-$1')
+  const normalizedName = canonicalManagedMcpName(name)
   if (!normalizedName || normalizedName.length > 128 || /[/\\\x00-\x1f]/.test(normalizedName)) {
     const error = new Error('Valid server name is required')
     ;(error as any).status = 400
     throw error
   }
-  if (STUDIO_MANAGED_NAMES.has(normalizedName)) {
+  if (isManagedName(normalizedName) && (STUDIO_MANAGED_NAMES.has(normalizedName) || isManaged(normalizedName, (await readServers(id, scope)).servers.get(normalizedName) || {}))) {
     const profile = scope.profile || 'default'
     const managedConfig = normalizeConfig(getCodingAgentManagedMcpServerConfigs(
       id as CodingAgentId,
@@ -541,8 +552,9 @@ export async function removeCodingAgentMcpServer(
   name: string,
   scope: CodingAgentConfigScope = {},
 ): Promise<{ ok: true }> {
-  if (STUDIO_MANAGED_NAMES.has(name)) {
-    setManagedMcpServerEnabled(id, scope.profile || 'default', name, false)
+  const normalizedName = canonicalManagedMcpName(name)
+  if (isManagedName(normalizedName) && (STUDIO_MANAGED_NAMES.has(normalizedName) || isManaged(normalizedName, (await readServers(id, scope)).servers.get(normalizedName) || {}))) {
+    setManagedMcpServerEnabled(id, scope.profile || 'default', normalizedName, false)
     invalidateCodingAgentConfigRuntime(id, scope, { profileScoped: true })
     return { ok: true }
   }

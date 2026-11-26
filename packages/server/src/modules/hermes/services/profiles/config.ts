@@ -34,7 +34,6 @@ export const PROVIDER_ENV_MAP: Record<string, { api_key_env: string; base_url_en
   'ai-gateway': { api_key_env: 'AI_GATEWAY_API_KEY', base_url_env: 'AI_GATEWAY_BASE_URL' },
   cliproxyapi: { api_key_env: '', base_url_env: '' },
   'opencode-zen': { api_key_env: 'OPENCODE_ZEN_API_KEY', base_url_env: 'OPENCODE_ZEN_BASE_URL' },
-  'opencode-free': { api_key_env: '', base_url_env: '' },
   'opencode-go': { api_key_env: 'OPENCODE_GO_API_KEY', base_url_env: 'OPENCODE_GO_BASE_URL' },
   huggingface: { api_key_env: 'HF_TOKEN', base_url_env: 'HF_BASE_URL' },
   nvidia: { api_key_env: 'NVIDIA_API_KEY', base_url_env: 'NVIDIA_BASE_URL' },
@@ -46,7 +45,7 @@ export const PROVIDER_ENV_MAP: Record<string, { api_key_env: string; base_url_en
   nous: { api_key_env: '', base_url_env: '' },
   'openai-codex': { api_key_env: '', base_url_env: '' },
   'openai-api': { api_key_env: 'OPENAI_API_KEY', base_url_env: 'OPENAI_BASE_URL' },
-  copilot: { api_key_env: 'GITHUB_TOKEN', base_url_env: '' },
+  copilot: { api_key_env: 'COPILOT_GITHUB_TOKEN', base_url_env: '' },
   longcat: { api_key_env: '', base_url_env: '' },
   'tencent-tokenhub': { api_key_env: 'TENCENT_TOKENHUB_API_KEY', base_url_env: 'TOKENHUB_BASE_URL' },
 }
@@ -147,6 +146,10 @@ async function saveEnvValueAtPath(envPath: string, key: string, value: string): 
   try { await chmod(envPath, 0o600) } catch { /* ignore */ }
 }
 
+export async function saveEnvValueInHome(hermesHome: string, key: string, value: string): Promise<void> {
+  await saveEnvValueAtPath(join(hermesHome, '.env'), key, value)
+}
+
 export async function saveEnvValue(key: string, value: string): Promise<void> {
   await saveEnvValueAtPath(getActiveEnvPath(), key, value)
 }
@@ -233,12 +236,13 @@ export async function fetchProviderModels(baseUrl: string, apiKey: string, freeO
       logger.warn('available-models %s returned %d', modelsUrl, res.status)
       return []
     }
-    const data = await res.json() as { data?: Array<{ id: string }> }
-    if (!Array.isArray(data.data)) {
+    const data = await res.json() as { data?: Array<{ id?: unknown; slug?: unknown }>; models?: Array<{ id?: unknown; slug?: unknown }> }
+    const rawModels = Array.isArray(data?.data) ? data.data : data?.models
+    if (!Array.isArray(rawModels)) {
       logger.warn('available-models %s returned unexpected format', modelsUrl)
       return []
     }
-    let models = data.data.map(m => m.id)
+    let models = rawModels.map(m => String(m?.id || m?.slug || '').trim()).filter(Boolean)
     // Gemini returns model IDs with "models/" prefix. Strip to avoid double
     // prefix when Hermes native adapter constructs .../models/{model}:generateContent
     if (base.includes('generativelanguage.googleapis.com')) {

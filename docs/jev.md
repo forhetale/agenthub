@@ -5,28 +5,42 @@ register the exact integration point, provide an independent feature switch with
 declared Studio default, and expose adjustable options in the frontend. `npm run harness:check`
 enforces the registration and configuration wiring.
 
-The Models page has a **JEV** tab for the selected `modelProfile`. Save a TypeSafe
-API key, API root (default `https://api.typesafe.ai`, without `/v1`), model
+The Models page has a global **JEV** tab, shared across model Profiles. Save a TypeSafe
+API key, API root (default `https://api.typesafe.ai`), model
 (`jev-latest`) and timeout. **Test saved configuration** submits one fixed sample
 with Choice, Score and Noul questions; it uses the saved settings, not unsaved form
 values, and consumes a provider request.
 
-Changing the page Profile only changes the configuration being edited. Each HTTP
-request explicitly sends `X-Hermes-Profile`; it does not change the active global
-Profile. Keys stay on the server and settings responses contain only `hasApiKey`.
-An empty key field preserves the existing key. Delete resets this Profile's JEV
-settings and removes its saved key.
+The API URL also accepts a trailing `/v1` or the full `/v1/systemone` endpoint.
+Studio and standalone Hub Agent normalize either form to the API root before the SDK
+adds its endpoint path, preserving any gateway prefix. Existing saved URLs are
+normalized when read. For example, `https://api.example.com/v1/systemone` uses
+the API root `https://api.example.com` and sends one request to the supplied endpoint.
+
+JEV connection details and feature switches are shared by the entire Studio
+installation. The JEV tab hides the model Profile selector and requests do not
+carry a Profile header. Keys stay on the server; responses expose only
+`hasApiKey`. An empty key field preserves the saved key. Only the super
+administrator can save, delete or test the global configuration; other signed-in
+users can read its non-secret settings and use enabled assessments.
+
+Configuration is stored in `config.appHome/models/jev/global.json`. On first read,
+Studio migrates the old default Profile configuration, or the only legacy
+configuration when no default exists. Multiple non-default configurations are
+retained without guessing a key; configure the shared connection once in that
+case. Legacy files remain intact. A global save/reset wins concurrent migration,
+and resetting global settings never restores legacy credentials.
 
 ## Server modules
 
-Import the Studio public facade. Pass the Profile authorized for the operation.
+Import the Studio public facade. Configuration is shared; resource authorization remains with the caller.
 The following is a low-level evaluation example; business callers must first gate
 it on their registered feature switch and retain their fallback behavior:
 
 ```ts
 import { evaluateJev, choice, score, noul } from '../modules/studio/public/jev'
 
-const result = await evaluateJev(profile, {
+const result = await evaluateJev({
   state: { message: 'Please fix this billing error.' },
   questions: {
     category: choice('Which team should handle this?', {
@@ -44,7 +58,7 @@ result.answers.actionable.noul
 
 The facade uses `@typesafe-ai/sdk`. It returns answers, confidence, probability
 distributions, model and usage unchanged. Each call reads the latest saved
-settings, with no fallback to another Profile or environment key. Requests have
+global settings, with no fallback to an environment key. Requests have
 the configured timeout, support cancellation, and do not automatically retry.
 `JevError.status` identifies missing configuration (409), provider errors (502),
 timeout (504), cancellation (499) and invalid input (400). Provider errors are
@@ -54,7 +68,7 @@ endpoints, so the UI can translate them without parsing English diagnostic text.
 
 ## Client modules and HTTP
 
-Use `evaluateJev(profile, input, signal?)` from `@/api/studio/jev`. It has the same
+Use `evaluateJev(input, signal?)` from `@/api/studio/jev`. It has the same
 typed request/response shape and routes through the authenticated Studio server.
 
 - `GET /api/studio/jev/settings`: read non-secret settings.
@@ -63,58 +77,79 @@ typed request/response shape and routes through the authenticated Studio server.
 - `POST /api/studio/jev/test`: test saved settings with a fixed sample.
 - `POST /api/studio/jev/evaluate`: accept `{ state, questions, model? }`.
 
-All endpoints require Studio authentication and an authorized Profile header.
-Persistence uses private files in `config.appHome/models/jev`, named by the profile hash.
+All endpoints require Studio authentication. Configuration writes and connection
+tests require super administrator privileges. Profile headers do not select JEV
+configuration. Persistence uses the private `config.appHome/models/jev/global.json` file.
 It does not write Hermes Agent configuration. No existing runtime or business
 module is routed through JEV without its feature switch being enabled.
 
 Protocol reference: [TypeSafe quickstart](https://docs.typesafe.ai/introduction/quickstart)
 and [JavaScript SDK](https://docs.typesafe.ai/sdk/javascript).
 
-## Ekko runtime configuration
+## Personal assistant memory
 
-Ekko Agent also owns an independent JEV module (`ekko.jev` and `runtime.jev`).
-Standalone users can persist `config.jev`, pass `new EkkoAgent({ jev: ... })`,
+Models → JEV includes **Use JEV for personal assistant memory**. This independent
+master switch defaults to off. Its semantic category routing, relevance filtering,
+candidate reranking and write review switches default to on, and remain saved
+when the master is off. Advanced parameters independently configure the candidate
+limit (20), recall threshold (0.5), filter confidence (0.8), write review confidence
+(0.8), and total recall/write budget (3000 ms), with the same ranges as Hub Agent memory.
+
+Each assistant run reads the global JEV configuration and
+captures a private runtime snapshot. Saved edits apply to the next run, including
+background result replies. Credentials and connection settings are shared with
+other JEV features; Hub Agent's memory switches do not activate or disable
+the assistant's enhancement. Memory remains account-owned across model/Profile
+changes. Background result replies still cannot write personal facts.
+
+Missing credentials, disabled enhancement, settings read errors and optional
+evaluation failures preserve the original memory flow. Cancellation propagates.
+The assistant uses Hub Agent's existing memory evaluator and does not add an approval
+step or a separate memory database.
+
+## Hub Agent runtime configuration
+
+Hub Agent also owns an independent JEV module (`hubAgent.jev` and `runtime.jev`).
+Standalone users can persist `config.jev`, pass `new HubAgent({ jev: ... })`,
 or override it when creating a runtime. Runtime values override persisted fields
-without writing them back. See the [Ekko API](../packages/ekko-agent/docs/API.md#jev-模块).
+without writing them back. See the [Hub Agent API](../packages/hub-agent/docs/API.md#jev-模块).
 
-Studio keeps using the Profile-scoped settings above. Before each Ekko run it
-reads the current Profile's complete values through the server-only
-`getJevRuntimeConfig(profile)` facade and passes configuration values to Ekko's
+Before each Hub Agent run, Studio reads the shared global settings through the server-only
+`getJevRuntimeConfig()` facade and passes configuration values to Hub Agent's
 own client. Cached runtimes pick up edits on the next run. Missing credentials or
-settings read failures disable JEV for the run, rather than using an Ekko-local
-or another Profile's key. No client/evaluator implementation is injected.
+settings read failures disable JEV for the run, rather than using a Hub Agent-local
+key. No client/evaluator implementation is injected.
 
-The JEV settings panel includes **Use JEV for Ekko memory**, stored per Profile as
-`ekkoMemoryEnabled` (default `false`). The runtime facade maps it to Ekko's
+The JEV settings panel includes **Use JEV for Hub Agent memory**, stored globally as
+`hubAgentMemoryEnabled` (default `false`). The runtime facade maps it to Hub Agent's
 `jev.memoryEnabled`; Studio's explicit `false` overrides a locally saved `true`.
-Edits take effect on the next run without changing Ekko's persisted settings.
+Edits take effect on the next run without changing Hub Agent's persisted settings.
 Deleting Studio JEV settings resets the switch to `false`. This switch does not
 disable other callers of the shared JEV evaluator.
 
-Standalone Ekko users can persist `config.jev.memoryEnabled` or override it via
-`new EkkoAgent({ jev: { memoryEnabled: true } })` and runtime creation options.
-Standalone Ekko defaults every switch to false. Studio defaults the master to false
+Standalone Hub Agent users can persist `config.jev.memoryEnabled` or override it via
+`new HubAgent({ jev: { memoryEnabled: true } })` and runtime creation options.
+Standalone Hub Agent defaults every switch to false. Studio defaults the master to false
 and the four child switches to true, so enabling the master activates all four
 policies unless a child was explicitly disabled. Missing fields in older Studio
 settings receive these defaults; saved values always take precedence, including false.
 
-| Studio field | Ekko `jev` field | Studio default / range |
+| Studio field | Hub Agent `jev` field | Studio default / range |
 | --- | --- | --- |
-| `ekkoMemoryKindRoutingEnabled` | `memoryKindRoutingEnabled` | true |
-| `ekkoMemoryRelevanceFilterEnabled` | `memoryRelevanceFilterEnabled` | true |
-| `ekkoMemoryRerankEnabled` | `memoryRerankEnabled` | true |
-| `ekkoMemoryWriteReviewEnabled` | `memoryWriteReviewEnabled` | true |
-| `ekkoMemoryCandidateLimit` | `memoryCandidateLimit` | 20 / integer 1–50 |
-| `ekkoMemoryRecallMinConfidence` | `memoryRecallMinConfidence` | 0.5 / 0.5–1 (routing relevance and ranking confidence) |
-| `ekkoMemoryFilterMinConfidence` | `memoryFilterMinConfidence` | 0.8 / 0.5–1 (minimum confidence to discard an irrelevant card) |
-| `ekkoMemoryMinConfidence` | `memoryMinConfidence` | 0.8 / 0.5–1 (write review only) |
-| `ekkoMemoryTimeoutMs` | `memoryTimeoutMs` | 3000 / integer 100–30000 ms |
+| `hubAgentMemoryKindRoutingEnabled` | `memoryKindRoutingEnabled` | true |
+| `hubAgentMemoryRelevanceFilterEnabled` | `memoryRelevanceFilterEnabled` | true |
+| `hubAgentMemoryRerankEnabled` | `memoryRerankEnabled` | true |
+| `hubAgentMemoryWriteReviewEnabled` | `memoryWriteReviewEnabled` | true |
+| `hubAgentMemoryCandidateLimit` | `memoryCandidateLimit` | 20 / integer 1–50 |
+| `hubAgentMemoryRecallMinConfidence` | `memoryRecallMinConfidence` | 0.5 / 0.5–1 (routing relevance and ranking confidence) |
+| `hubAgentMemoryFilterMinConfidence` | `memoryFilterMinConfidence` | 0.8 / 0.5–1 (minimum confidence to discard an irrelevant card) |
+| `hubAgentMemoryMinConfidence` | `memoryMinConfidence` | 0.8 / 0.5–1 (write review only) |
+| `hubAgentMemoryTimeoutMs` | `memoryTimeoutMs` | 3000 / integer 100–30000 ms |
 
 The page groups provider connection settings and memory use cases. Feature switches
 are in the expandable memory section; numeric controls are under Advanced parameters.
 Turning the master switch off retains the child settings. Save applies the complete
-Profile configuration on the next run. Delete resets all fields in that Profile.
+global configuration on the next run. Delete resets all global JEV fields.
 
 Category routing uses actual eligible memory content to select controlled kinds,
 with routing, individual relevance filtering and ranking bounded by the candidate limit. The recall threshold
@@ -138,26 +173,26 @@ Disabled/missing JEV makes no requests. Timeout, provider failures, invalid/unre
 results, unavailable evidence, or oversized input preserve the original flow.
 Cancellation propagates and cannot authorize a write. Result structures and stored
 card confidence/importance remain unchanged; provider scores stay internal.
-See [Ekko memory JEV behavior](../packages/ekko-agent/docs/memory-jev.md) for details.
+See [Hub Agent memory JEV behavior](../packages/hub-agent/docs/memory-jev.md) for details.
 
-Memory JEV diagnostics appear as `memory.jev` in the existing Ekko logs, correlated
+Memory JEV diagnostics appear as `memory.jev` in the existing Hub Agent logs, correlated
 by session/run/turn. They include timings, routing probabilities, thresholds and
 sanitized failure codes; filter diagnostics also report per-card decisions, confidence
 and removed ids, never card text or credentials. See the
-[recall verification guide](../packages/ekko-agent/docs/memory-jev.md#diagnostics-and-manual-verification).
+[recall verification guide](../packages/hub-agent/docs/memory-jev.md#diagnostics-and-manual-verification).
 
-## Unified Ekko skill enhancement
+## Unified Hub Agent skill enhancement
 
-Models → JEV includes **Use JEV for Ekko skills**. One Profile-scoped switch,
-`ekkoSkillsEnabled`, enables semantic matching and background learning preflight
-independently of memory. It defaults to false in Studio and standalone Ekko.
+Models → JEV includes **Use JEV for Hub Agent skills**. One global switch,
+`hubAgentSkillsEnabled`, enables semantic matching and background learning preflight
+independently of memory. It defaults to false in Studio and standalone Hub Agent.
 
-| Studio field | Ekko `jev` field | Default / range |
+| Studio field | Hub Agent `jev` field | Default / range |
 | --- | --- | --- |
-| `ekkoSkillsEnabled` | `skillsEnabled` | false |
-| `ekkoSkillsCandidateLimit` | `skillsCandidateLimit` | 20 / integer 1–50 |
-| `ekkoSkillsMinConfidence` | `skillsMinConfidence` | 0.8 / 0.5–1 |
-| `ekkoSkillsTimeoutMs` | `skillsTimeoutMs` | 3000 / integer 100–30000 ms |
+| `hubAgentSkillsEnabled` | `skillsEnabled` | false |
+| `hubAgentSkillsCandidateLimit` | `skillsCandidateLimit` | 20 / integer 1–50 |
+| `hubAgentSkillsMinConfidence` | `skillsMinConfidence` | 0.8 / 0.5–1 |
+| `hubAgentSkillsTimeoutMs` | `skillsTimeoutMs` | 3000 / integer 100–30000 ms |
 
 All parameters are editable in the same skills section. Save applies on the next
 run; disable retains parameters; delete resets them. Routing adds at most three
@@ -166,14 +201,14 @@ existing full reviewer only when confidently no reusable experience is present.
 Both use the run snapshot, one request per decision, bounded input and conservative
 fallback. Background review snapshots remain isolated while queued. Skill JEV
 logs use `skill.jev`; context estimation makes no JEV calls.
-See [Ekko skill JEV behavior](../packages/ekko-agent/docs/skills-jev.md) for details.
+See [Hub Agent skill JEV behavior](../packages/hub-agent/docs/skills-jev.md) for details.
 
 
 ## Built-in browser automation
 
 Models → JEV → **Built-in browser automation** provides two independent,
-default-off switches per Studio Profile. These are Studio MCP settings, not
-standalone Ekko runtime settings. Save takes effect at the next assessment;
+default-off global switches. These are Studio MCP settings, not
+standalone Hub Agent runtime settings. Save takes effect at the next assessment;
 disabling retains numeric options, while Delete resets them.
 
 | Field | Default / range |
@@ -188,7 +223,7 @@ disabling retains numeric options, while Delete resets them.
 
 The existing browser toolset remains list → describe → call:
 
-- `ekko_studio_browser_snapshot({ tab_id, target? })` accepts a natural-language
+- `agenthub_browser_snapshot({ tab_id, target? })` accepts a natural-language
   target, e.g. `"the Continue button"`. If enabled and configured, `result.elementMatch`
   returns `matched` with an existing ref and snapshot identity, `no_match`,
   `skipped`, or `unavailable`. Non-disabled interactive elements across the entire
@@ -196,10 +231,10 @@ The existing browser toolset remains list → describe → call:
   candidate limit. Document, heading and text nodes do not consume that budget.
   Low-confidence or ambiguous choices never invent refs. The full original
   snapshot is preserved, including elements outside that candidate window.
-- `ekko_studio_browser_interact({ ..., expectation? })` accepts an expected visible
+- `agenthub_browser_interact({ ..., expectation? })` accepts an expected visible
   outcome, e.g. `"the order confirmation heading is visible"`. After the action,
   enabled verification takes a new snapshot and returns it with `result.verification`.
-- `ekko_studio_browser_batch({ ..., expectation? })` reuses the final snapshot of a
+- `agenthub_browser_batch({ ..., expectation? })` reuses the final snapshot of a
   fully completed batch. Partial batches, takeover/snapshot failure and action
   errors are not evaluated or retried. Verification reports `met`, `not_met`,
   `unknown`, `skipped`, or `unavailable`; it never changes action completion or MCP
@@ -225,9 +260,9 @@ retried. CDP execution failures retain a bounded, redacted error description.
 For a sequence with known refs, prefer one batch and one final `expectation`;
 use `target` for semantic help when a target is ambiguous.
 
-The MCP transport uses the run's configured, authorized Studio Profile. There is
-no browser-tool Profile/key override or fallback to another Profile. The browser's
-cookie-storage Profile is independent of this Studio settings Profile. Direct Ekko
+The MCP transport retains the run's authorized Studio identity. JEV uses the
+shared global configuration, with no browser-tool key override. The browser's
+cookie-storage Profile remains independent of JEV configuration. Direct Hub Agent
 runs receive revocable credentials bound to the authenticated user, Profile and
 turn, ahead of any inherited static server token. MCP connections are isolated by
 run; background tasks retain their originating lease until they finish. A completed
@@ -256,3 +291,24 @@ Feature timeouts bound the provider assessment, independently of the browser's
 execution budget; the shared provider timeout also applies. The MCP settings
 lookup has a five-second transport deadline and assessment transport allows one
 extra second for the server response. Optional evaluations do not automatically retry.
+
+## Hub Agent Computer Use
+
+Models → JEV → Hub Agent Computer Use has independent default-off controls for
+desktop element matching and outcome verification. Global settings are read
+before each Hub Agent run; settings stay fixed during that run. A fresh
+`get_window_state` with top-level `target` and/or `expectation` supplies bounded
+native accessibility evidence. Assessments return advisory results alongside the
+native observation and images. They never click, retry or alter native success.
+Field values and images are excluded from JEV. Disabled/unconfigured features
+make zero provider requests; optional failures retain the native result.
+See [configuration and examples](../packages/hub-agent/docs/computer-use.md#optional-jev-assessments).
+
+### Gateway base URL paths
+
+The base URL must include any gateway path prefix. For example, if the gateway serves
+`/typesafe/v1/systemone`, configure `https://gateway.example/typesafe`. The SDK appends
+`/v1/systemone`; do not include that endpoint in the base URL. An upstream HTTP 404
+is reported as `jev_endpoint_not_found` and prompts users to check the address and
+path prefix, rather than change the model. Other causes of upstream 404 responses
+are still possible; this message is a diagnostic hint, not automatic URL rewriting.

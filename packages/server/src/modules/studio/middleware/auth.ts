@@ -1,15 +1,24 @@
+import { gatewayProtocol, gatewayToken } from '../public/model-gateway-adapters'
+import { authenticateInternalModelCredential } from '../public/provider-account'
+import { ownedPersonTaskSession } from '../services/person/task-chat'
+import { isPersonSession, isPrivatePersonSession, ownsPersonSession } from '../contracts/person-session'
+import { getSession } from '../repositories/session-store'
 import type { Context, Next } from 'koa'
 import { createHmac, timingSafeEqual } from 'crypto'
 import { getToken } from '../services/auth/token-auth'
 import { runMcpCredentials } from '../services/auth/run-mcp-credentials'
+import { MODEL_API_KEY_PREFIX, LEGACY_MODEL_API_KEY_PREFIX, findModelApiKey, touchModelApiKey } from '../services/model-api/keys'
+import { ModelApiError, modelApiErrorBody } from '../services/model-api/errors'
 import {
   findUserById,
+  getDefaultProfileForUser,
   listUserProfiles,
   touchUserLogin,
   userCanAccessProfile,
   type UserRecord,
   type UserRole,
 } from '../repositories/users-store'
+
 export interface AuthenticatedUser {
   id: number
   username: string
@@ -36,6 +45,8 @@ declare module 'koa' {
     user?: AuthenticatedUser
     profile?: RequestProfile
     serverTokenAuth?: boolean
+    modelApiKey?: { id: string; models: string[] }
+    modelGateway?: { userId: number; profile: string; sessionId?: string }
   }
 }
 
@@ -228,15 +239,118 @@ export async function isAuthEnabled(): Promise<boolean> {
   return true
 }
 
+const CANONICAL_MODEL_GATEWAY_PREFIX = '/api/agenthub/models/'
+const LEGACY_MODEL_GATEWAY_PREFIX = '/api/ekko-studio/models/'
+
+function isModelGatewayListPath(path: string | undefined): boolean {
+  return path === `${CANONICAL_MODEL_GATEWAY_PREFIX}v1/models` || path === `${LEGACY_MODEL_GATEWAY_PREFIX}v1/models`
+}
+
+function isModelGatewayRequestPath(path: string | undefined): boolean {
+  return !!path && (path.startsWith(CANONICAL_MODEL_GATEWAY_PREFIX) || path.startsWith(LEGACY_MODEL_GATEWAY_PREFIX))
+}
+
+function isAccountModelApiPath(path: string | undefined): boolean {
+  // Router paths are case-insensitive and allow a trailing slash.
+  path = path?.toLowerCase()
+  return path === '/api/studio/person' || !!path?.startsWith('/api/studio/person/')
+    || path === '/api/studio/models/api-keys' || !!path?.startsWith('/api/studio/models/api-keys/')
+    || isModelGatewayListPath(path) || !!gatewayProtocol(path || '')
+}
+
+/** Only session identifiers carry ownership; search text and file paths do not. */
+function requestedPersonSessionIds(ctx: Context): string[] {
+  const body = ctx.request.body as Record<string, unknown> | undefined
+  const query = ctx.query || {}
+  const route = /^\/api\/studio\/(?:sessions\/(?:(?:conversations|hermes)\/)?|person\/conversations\/)([^/]+)/i.exec(ctx.path)
+    || /^\/api\/coding-agents\/runs\/([^/]+)/i.exec(ctx.path)
+  let routeId = route?.[1]
+  try { if (routeId) routeId = decodeURIComponent(routeId) } catch { /* Router rejects invalid escapes. */ }
+  const refs: unknown[] = [routeId]
+  for (const source of [query, body]) {
+    for (const key of ['session_id', 'sessionId', 'parent_session_id', 'session_ids']) refs.push(source?.[key])
+  }
+  if (/^\/api\/studio\/logs\/[^/]+\/?$/i.test(ctx.path)) refs.push(query.session)
+  if (/^\/api\/studio\/sessions\/usage\/?$/i.test(ctx.path) && typeof query.ids === 'string') {
+    refs.push(query.ids.split(','))
+  }
+  if (/^\/api\/studio\/sessions\/batch-delete\/?$/i.test(ctx.path)) {
+    const targets = Array.isArray(body?.sessions) && body.sessions.length ? body.sessions : body?.ids
+    if (Array.isArray(targets)) refs.push(targets.map(target =>
+      typeof target === 'string' ? target : target && typeof target === 'object' ? target.id : undefined))
+  }
+  return [...new Set(refs.flatMap(ref => Array.isArray(ref) ? ref : [ref])
+    .filter((ref): ref is string => typeof ref === 'string')
+    .map(ref => ref.trim()).filter(isPrivatePersonSession))]
+}
+
 export async function requireUserJwt(ctx: Context, next: Next): Promise<void> {
   if (!isProtectedHttpPath(ctx.path)) {
     await next()
     return
   }
 
+  // Internal Person sessions never become profile-shared HTTP resources.
+  let decodedPath = ctx.path
+  try { decodedPath = decodeURIComponent(ctx.path) } catch { /* Router handles invalid escapes. */ }
+  const refs = requestedPersonSessionIds(ctx)
+  const workerRefs = refs.filter(id => id.startsWith('person-task-'))
+  const workerRead = ctx.method === 'GET' && /^\/api\/studio\/sessions\/(?:conversations\/)?person-task-[^/]+(?:\/(?:messages(?:\/paginated)?|context|usage|workspace-files\/list|workspace-file\/(?:read|content|diff)))?\/?$/i.test(decodedPath)
+  if (workerRefs.length && !workerRead) {
+    ctx.status = 404; ctx.body = { error: 'Session not found' }; return
+  }
+  const personRefs = refs.filter(isPersonSession)
+
   const secret = await getJwtSecret()
-  const token = requestToken(ctx)
+  const token = isModelGatewayRequestPath(ctx.path) ? gatewayToken(ctx) || requestToken(ctx) : requestToken(ctx)
+  if (token.startsWith('studio_model_')) {
+    const allowed = (ctx.method === 'POST' && !!gatewayProtocol(ctx.path)) || (ctx.method === 'GET' && isModelGatewayListPath(ctx.path))
+    const credential = allowed ? await authenticateInternalModelCredential(token) : null
+    const owner = credential ? findUserById(credential.userId) : null
+    if (!credential || !owner || owner.status !== 'active') { ctx.status = 401; ctx.body = { error: 'Invalid internal model credential' }; return }
+    ctx.state.user = toAuthenticatedUser(owner)
+    const requestedProfile = ctx.get('x-studio-profile')
+    const profile = (credential.sessionId ? credential.profile : requestedProfile) || credential.profile || getDefaultProfileForUser(owner.id)
+    if ((credential.sessionId && requestedProfile && requestedProfile !== profile)
+      || ((requestedProfile || credential.sessionId) && owner.role !== 'super_admin' && !userCanAccessProfile(owner.id, profile))) {
+      ctx.status = 403; ctx.body = { error: 'Profile is not available for this user' }; return
+    }
+    ctx.state.modelGateway = { userId: owner.id, profile, ...(credential.sessionId && { sessionId: credential.sessionId }) }
+    ctx.state.profile = { name: profile }
+    await next()
+    return
+  }
+  if (token.startsWith(MODEL_API_KEY_PREFIX) || token.startsWith(LEGACY_MODEL_API_KEY_PREFIX)) {
+    try {
+      // Keys never authenticate UI, management, proxy or WebSocket endpoints.
+      if (!(ctx.method === 'GET' && isModelGatewayListPath(ctx.path))
+        && !(ctx.method === 'POST' && !!gatewayProtocol(ctx.path))) {
+        throw new ModelApiError('This key only permits Model API requests.', 403)
+      }
+      if (gatewayToken(ctx) !== token) throw new ModelApiError('Send the API key in the Authorization header.', 401)
+      const key = findModelApiKey(token)
+      if (!key) throw new ModelApiError('Invalid or revoked API key.', 401)
+      const user = findUserById(key.userId)
+      if (!user || user.status !== 'active') throw new ModelApiError('The key owner is disabled or no longer exists.', 403)
+      ctx.state.user = toAuthenticatedUser(user)
+      ctx.state.modelApiKey = { id: key.id, models: key.models }
+      touchModelApiKey(key.id)
+    } catch (error) {
+      const result = modelApiErrorBody(error)
+      ctx.status = result.status; ctx.body = result.body
+      return
+    }
+    await next()
+    return
+  }
   if (runMcpCredentials.recognizes(token)) {
+    // A turn-scoped credential must not mint permanent account-wide keys or
+    // escape its bound Profile through the aggregated model directory.
+    if (workerRefs.length || personRefs.length || isAccountModelApiPath(ctx.path)) {
+      ctx.status = 403
+      ctx.body = { error: 'This account endpoint requires a Studio login token' }
+      return
+    }
     const binding = runMcpCredentials.authenticate(token)
     if (!binding) {
       ctx.status = 401
@@ -247,6 +361,7 @@ export async function requireUserJwt(ctx: Context, next: Next): Promise<void> {
     const profiles = [ctx.get('x-hermes-profile'), ctx.query.profile, body?.profile].filter(value => value !== undefined && value !== '')
     const interaction = ctx.method === 'POST' && (
       ctx.path === '/api/studio/task-plans/update' || ctx.path === '/api/studio/clarifications/request'
+      || ctx.path === '/api/studio/session-tasks/list' || ctx.path === '/api/studio/session-tasks/update'
     )
     if (ctx.get('x-studio-run-context') !== binding.contextId
       || profiles.some(value => typeof value !== 'string' || value.trim() !== binding.profile)
@@ -265,7 +380,7 @@ export async function requireUserJwt(ctx: Context, next: Next): Promise<void> {
       ctx.state.user = toAuthenticatedUser(user)
     } else if (!interaction) {
       ctx.status = 403
-      ctx.body = { error: 'This run credential only permits its task plan and clarification requests' }
+      ctx.body = { error: 'This run credential only permits its interaction requests' }
       return
     }
     ctx.state.profile = { name: binding.profile }
@@ -274,7 +389,7 @@ export async function requireUserJwt(ctx: Context, next: Next): Promise<void> {
   }
   const payload = token ? verifyUserJwt(token, secret) : null
   if (!payload) {
-    if (await allowServerTokenForAgentEndpoint(ctx, token)) {
+    if (!workerRefs.length && !personRefs.length && await allowServerTokenForAgentEndpoint(ctx, token)) {
       await next()
       return
     }
@@ -283,7 +398,6 @@ export async function requireUserJwt(ctx: Context, next: Next): Promise<void> {
     return
   }
 
-
   const user = findUserById(payload.sub)
   if (!user || user.status !== 'active') {
     ctx.status = 403
@@ -291,6 +405,16 @@ export async function requireUserJwt(ctx: Context, next: Next): Promise<void> {
     return
   }
 
+  if (workerRefs.length) {
+    try { for (const id of workerRefs) ownedPersonTaskSession(user.id, id) }
+    catch { ctx.status = 404; ctx.body = { error: 'Session not found' }; return }
+    ctx.state.personTaskRead = workerRefs[0]
+    ctx.state.personSession = getSession(workerRefs[0])
+  }
+  if (personRefs.some(id => !ownsPersonSession(user.id, getSession(id)))) {
+    ctx.status = 404; ctx.body = { error: 'Session not found' }; return
+  }
+  if (personRefs.length) ctx.state.personSession = getSession(personRefs[0])
   ctx.state.user = toAuthenticatedUser(user)
   touchUserLogin(user.id)
   await next()
@@ -327,6 +451,8 @@ export function resolveRequestedProfile(ctx: Context): string {
 }
 
 export async function resolveUserProfile(ctx: Context, next: Next): Promise<void> {
+  if (ctx.state.personSession) { ctx.state.profile = { name: ctx.state.personSession.profile || 'default' }; await next(); return }
+  if (isAccountModelApiPath(ctx.path) || ctx.path?.startsWith('/api/studio/jev/')) { await next(); return }
   const user = ctx.state.user
   if (!user) {
     await next()

@@ -12,10 +12,6 @@ import { detectHermesHome } from './path'
 import { cleanupRuntimePath, removeRuntimePath, renameRuntimePath } from './runtime-filesystem'
 
 const ACTIVE_VERSION_FILE = 'active-version.json'
-const DEFAULT_REMOTE_MANIFEST_URL = 'https://api.ekkostudio.xyz/api/studio/versions'
-const FALLBACK_REMOTE_MANIFEST_URL = 'https://ekkostudio.xyz/versions.json'
-const DEFAULT_DOWNLOAD_BASE_URL = 'https://download.ekkolearnai.com'
-const DEFAULT_GITHUB_REPO = 'EKKOLearnAI/ekko-studio'
 
 export interface ActiveVersionManifest {
   schema: number
@@ -182,15 +178,18 @@ function isSameOrNestedPath(parent: string, candidate: string): boolean {
 }
 
 function downloadBaseUrl(): string {
-  return (process.env.HERMES_WEB_UI_DOWNLOAD_BASE_URL || DEFAULT_DOWNLOAD_BASE_URL).trim().replace(/\/$/, '')
+  return (process.env.HERMES_WEB_UI_DOWNLOAD_BASE_URL || '').trim().replace(/\/$/, '')
 }
 
 function downloadAssetUrl(assetName: string, tag: string, source: VersionDownloadSource): string {
   if (source === 'github') {
-    const repo = process.env.HERMES_WEB_UI_DOWNLOAD_GITHUB_REPO?.trim() || DEFAULT_GITHUB_REPO
+    const repo = process.env.HERMES_WEB_UI_DOWNLOAD_GITHUB_REPO?.trim()
+    if (!repo) throw new Error('HERMES_WEB_UI_DOWNLOAD_GITHUB_REPO is not configured')
     return `https://github.com/${repo}/releases/download/${encodeURIComponent(tag)}/${encodeURIComponent(assetName)}`
   }
-  return `${downloadBaseUrl()}/${encodeURIComponent(tag)}/${encodeURIComponent(assetName)}`
+  const base = downloadBaseUrl()
+  if (!base) throw new Error('HERMES_WEB_UI_DOWNLOAD_BASE_URL is not configured')
+  return `${base}/${encodeURIComponent(tag)}/${encodeURIComponent(assetName)}`
 }
 
 function readJsonFile<T>(file: string): T | null {
@@ -469,20 +468,12 @@ async function fetchVersionManifest(url: string): Promise<StudioVersionManifest>
 }
 
 async function fetchRemoteVersions(): Promise<{ manifest: StudioVersionManifest | null; error: string }> {
-  const primaryUrl = process.env.HERMES_WEB_UI_VERSION_MANIFEST_URL?.trim() || DEFAULT_REMOTE_MANIFEST_URL
+  const primaryUrl = process.env.HERMES_WEB_UI_VERSION_MANIFEST_URL?.trim() || ''
+  if (!primaryUrl) return { manifest: null, error: '' }
   try {
     return { manifest: await fetchVersionManifest(primaryUrl), error: '' }
   } catch (primaryError) {
-    if (primaryUrl === FALLBACK_REMOTE_MANIFEST_URL) {
-      return { manifest: null, error: primaryError instanceof Error ? primaryError.message : String(primaryError) }
-    }
-    try {
-      return { manifest: await fetchVersionManifest(FALLBACK_REMOTE_MANIFEST_URL), error: '' }
-    } catch (fallbackError) {
-      const primaryMessage = primaryError instanceof Error ? primaryError.message : String(primaryError)
-      const fallbackMessage = fallbackError instanceof Error ? fallbackError.message : String(fallbackError)
-      return { manifest: null, error: `${primaryMessage}; fallback failed: ${fallbackMessage}` }
-    }
+    return { manifest: null, error: primaryError instanceof Error ? primaryError.message : String(primaryError) }
   }
 }
 
@@ -520,7 +511,7 @@ export async function getRuntimeVersionStatus(
     platform: runtimePlatformKey(),
     activeVersionPath: probeRuntime ? activeVersionPath() : '',
     remoteManifestUrl: probeRuntime
-      ? process.env.HERMES_WEB_UI_VERSION_MANIFEST_URL?.trim() || DEFAULT_REMOTE_MANIFEST_URL
+      ? process.env.HERMES_WEB_UI_VERSION_MANIFEST_URL?.trim() || ''
       : '',
     remoteError: error,
     hermes: {

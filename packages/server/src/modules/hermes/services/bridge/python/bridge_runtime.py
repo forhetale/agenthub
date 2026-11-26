@@ -23,11 +23,6 @@ DEFAULT_HERMES_HOME = "~/.hermes"
 APPROVAL_TIMEOUT_SECONDS = 120
 APPROVAL_TIMEOUT_MS = APPROVAL_TIMEOUT_SECONDS * 1000
 PARENT_WATCHDOG_INTERVAL_SECONDS = 2.0
-OPENROUTER_ATTRIBUTION_ENV = {
-    "referer": "HERMES_OPENROUTER_APP_REFERER",
-    "title": "HERMES_OPENROUTER_APP_TITLE",
-    "categories": "HERMES_OPENROUTER_APP_CATEGORIES",
-}
 _SURROGATE_RE = re.compile("[\ud800-\udfff]")
 
 
@@ -507,35 +502,27 @@ def _ensure_agent_imports() -> None:
         if exc.name != "hermes_bootstrap":
             raise
         # Older Hermes runtimes do not have a bootstrap module.
-    _apply_openrouter_attribution_override()
+    _install_platform_tls_trust()
     from bridge_mcp import install_studio_mcp_env
 
     install_studio_mcp_env()
 
 
-def _apply_openrouter_attribution_override() -> None:
-    """Override hermes-agent OpenRouter attribution at bridge runtime only."""
-    referer = os.environ.get(OPENROUTER_ATTRIBUTION_ENV["referer"], "").strip()
-    title = os.environ.get(OPENROUTER_ATTRIBUTION_ENV["title"], "").strip()
-    categories = os.environ.get(OPENROUTER_ATTRIBUTION_ENV["categories"], "").strip()
-    if not (referer or title or categories):
-        return
+def _install_platform_tls_trust() -> None:
+    """Install Hermes' platform TLS trust before Hermes dependencies load.
+
+    Libraries such as botocore bind ``ssl.SSLContext`` at import time. If
+    truststore replaces it afterwards, building a new context recurses in the
+    ``SSLContext.options`` setter, so this must run before any agent import.
+    """
     try:
-        from agent import auxiliary_client
-    except Exception:
+        from agent.ssl_verify import install_truststore
+    except ImportError as exc:
+        if exc.name not in ("agent", "agent.ssl_verify"):
+            raise
+        # Older Hermes runtimes do not manage platform TLS trust.
         return
-    headers = dict(getattr(auxiliary_client, "_OR_HEADERS_BASE", {}) or {})
-    if referer:
-        headers["HTTP-Referer"] = referer
-    if title:
-        headers.pop("X-Title", None)
-        headers["X-OpenRouter-Title"] = title
-    if categories:
-        headers["X-OpenRouter-Categories"] = categories
-    try:
-        auxiliary_client._OR_HEADERS_BASE = headers
-    except Exception:
-        pass
+    install_truststore()
 
 
 def _load_yaml_module():
@@ -825,6 +812,31 @@ def _resolve_runtime(model: str, provider: str | None = None) -> dict[str, Any]:
     return resolve_runtime_provider(requested=requested, target_model=model or None)
 
 
+def _load_disabled_toolsets() -> list[str] | None:
+    """``agent.disabled_toolsets`` from config.yaml, or ``None``.
+
+    Mirrors Hermes' own ``tui_gateway.server._load_disabled_toolsets`` /
+    ``hermes_cli.cli_init_mixin`` loader. AIAgent only strips these toolsets when the
+    caller forwards the list (``agent/agent_init.py::_load_tools``): the CLI passes it,
+    so ``disabled_toolsets: [web, browser]`` worked there, but this bridge historically
+    passed ``enabled_toolsets`` alone — so the block silently never reached Studio /
+    desktop / TUI sessions and ``web_search`` / ``web_extract`` / every ``browser_*``
+    tool stayed callable even though ``hermes-cli`` resolves them and
+    ``_get_platform_tools`` cannot strip them from a composite default toolset.
+    """
+    _ensure_agent_imports()
+    try:
+        from agent.skill_utils import parse_config_string_list
+
+        from hermes_cli.config import load_config
+
+        agent_cfg = load_config().get("agent") or {}
+        disabled = parse_config_string_list(agent_cfg.get("disabled_toolsets"))
+        return [str(ts) for ts in disabled] or None
+    except Exception:
+        return None
+
+
 def _load_enabled_toolsets() -> list[str] | None:
     _ensure_agent_imports()
     raw = os.environ.get("HERMES_BRIDGE_TOOLSETS", "").strip()
@@ -882,6 +894,7 @@ def _log_worker_startup_context(profile: str | None) -> None:
     try:
         cfg = _load_cfg()
         enabled_toolsets = _load_enabled_toolsets()
+        disabled_toolsets = _load_disabled_toolsets()
         discovered_mcp_tools = _discover_bridge_mcp_tools()
         tool_names: list[str] = []
         tool_error: str | None = None
@@ -890,7 +903,7 @@ def _log_worker_startup_context(profile: str | None) -> None:
 
             tool_names = _tool_names_from_definitions(
                 get_tool_definitions(
-                    enabled_toolsets=enabled_toolsets,
+                    enabled_toolsets=enabled_toolsets, disabled_toolsets=disabled_toolsets,
                     quiet_mode=True,
                 )
             )
@@ -914,6 +927,7 @@ def _log_worker_startup_context(profile: str | None) -> None:
             "config_path": str(_hermes_home() / "config.yaml"),
             "model": _resolve_model(cfg),
             "enabled_toolsets": enabled_toolsets,
+            "disabled_toolsets": disabled_toolsets,
             "tool_count": len(tool_names),
             "tool_names": tool_names,
             "tool_error": tool_error,

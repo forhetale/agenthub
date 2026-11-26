@@ -1,4 +1,6 @@
 import type { Context } from 'koa'
+import { createReadStream } from 'fs'
+import { stat } from 'fs/promises'
 import { textToSpeech, openaiCompatibleTts, speedToEdgeRate } from '../services/voice/tts/core'
 import { getTtsProvider } from '../services/voice/tts/providers'
 import { transcodeToMp3 } from '../services/voice/stt/audio-convert'
@@ -135,7 +137,7 @@ export async function saveSettings(ctx: Context) {
       ? saveActiveTtsProvider(profile, storedProvider)
       : saveActiveTtsProvider(profile, assertActiveTtsProvider(String(body.activeProvider)))
 
-    await syncVoiceConfigToHermesProfile(profile)
+    await syncVoiceConfigToHermesProfile(profile, 'tts', { selectProvider: true })
     ctx.body = { setting, activeProvider }
   } catch (error) {
     if (handleSettingsError(ctx, error)) return
@@ -152,7 +154,7 @@ export async function saveActiveProvider(ctx: Context) {
   try {
     const profile = requestedProfile(ctx)
     const activeProvider = saveActiveTtsProvider(profile, assertActiveTtsProvider(String(body?.provider || '')))
-    await syncVoiceConfigToHermesProfile(profile)
+    await syncVoiceConfigToHermesProfile(profile, 'tts', { selectProvider: true })
     ctx.body = { activeProvider }
   } catch (error) {
     if (handleSettingsError(ctx, error)) return
@@ -194,7 +196,9 @@ export async function deleteSecret(ctx: Context) {
     const profile = requestedProfile(ctx)
     const storedProvider = assertStoredTtsProvider(provider)
     const setting = clearStoredTtsSecret(profile, storedProvider, secretName)
-    await syncVoiceConfigToHermesProfile(profile)
+    if (getActiveTtsProvider(profile) === storedProvider) {
+      await syncVoiceConfigToHermesProfile(profile, 'tts')
+    }
     ctx.body = { success: true, setting }
   } catch (error) {
     if (handleSettingsError(ctx, error)) return
@@ -221,7 +225,9 @@ export async function deleteProvider(ctx: Context) {
     const activeProvider = currentActiveProvider === storedProvider
       ? saveActiveTtsProvider(profile, 'edge')
       : currentActiveProvider
-    await syncVoiceConfigToHermesProfile(profile)
+    if (currentActiveProvider === storedProvider) {
+      await syncVoiceConfigToHermesProfile(profile, 'tts')
+    }
     ctx.body = { success: true, deleted, activeProvider }
   } catch (error) {
     if (handleSettingsError(ctx, error)) return
@@ -565,7 +571,7 @@ async function synthesizeVoiceProxyText(ctx: Context, text: string) {
     }
     ctx.status = statusForTtsError(error)
     ctx.body = {
-      error: 'Ekko Studio TTS failed',
+      error: 'AgentHub TTS failed',
       detail: sanitizeTtsError(error),
     }
   }

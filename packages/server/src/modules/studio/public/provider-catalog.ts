@@ -1,10 +1,5 @@
 import { openCodeSessionHeaders } from './opencode-session'
 import { logger } from './logging'
-import { OPENCODE_FREE_BASE_URL, isOpenCodeFreeModel } from '../contracts/opencode-free'
-
-export async function fetchOpenCodeFreeModels(): Promise<string[]> {
-  return (await fetchProviderModels(OPENCODE_FREE_BASE_URL, '')).filter(isOpenCodeFreeModel)
-}
 
 export async function fetchProviderModels(baseUrl: string, apiKey: string, freeOnly = false): Promise<string[]> {
   const base = baseUrl.replace(/\/+$/, '')
@@ -18,12 +13,13 @@ export async function fetchProviderModels(baseUrl: string, apiKey: string, freeO
       logger.warn('available-models %s returned %d', modelsUrl, response.status)
       return []
     }
-    const data = await response.json() as { data?: Array<{ id: string }> }
-    if (!Array.isArray(data.data)) {
+    const data = await response.json() as { data?: Array<{ id?: unknown; slug?: unknown }>; models?: Array<{ id?: unknown; slug?: unknown }> }
+    const rawModels = Array.isArray(data?.data) ? data.data : data?.models
+    if (!Array.isArray(rawModels)) {
       logger.warn('available-models %s returned unexpected format', modelsUrl)
       return []
     }
-    let models = data.data.map(model => model.id)
+    let models = rawModels.map(model => String(model?.id || model?.slug || '').trim()).filter(Boolean)
     if (base.includes('generativelanguage.googleapis.com')) {
       models = models.map(model => model.startsWith('models/') ? model.slice('models/'.length) : model)
     }

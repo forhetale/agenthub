@@ -2,7 +2,7 @@
 
 日期：2026-09-12
 
-状态：规划 v0.2，已有原生预设清单、附加 ACP 包管理与 Web 后端配置/预设用于 ACP 的局部实现，范围和限制见[当前实现](dsh-plugin-management-implementation.md)；完整 M1–M3 尚未完成；T01/T02 首轮后端实验已通过，范围见[兼容性证据](dsh-compatibility-evidence.md)。作为[主规划](dsh-profiles-and-plugins.md)的实施附件，随 [PR #3011](https://github.com/EKKOLearnAI/ekko-studio/pull/3011)维护。下文 API、事件名、错误码及测试文件名均为拟议契约；源码核对不等于运行测试通过。
+状态：规划 v0.2，已有原生预设清单、附加 ACP 包管理与 Web 后端配置/预设用于 ACP 的局部实现，范围和限制见[当前实现](dsh-plugin-management-implementation.md)；完整 M1–M3 尚未完成；T01/T02 首轮后端实验已通过，范围见[兼容性证据](dsh-compatibility-evidence.md)。作为[主规划](dsh-profiles-and-plugins.md)的实施附件，参考上游 [PR #3011](https://github.com/EKKOLearnAI/ekko-studio/pull/3011) 演进。下文 API、事件名、错误码及测试文件名均为拟议契约；源码核对不等于运行测试通过。
 
 ## 1. 本轮收敛的技术决定
 
@@ -134,7 +134,7 @@ owner key 由服务器根据现有授权上下文构造，至少区分单聊 ses
 
 ### 4.2 能力握手
 
-标准 ACP `initialize` 继续按标准处理；Studio 插件增加可版本协商的私有能力查询，例如 `_ekko/capabilities`，返回扩展版本、支持的预设绑定、事件标识、flush 屏障及浏览器通道。
+标准 ACP `initialize` 继续按标准处理；Studio 插件增加可版本协商的私有能力查询，例如 `_agenthub/capabilities`，返回扩展版本、支持的预设绑定、事件标识、flush 屏障及浏览器通道。
 
 方法名为提案，不是官方 ACP 已提供的方法。对方返回 method-not-found 时：基础 ACP 可继续；依赖私有能力的 Web 预设或浏览器模式明确失败，不自动降成另一个工具集合。第三方未经声明的字段不能被解释为同一扩展版本。
 

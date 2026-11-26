@@ -1,4 +1,11 @@
 <script setup lang="ts">
+import PluginWorkspaceSidebar from "@/components/layout/PluginWorkspaceSidebar.vue";
+import { usePluginCatalog, pluginPages } from "@/composables/usePluginCatalog";
+import PluginNotifications from '@/components/plugins/PluginNotifications.vue'
+import NavigationSettingsModal from '@/components/layout/NavigationSettingsModal.vue'
+import { useNavigationStore } from '@/stores/navigation'
+import { ensureRemoteBrowserRelay, stopRemoteBrowserRelay } from '@/composables/useRemoteBrowserRelay'
+import { deploymentUrl } from '@/utils/deployment-url'
 import {
   computed,
   defineAsyncComponent,
@@ -26,6 +33,7 @@ import { useSessionSearch } from "@/composables/useSessionSearch";
 import { watchServerTtsSettingsHydration } from "@/composables/useTtsSettingsHydration";
 import { useAppStore } from "@/stores/hermes/app";
 import { useProfilesStore } from "@/stores/hermes/profiles";
+import { usePersonPresenceStore } from '@/stores/hermes/person-presence';
 import { isStoredSuperAdmin } from "@/api/client";
 import AuthEventListener from "@/components/auth/AuthEventListener.vue";
 import { desktopBridge } from "@/utils/desktop-bridge";
@@ -35,6 +43,7 @@ import { navigationRailKey } from "@/composables/useNavigationRail";
 import { pageHeaderTargetKey } from "@/composables/usePageHeader";
 import { mobileNavigationKey } from "@/composables/usePageSidebar";
 import HeaderSidebarToggle from "@/components/layout/HeaderSidebarToggle.vue";
+import { clampSidebarWidth, SIDEBAR_DEFAULT_WIDTH, sidebarMaxWidth } from "@/utils/sidebar-width";
 
 const StudioNavigationRail = defineAsyncComponent(
   async () => (await import("@/components/layout/StudioNavigationRail.vue")).default,
@@ -50,9 +59,9 @@ const HermesConfigSidebar = defineAsyncComponent(
   async () =>
     (await import("@/components/layout/HermesConfigSidebar.vue")).default,
 );
-const EkkoConfigSidebar = defineAsyncComponent(
+const HubAgentConfigSidebar = defineAsyncComponent(
   async () =>
-    (await import("@/components/layout/EkkoConfigSidebar.vue")).default,
+    (await import("@/components/layout/HubAgentConfigSidebar.vue")).default,
 );
 const CodingAgentConfigSidebar = defineAsyncComponent(
   async () =>
@@ -85,6 +94,9 @@ const RuntimeRestartPrompt = defineAsyncComponent(
   async () =>
     (await import("@/components/layout/RuntimeRestartPrompt.vue")).default,
 );
+const ComputerUsePermissionPrompt = defineAsyncComponent(
+  async () => (await import('@/components/hub-agent/ComputerUsePermissionPrompt.vue')).default,
+);
 const StudioAnnouncementPrompt = defineAsyncComponent(
   async () => (await import('@/components/layout/StudioAnnouncementPrompt.vue')).default,
 );
@@ -93,23 +105,36 @@ const {
   isDark,
   isComic,
   customization,
-  hasBackgroundImage,
+  hasCustomBackground,
   syncThemeFromServer,
 } = useTheme();
 const { t, locale } = useI18n();
 const naiveLocale = computed(() => naiveLocaleFor(locale.value));
 const naiveRtl = computed(() => naiveRtlFor(locale.value));
 const appStore = useAppStore();
+const navigation = useNavigationStore();
 const profilesStore = useProfilesStore();
+watch(() => profilesStore.activeProfileName, async () => { await stopRemoteBrowserRelay(); await ensureRemoteBrowserRelay() });
 const route = useRoute();
+const isPluginPage = computed(() => ['studio.pluginPage', 'studio.pluginSettings', 'studio.pluginAgentSettings'].includes(String(route.name)));
+const { snapshot: pluginSnapshot, profile: pluginProfile } = usePluginCatalog(computed(() => ['studio.pluginPage', 'studio.pluginAgentSettings'].includes(String(route.name))));
+const workspacePlugin = computed(() => {
+  if (!['studio.pluginPage', 'studio.pluginAgentSettings'].includes(String(route.name))) return undefined;
+  const plugin = pluginSnapshot.value.plugins.find(plugin => plugin.manifest.id === route.params.pluginId && plugin.status === 'active');
+  const views = plugin ? pluginPages(plugin).filter(view => route.name === 'studio.pluginAgentSettings' ? view.slot === 'agent-settings' : ['page', 'workspace'].includes(view.slot)) : [];
+  const view = route.params.viewId ? views.find(view => view.id === route.params.viewId) : views[0];
+  return view && ['workspace', 'agent-settings'].includes(view.slot) ? plugin : undefined;
+});
+const usesPluginSidebar = computed(() => Boolean(workspacePlugin.value));
 const { sessionSearchOpen } = useSessionSearch();
 
 const themeOverrides = computed(() =>
-  getThemeOverrides(isDark.value, isComic.value, customization.value),
+  getThemeOverrides(isDark.value, isComic.value, customization.value, hasCustomBackground.value),
 );
 const naiveTheme = computed(() => (isDark.value ? darkTheme : null));
 
 const isLoginPage = computed(() => route.name === "login");
+watch(isLoginPage, login => { void (login ? stopRemoteBrowserRelay() : ensureRemoteBrowserRelay()) }, { immediate: true });
 watchServerTtsSettingsHydration({
   isLoginPage: () => isLoginPage.value,
   activeProfileName: () => profilesStore.activeProfileName,
@@ -118,8 +143,19 @@ const isStandaloneChatPage = computed(
   () => route.meta?.standaloneChat === true,
 );
 const isInviteOnlyPage = computed(() => route.meta?.inviteOnly === true);
+const personPresence = usePersonPresenceStore();
+watch(() => !isLoginPage.value && !isInviteOnlyPage.value && route.name !== 'desktop.pet', enabled => {
+  if (enabled) personPresence.start(); else personPresence.stop();
+}, { immediate: true });
 const wideViewportQuery = window.matchMedia('(min-width: 769px)');
 const isWideViewport = ref(wideViewportQuery.matches);
+const viewportWidth = ref(window.innerWidth);
+const sidebarLayoutWidth = computed(() => isWideViewport.value
+  ? clampSidebarWidth(appStore.sidebarWidth, sidebarMaxWidth(viewportWidth.value))
+  : SIDEBAR_DEFAULT_WIDTH);
+function handleViewportResize() {
+  viewportWidth.value = window.innerWidth;
+}
 const hasNavigationRail = computed(() =>
   !isLoginPage.value && !isStandaloneChatPage.value && route.name !== 'desktop.pet',
 );
@@ -132,7 +168,7 @@ provide(mobileNavigationKey, {
   target: computed(() => !isWideViewport.value && hasNavigationRail.value ? mobileSidebarHost.value : null),
 });
 const hasMobileContextSidebar = computed(() =>
-  !['hermes.connections', 'hermes.agentManager', 'hermes.models'].includes(String(route.name)),
+  usesPluginSidebar.value || !['studio.plugins', 'studio.pluginPage', 'studio.pluginAgentSettings', 'hermes.connections', 'hermes.agentManager', 'hermes.models', 'hermes.usage'].includes(String(route.name)),
 );
 watch([hasNavigationRail, isWideViewport], () => { mobileNavigationOpen.value = false; });
 watch(sessionSearchOpen, (open) => { if (open) mobileNavigationOpen.value = false; });
@@ -146,11 +182,16 @@ function handleWideViewportChange(event: MediaQueryListEvent) {
 }
 const usesPageSidebar = computed(() =>
   [
+    "studio.plugins",
+    "studio.pluginPage",
+    "studio.pluginAgentSettings",
+    "hermes.person",
     "hermes.chat",
     "hermes.session",
     "hermes.connections",
     "hermes.agentManager",
     "hermes.models",
+    "hermes.usage",
     "hermes.history",
     "hermes.historySession",
     "hermes.globalAgent",
@@ -163,8 +204,8 @@ const usesPageSidebar = computed(() =>
 const usesHermesConfigSidebar = computed(
   () => route.meta?.hermesConfig === true,
 );
-const usesEkkoConfigSidebar = computed(
-  () => route.meta?.ekkoConfig === true,
+const usesHubAgentConfigSidebar = computed(
+  () => route.meta?.hubAgentConfig === true,
 );
 const usesCodingAgentConfigSidebar = computed(
   () => route.meta?.codingAgentConfig === true,
@@ -175,11 +216,11 @@ const showAppSidebar = computed(
     !isStandaloneChatPage.value &&
     !usesPageSidebar.value &&
     !usesHermesConfigSidebar.value &&
-    !usesEkkoConfigSidebar.value &&
-    !usesCodingAgentConfigSidebar.value,
+    !usesHubAgentConfigSidebar.value &&
+    !usesCodingAgentConfigSidebar.value && !usesPluginSidebar.value,
 );
 const usesShellSidebar = computed(() =>
-  showAppSidebar.value || usesHermesConfigSidebar.value || usesEkkoConfigSidebar.value || usesCodingAgentConfigSidebar.value,
+  showAppSidebar.value || usesHermesConfigSidebar.value || usesHubAgentConfigSidebar.value || usesCodingAgentConfigSidebar.value || usesPluginSidebar.value,
 );
 const showMobileMenuButton = computed(
   () =>
@@ -188,7 +229,7 @@ const showMobileMenuButton = computed(
     (showAppSidebar.value ||
       usesPageSidebar.value ||
       usesHermesConfigSidebar.value ||
-      usesEkkoConfigSidebar.value ||
+      usesHubAgentConfigSidebar.value ||
       usesCodingAgentConfigSidebar.value),
 );
 
@@ -212,14 +253,14 @@ const showDesktopTitleBar = computed(
 const desktopTitleBarLeft = computed(() => {
   if (isLoginPage.value) return 10;
   if (showNavigationRail.value) return 64;
-  if (showAppSidebar.value) return appStore.sidebarCollapsed ? 64 : 240;
+  if (showAppSidebar.value) return appStore.sidebarCollapsed ? 64 : sidebarLayoutWidth.value;
   if (usesHermesConfigSidebar.value)
-    return appStore.sidebarCollapsed ? 64 : 240;
-  if (usesEkkoConfigSidebar.value)
-    return appStore.sidebarCollapsed ? 64 : 240;
-  if (usesCodingAgentConfigSidebar.value)
-    return appStore.sidebarCollapsed ? 64 : 240;
-  return appStore.pageSidebarExpanded ? 240 : 10;
+    return appStore.sidebarCollapsed ? 64 : sidebarLayoutWidth.value;
+  if (usesHubAgentConfigSidebar.value)
+    return appStore.sidebarCollapsed ? 64 : sidebarLayoutWidth.value;
+  if (usesCodingAgentConfigSidebar.value || usesPluginSidebar.value)
+    return appStore.sidebarCollapsed ? 64 : sidebarLayoutWidth.value;
+  return appStore.pageSidebarExpanded ? sidebarLayoutWidth.value : 10;
 });
 const isDesktopPetRoute = computed(() => route.name === "desktop.pet");
 const showWebPet = computed(
@@ -255,6 +296,7 @@ watch(
 );
 
 onMounted(() => {
+  window.addEventListener('resize', handleViewportResize);
   wideViewportQuery.addEventListener('change', handleWideViewportChange);
   if (!isInviteOnlyPage.value) {
     void syncThemeFromServer().catch(() => undefined);
@@ -277,6 +319,8 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  personPresence.stop();
+  window.removeEventListener('resize', handleViewportResize);
   wideViewportQuery.removeEventListener('change', handleWideViewportChange);
   stopWindowStateListener?.();
   appStore.stopHealthPolling();
@@ -294,6 +338,8 @@ useKeyboard();
     :rtl="naiveRtl"
   >
     <NMessageProvider>
+      <PluginNotifications />
+      <NavigationSettingsModal v-model:show="navigation.settingsOpen" />
       <AuthEventListener />
       <NDialogProvider>
         <NNotificationProvider>
@@ -301,14 +347,16 @@ useKeyboard();
           <div
             v-else
             class="app-shell"
+            :style="{ '--studio-sidebar-width': `${sidebarLayoutWidth}px` }"
             :class="[
               desktopPlatformClass,
               {
                 desktop: isDesktopShell,
                 'desktop-chat-window': isDesktopChatWindow,
                 'desktop-window-maximized': isDesktopWindowMaximized,
-                'app-shell--custom-background': hasBackgroundImage,
+                'app-shell--custom-background': hasCustomBackground,
                 'app-shell--navigation-rail': showNavigationRail,
+                'app-shell--resizing-sidebar': appStore.sidebarResizing,
               },
             ]"
           >
@@ -317,6 +365,7 @@ useKeyboard();
               :standalone="isLoginPage || isDesktopChatWindow"
               :left-offset="desktopTitleBarLeft"
             />
+            <div v-if="showNavigationRail" class="studio-frame-surface" aria-hidden="true" />
             <StudioNavigationRail v-if="showNavigationRail" />
             <MobileNavigationDrawer
               v-if="hasNavigationRail && !isWideViewport"
@@ -334,8 +383,9 @@ useKeyboard();
                 v-if="showDesktopTitleBar && showNavigationRail"
                 flush
               />
+              <!-- Keep the control before headers teleported while sidebar metadata is loading. -->
               <HeaderSidebarToggle
-                v-if="showNavigationRail && usesShellSidebar"
+                v-show="showNavigationRail && usesShellSidebar"
                 class="header-sidebar-toggle"
                 :expanded="!appStore.sidebarCollapsed"
                 @toggle="appStore.toggleSidebarCollapsed()"
@@ -355,10 +405,13 @@ useKeyboard();
               <div
                 class="app-layout"
                 :class="{
+                  'app-layout--shell-sidebar': usesShellSidebar,
+                  'app-layout--plugin': isPluginPage,
                   'no-sidebar': isLoginPage || !showAppSidebar,
                   'has-hermes-config-sidebar': usesHermesConfigSidebar,
-                  'has-ekko-config-sidebar': usesEkkoConfigSidebar,
+                  'has-hub-agent-config-sidebar': usesHubAgentConfigSidebar,
                   'has-coding-agent-config-sidebar': usesCodingAgentConfigSidebar,
+                  'has-plugin-config-sidebar': usesPluginSidebar,
                 }"
               >
                 <button
@@ -368,7 +421,7 @@ useKeyboard();
                   @click="handleMobileMenuClick"
                 >
                   <img
-                    src="/logo.png"
+                    :src="deploymentUrl('/logo.png')"
                     alt="Menu"
                     style="width: 24px; height: 24px"
                   />
@@ -377,16 +430,17 @@ useKeyboard();
                 <HermesConfigSidebar
                   v-if="!isLoginPage && usesHermesConfigSidebar"
                 />
-                <EkkoConfigSidebar
-                  v-if="!isLoginPage && usesEkkoConfigSidebar"
+                <HubAgentConfigSidebar
+                  v-if="!isLoginPage && usesHubAgentConfigSidebar"
                 />
                 <CodingAgentConfigSidebar
                   v-if="!isLoginPage && usesCodingAgentConfigSidebar"
                 />
+                <PluginWorkspaceSidebar v-if="workspacePlugin" :plugin="workspacePlugin" :profile="pluginProfile" :agent-settings="route.name === 'studio.pluginAgentSettings'" />
                 <main
                   class="app-main"
                   :class="{
-                    'app-main--card': showAppSidebar || usesHermesConfigSidebar || usesEkkoConfigSidebar || usesCodingAgentConfigSidebar,
+                    'app-main--card': usesShellSidebar,
                   }"
                 >
                   <router-view />
@@ -411,6 +465,9 @@ useKeyboard();
           />
           <RuntimeRestartPrompt
             v-if="!isLoginPage && !isDesktopPetRoute && !isStandaloneChatPage && isStoredSuperAdmin()"
+          />
+          <ComputerUsePermissionPrompt
+            v-if="!isLoginPage && !isInviteOnlyPage && !isDesktopPetRoute && desktopBridge()?.computerUsePermissions?.claimReminder"
           />
           <StudioAnnouncementPrompt
             v-if="!isLoginPage && !isInviteOnlyPage && !isDesktopPetRoute && !isStandaloneChatPage"
@@ -439,10 +496,10 @@ useKeyboard();
     position: absolute;
     z-index: 0;
     inset: 0;
-    background-image: var(--app-background-image, none);
-    background-position: center;
+    background-image: linear-gradient(var(--app-background-overlay, transparent), var(--app-background-overlay, transparent)), var(--app-background-image, none), var(--app-background-gradient, none);
+    background-position: var(--app-background-position, center);
     background-repeat: no-repeat;
-    background-size: cover;
+    background-size: var(--app-background-size, cover);
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.3s ease;
@@ -474,7 +531,7 @@ useKeyboard();
   width: 100%;
   max-width: 100%;
   overflow: hidden;
-  background-color: $bg-card;
+  background-color: var(--theme-card-bg, $bg-card);
 
   &.no-sidebar {
     display: block;
@@ -483,13 +540,29 @@ useKeyboard();
       display: flex;
     }
 
-    &.has-ekko-config-sidebar {
+    &.has-hub-agent-config-sidebar {
       display: flex;
     }
 
-    &.has-coding-agent-config-sidebar {
+    &.has-coding-agent-config-sidebar, &.has-plugin-config-sidebar {
       display: flex;
     }
+  }
+}
+
+.app-shell--resizing-sidebar {
+  user-select: none;
+
+  :deep(.sidebar),
+  :deep(.hermes-config-sidebar),
+  :deep(.hub-agent-config-sidebar),
+  :deep(.coding-agent-config-sidebar),
+  :deep(.plugin-config-sidebar),
+  :deep(.session-list),
+  :deep(.room-sidebar),
+  :deep(.workflow-sidebar),
+  :deep(.header-sidebar-control) {
+    transition: none;
   }
 }
 
@@ -500,27 +573,38 @@ useKeyboard();
   overflow-y: auto;
   background-color: $bg-primary;
 
-  .no-sidebar:not(.has-hermes-config-sidebar):not(.has-ekko-config-sidebar):not(.has-coding-agent-config-sidebar) & {
+  .no-sidebar:not(.has-hermes-config-sidebar):not(.has-hub-agent-config-sidebar):not(.has-coding-agent-config-sidebar):not(.has-plugin-config-sidebar) & {
     height: 100%;
   }
 
   &--card {
     margin: 10px 10px 10px 0;
-    background-color: $bg-main-surface;
-    border: 1px solid $border-color;
-    border-radius: 14px;
+    background-color: var(--theme-content-bg, $bg-main-surface);
+    border: var(--border-width, 1px) solid $border-color;
+    border-radius: var(--radius-component, 14px);
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
   }
 }
 
 .app-shell--navigation-rail {
-  --studio-header-height: 40px;
   --studio-header-inset: #{$navigation-rail-width};
   --studio-content-gutter: 5px;
   --studio-content-radius: #{$radius-lg};
   --desktop-window-controls-width: 138px;
   flex-direction: row;
   background-color: $bg-sidebar;
+
+  // Paint the whole outer frame once, behind all navigation/header controls.
+  // Separate backdrop filters sample nearby content differently at their seam.
+  .studio-frame-surface {
+    position: absolute;
+    z-index: 1;
+    inset: 0;
+    pointer-events: none;
+    background-color: var(--theme-chrome-bg, $bg-sidebar);
+    -webkit-backdrop-filter: var(--theme-chrome-filter, none);
+    backdrop-filter: var(--theme-chrome-filter, none);
+  }
 
   .studio-page-header {
     position: absolute;
@@ -532,6 +616,9 @@ useKeyboard();
     min-width: 0;
     display: flex;
     align-items: center;
+    border: 0;
+    box-shadow: none;
+    background: transparent;
     -webkit-app-region: drag;
 
     > :deep(:not(.header-sidebar-control):not(.desktop-titlebar)) {
@@ -540,7 +627,7 @@ useKeyboard();
       align-items: center;
       justify-content: space-between;
       flex-wrap: nowrap;
-      gap: 12px;
+      gap: calc(12px * var(--spacing-scale, 1));
       // The sidebar control is a sibling on configuration pages.
       flex: 1 1 0%;
       width: 0;
@@ -549,7 +636,8 @@ useKeyboard();
       height: 100%;
       min-height: 0;
       margin: 0;
-      padding: 0 16px;
+      padding: 0 calc(16px * var(--spacing-scale, 1));
+      padding-right: var(--studio-header-controls-gap, calc(16px * var(--spacing-scale, 1))); // rtl-physical: the native device and window controls stay on the physical right in every locale.
       border: 0;
       background: transparent;
       overflow-x: auto;
@@ -575,9 +663,10 @@ useKeyboard();
     :deep(.header-title),
     :deep(h1),
     :deep(.header-session-title),
+    :deep(.person-title),
     :deep(.header-workflow-title),
     :deep(.room-title-text) {
-      font-size: 13px;
+      font-size: calc(var(--font-size-base, 14px) * 13 / 14);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -613,7 +702,7 @@ useKeyboard();
     :deep(.header-text) {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: calc(8px * var(--spacing-scale, 1));
       min-width: 0;
 
       p {
@@ -628,25 +717,19 @@ useKeyboard();
   // Three 46px window buttons.
   &.desktop-platform-win32 .studio-page-header,
   &.desktop-platform-linux .studio-page-header {
+    --studio-header-controls-gap: calc(8px * var(--spacing-scale, 1));
     padding-right: var(--desktop-window-controls-width); // rtl-physical: window controls stay on the physical right in every locale.
   }
 
   .app-box {
     padding-top: var(--studio-header-height);
-
-    &::before {
-      content: "";
-      position: absolute;
-      inset: 0 0 auto;
-      height: var(--studio-header-height);
-      background-color: $bg-sidebar;
-      pointer-events: none;
-    }
   }
   .app-layout {
     width: auto;
     margin: 0 var(--studio-content-gutter) var(--studio-content-gutter) 0;
     border-radius: var(--studio-content-radius);
+    // Content surfaces composite over their own base, independently of chrome.
+    background-color: $bg-sidebar;
   }
   .app-layout.no-sidebar { display: flex; }
 
@@ -660,27 +743,48 @@ useKeyboard();
     border-radius: 0;
     box-shadow: none;
   }
+
+  // The shell sidebar and page form one surface with a straight inner seam.
+  .app-layout--shell-sidebar {
+    --studio-layout-start-radius: var(--theme-sidebar-radius, var(--studio-content-radius));
+    --studio-layout-end-radius: var(--theme-content-radius, var(--studio-content-radius));
+    --studio-layout-clip: inset(0 round var(--studio-layout-start-radius) var(--studio-layout-end-radius) var(--studio-layout-end-radius) var(--studio-layout-start-radius));
+    border-radius: 0;
+    clip-path: var(--studio-layout-clip);
+
+    &:dir(rtl) {
+      --studio-layout-clip: inset(0 round var(--studio-layout-end-radius) var(--studio-layout-start-radius) var(--studio-layout-start-radius) var(--studio-layout-end-radius));
+    }
+
+    > :deep(:is(.sidebar, .hermes-config-sidebar, .hub-agent-config-sidebar, .coding-agent-config-sidebar, .plugin-config-sidebar)) {
+      border-radius: 0;
+      border-start-start-radius: var(--studio-layout-start-radius);
+      border-end-start-radius: var(--studio-layout-start-radius);
+    }
+
+    > .app-main--card {
+      border-radius: 0;
+      border-start-end-radius: var(--studio-layout-end-radius);
+      border-end-end-radius: var(--studio-layout-end-radius);
+    }
+  }
 }
 
 .app-shell--custom-background {
-  .studio-page-header {
-    box-shadow: inset 0 -1px 0 var(--glass-divider-color);
-  }
-
   &.app-shell--navigation-rail {
-    .app-box::before {
-      inset: 0;
-      height: auto;
-    }
-
     .app-layout {
       // Align this image with the shell's full-window background. Its opaque base
       // keeps the continuous frame glass from tinting the content a second time.
-      background: $bg-sidebar var(--app-background-image, none) center / cover no-repeat fixed;
+      background-color: $bg-sidebar;
+      background-image: linear-gradient(var(--app-background-overlay, transparent), var(--app-background-overlay, transparent)), var(--app-background-image, none), var(--app-background-gradient, none);
+      background-position: var(--app-background-position, center);
+      background-size: var(--app-background-size, cover);
+      background-repeat: no-repeat;
+      background-attachment: fixed;
       // Composite the image and surfaces before rounding them together. Separate
       // rounded clips leave antialiased pixels that expose the unfiltered image.
       border-radius: 0;
-      clip-path: inset(0 round var(--studio-content-radius));
+      clip-path: var(--studio-layout-clip, inset(0 round var(--studio-content-radius)));
     }
   }
 
@@ -692,9 +796,9 @@ useKeyboard();
     background-color: transparent;
 
     &--card {
-      background-color: var(--glass-content-bg);
-      -webkit-backdrop-filter: blur(8px) saturate(110%);
-      backdrop-filter: blur(8px) saturate(110%);
+      background-color: var(--theme-content-bg, var(--glass-content-bg));
+      -webkit-backdrop-filter: var(--theme-content-filter, blur(8px) saturate(110%));
+      backdrop-filter: var(--theme-content-filter, blur(8px) saturate(110%));
     }
   }
 
@@ -706,27 +810,29 @@ useKeyboard();
     background-color: transparent;
   }
 
-  &.app-shell--navigation-rail .app-box::before,
-  :deep(.studio-navigation-rail),
+  .studio-frame-surface,
   :deep(.desktop-titlebar:not(.desktop-titlebar--flush)),
   :deep(.chat-panel > .chat-main > .chat-header),
   :deep(.group-chat-panel > .chat-main > .chat-header) {
-    background-color: var(--glass-chrome-bg);
-    -webkit-backdrop-filter: blur(16px) saturate(110%);
-    backdrop-filter: blur(16px) saturate(110%);
+    background-color: var(--theme-chrome-bg, var(--glass-chrome-bg));
+    -webkit-backdrop-filter: var(--theme-chrome-filter, blur(16px) saturate(110%));
+    backdrop-filter: var(--theme-chrome-filter, blur(16px) saturate(110%));
   }
 
   :deep(.sidebar),
   :deep(.hermes-config-sidebar),
-  :deep(.ekko-config-sidebar),
+  :deep(.hub-agent-config-sidebar),
   :deep(.coding-agent-config-sidebar),
+  :deep(.plugin-config-sidebar),
   :deep(.chat-panel > .session-list),
+  :deep(.person-layout > .person-sidebar),
   :deep(.history-panel > .page-loading-content > .session-list),
   :deep(.group-chat-panel > .room-sidebar),
+  :deep(.agent-avatar-rail),
   :deep(.workflow-view > .page-loading-content > .workflow-sidebar) {
-    background-color: var(--glass-sidebar-bg);
-    -webkit-backdrop-filter: blur(12px) saturate(110%);
-    backdrop-filter: blur(12px) saturate(110%);
+    background-color: var(--theme-sidebar-bg, var(--glass-sidebar-bg));
+    -webkit-backdrop-filter: var(--theme-sidebar-filter, blur(12px) saturate(110%));
+    backdrop-filter: var(--theme-sidebar-filter, blur(12px) saturate(110%));
   }
 
   :deep(.history-panel > .page-loading-content > .chat-main),
@@ -734,9 +840,9 @@ useKeyboard();
   :deep(.connections-panel),
   :deep(.agent-manager-panel),
   :deep(.models-view) {
-    background-color: var(--glass-content-bg);
-    -webkit-backdrop-filter: blur(8px) saturate(110%);
-    backdrop-filter: blur(8px) saturate(110%);
+    background-color: var(--theme-content-bg, var(--glass-content-bg));
+    -webkit-backdrop-filter: var(--theme-content-filter, blur(8px) saturate(110%));
+    backdrop-filter: var(--theme-content-filter, blur(8px) saturate(110%));
   }
 
   :deep(.chat-panel > .chat-main),
@@ -753,7 +859,7 @@ useKeyboard();
 
   :deep(.chat-main-content),
   :deep(.group-chat-surface) {
-    background-color: rgba(var(--bg-main-surface-rgb), 0.42);
+    background-color: var(--theme-content-bg, rgba(var(--bg-main-surface-rgb), 0.42));
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
   }
@@ -767,9 +873,9 @@ useKeyboard();
 
   :deep(.chat-input-area .context-usage-row),
   :deep(.chat-input-area .input-wrapper) {
-    background-color: rgba(var(--bg-main-surface-rgb), 0.72);
-    -webkit-backdrop-filter: blur(8px) saturate(110%);
-    backdrop-filter: blur(8px) saturate(110%);
+    background-color: var(--theme-input-bg, rgba(var(--bg-main-surface-rgb), 0.72));
+    -webkit-backdrop-filter: var(--theme-input-filter, blur(8px) saturate(110%));
+    backdrop-filter: var(--theme-input-filter, blur(8px) saturate(110%));
   }
 
   :deep(.browser-settings-page > .settings-card) {
@@ -825,6 +931,7 @@ useKeyboard();
   }
 
   :deep(.chat-panel > .session-list > .page-sidebar-top),
+  :deep(.person-layout > .person-sidebar > .page-sidebar-top),
   :deep(.history-panel > .page-loading-content > .session-list > .page-sidebar-top),
   :deep(.workflow-view > .page-loading-content > .workflow-sidebar > .page-sidebar-top),
   :deep(.group-chat-panel > .room-sidebar > .sidebar-header) {
@@ -850,7 +957,7 @@ useKeyboard();
   }
 
   :deep(.studio-navigation-rail) {
-    padding-top: 44px;
+    padding-top: calc(44px * var(--spacing-scale, 1));
 
     &::before {
       content: "";
@@ -867,16 +974,18 @@ useKeyboard();
 .app-shell.desktop-platform-darwin:not(.app-shell--navigation-rail) {
   .app-layout > :deep(.sidebar),
   .app-layout > :deep(.hermes-config-sidebar),
-  .app-layout > :deep(.ekko-config-sidebar),
-  .app-layout > :deep(.coding-agent-config-sidebar) {
-    padding-top: 40px;
+  .app-layout > :deep(.hub-agent-config-sidebar),
+  .app-layout > :deep(.coding-agent-config-sidebar),
+  .app-layout > :deep(.plugin-config-sidebar) {
+    padding-top: calc(40px * var(--spacing-scale, 1));
   }
 
   :deep(.chat-panel > .session-list > .page-sidebar-top),
+  :deep(.person-layout > .person-sidebar > .page-sidebar-top),
   :deep(.history-panel > .page-loading-content > .session-list > .page-sidebar-top),
   :deep(.workflow-view > .page-loading-content > .workflow-sidebar > .page-sidebar-top),
   :deep(.group-chat-panel > .room-sidebar > .sidebar-header) {
-    padding-top: 44px;
+    padding-top: calc(44px * var(--spacing-scale, 1));
   }
 }
 
@@ -894,7 +1003,7 @@ useKeyboard();
   }
 
   .app-layout {
-    padding-top: 46px;
+    padding-top: calc(46px * var(--spacing-scale, 1));
   }
 
   :deep(.chat-panel--standalone > .chat-main) {
@@ -928,13 +1037,13 @@ useKeyboard();
   flex: 0 0 auto;
   width: 100%;
   z-index: 100;
-  padding: 4px 16px;
-  font-size: 12px;
+  padding: calc(4px * var(--spacing-scale, 1)) calc(16px * var(--spacing-scale, 1));
+  font-size: calc(var(--font-size-base, 14px) * 12 / 14);
   font-weight: 500;
   color: #b45309;
   background-color: #fef3c7;
-  border-bottom: 1px solid #fde68a;
+  border-bottom: var(--border-width, 1px) solid #fde68a;
   text-align: center;
-  line-height: 1.4;
+  line-height: var(--line-height, 1.4);
 }
 </style>

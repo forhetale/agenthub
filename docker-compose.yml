@@ -20,6 +20,13 @@ services:
       - HERMES_WEB_UI_AUTH_JWT_EXPIRES_IN=${HERMES_WEB_UI_AUTH_JWT_EXPIRES_IN:-30d}
       - HERMES_WEB_UI_XAI_CALLBACK_BIND_HOST=0.0.0.0
       - HERMES_PATCH_SCRIPT=${HERMES_PATCH_SCRIPT:-}
+      # Keep defaults in Studio so an unset/invalid new name can use its legacy alias.
+      - AGENTHUB_DSH_ACP_TIMEOUT_MS=${AGENTHUB_DSH_ACP_TIMEOUT_MS:-}
+      - AGENTHUB_ACP_TIMEOUT_MS=${AGENTHUB_ACP_TIMEOUT_MS:-}
+      - AGENTHUB_AGENT_MODEL_DISCOVERY_TIMEOUT_MS=${AGENTHUB_AGENT_MODEL_DISCOVERY_TIMEOUT_MS:-}
+      - HERMES_DSH_ACP_TIMEOUT_MS=${HERMES_DSH_ACP_TIMEOUT_MS:-}
+      - HERMES_ACP_TIMEOUT_MS=${HERMES_ACP_TIMEOUT_MS:-}
+      - HERMES_AGENT_MODEL_DISCOVERY_TIMEOUT_MS=${HERMES_AGENT_MODEL_DISCOVERY_TIMEOUT_MS:-}
       - NPM_CONFIG_PREFIX=/home/agent/.hermes-web-ui/coding-agent/npm
       - PATH=/home/agent/.hermes-web-ui/coding-agent/npm/bin:/opt/hermes/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
       - HERMES_ALLOW_ROOT_GATEWAY=1

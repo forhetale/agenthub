@@ -2,13 +2,18 @@ appId: com.hermeswebui.studio
 productName: AgentHub
 copyright: Copyright © 2026
 
+protocols:
+  - name: AgentHub provider import
+    schemes:
+      - agenthub
+
 directories:
   output: release
   buildResources: build
 
 publish:
   provider: generic
-  url: https://download.ekkolearnai.com
+  url: https://github.com/forhetale/agenthub/releases/latest/download
 
 # Don't auto-prune our root node_modules; we curate `files` and `extraResources` ourselves.
 buildDependenciesFromSource: false
@@ -46,7 +51,7 @@ extraResources:
       - "dist/**"
       - "!packages/desktop/**"
       # Exclude repository-root development files without dropping nested
-      # runtime assets such as dist/ekko-skills/*/scripts/**.
+      # runtime assets such as dist/hub-agent-skills/*/scripts/**.
       - "!.git/**"
       - "!.github/**"
       - "!docs/**"
@@ -96,10 +101,11 @@ win:
   icon: build/icon.ico
   target:
     - target: nsis
-      arch: [x64]
+      arch: [x64, arm64]
   artifactName: "AgentHub-${version}-${arch}.${ext}"
 
 linux:
+  syncDesktopName: true
   icon: build/icons
   target:
     - target: AppImage

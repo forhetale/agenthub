@@ -9,9 +9,26 @@
 
 export const USAGE_TABLE = 'session_usage'
 
+export const MODEL_API_KEYS_TABLE = 'model_api_keys'
+export const MODEL_API_KEYS_SCHEMA: Record<string, string> = {
+  id: 'TEXT PRIMARY KEY',
+  user_id: 'INTEGER NOT NULL',
+  name: 'TEXT NOT NULL',
+  preview: 'TEXT NOT NULL',
+  token_hash: 'TEXT NOT NULL UNIQUE',
+  models_json: "TEXT NOT NULL DEFAULT '[]'",
+  budget_usd: 'REAL',
+  created_at: 'INTEGER NOT NULL',
+  last_used_at: 'INTEGER',
+}
+
 export const USAGE_SCHEMA: Record<string, string> = {
   id: 'INTEGER PRIMARY KEY AUTOINCREMENT',
   session_id: 'TEXT NOT NULL',
+  account_id: 'TEXT',
+  model_api_key_id: 'TEXT',
+  model_api_pending: 'INTEGER NOT NULL DEFAULT 0',
+  origin: "TEXT NOT NULL DEFAULT 'internal'",
   run_id: "TEXT NOT NULL DEFAULT ''",
   parent_run_id: "TEXT NOT NULL DEFAULT ''",
   api_duration: 'REAL',
@@ -73,6 +90,27 @@ export const USAGE_PRICING_SCHEMA = {
 // ============================================================================
 
 export const TASK_PLANS_TABLE = 'task_plans'
+export const SESSION_TASKS_TABLE = 'session_tasks'
+export const SESSION_TASKS_SCHEMA: Record<string, string> = {
+  id: 'TEXT PRIMARY KEY',
+  session_id: 'TEXT',
+  title: 'TEXT NOT NULL',
+  summary: "TEXT NOT NULL DEFAULT ''",
+  status: "TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open', 'completed', 'closed'))",
+  source_message_id: 'INTEGER',
+  evidence_message_id: 'INTEGER',
+  completion_evidence: "TEXT NOT NULL DEFAULT ''",
+  created_at: 'INTEGER NOT NULL',
+  updated_at: 'INTEGER NOT NULL',
+  completed_at: 'INTEGER',
+  owner_user_id: 'INTEGER',
+  bot_id: 'TEXT',
+  revision: 'INTEGER NOT NULL DEFAULT 0',
+  requirements_revision: 'INTEGER NOT NULL DEFAULT 0',
+  requirements_json: "TEXT NOT NULL DEFAULT '{}'",
+  selection_json: "TEXT NOT NULL DEFAULT '{}'",
+  workspace: "TEXT NOT NULL DEFAULT ''",
+}
 export const TASK_PLANS_SCHEMA: Record<string, string> = {
   session_id: 'TEXT NOT NULL',
   plan_id: 'TEXT NOT NULL',
@@ -86,6 +124,23 @@ export const TASK_PLANS_SCHEMA: Record<string, string> = {
 export const SESSIONS_TABLE = 'sessions'
 
 export const SESSION_CATEGORIES_TABLE = 'session_categories'
+
+export const WORKSPACE_DIRECTORIES_TABLE = 'workspace_directories'
+export const WORKSPACE_DIRECTORIES_SCHEMA: Record<string, string> = {
+  id: 'INTEGER PRIMARY KEY AUTOINCREMENT',
+  user_id: 'INTEGER NOT NULL',
+  path: 'TEXT NOT NULL',
+  path_key: 'TEXT NOT NULL',
+  is_favorite: 'INTEGER NOT NULL DEFAULT 0',
+  last_used: 'INTEGER NOT NULL DEFAULT 0',
+  use_count: 'INTEGER NOT NULL DEFAULT 0',
+  created_at: 'INTEGER NOT NULL',
+  updated_at: 'INTEGER NOT NULL',
+}
+export const WORKSPACE_DIRECTORIES_INDEXES = {
+  uniq_workspace_directories_user_path: 'CREATE UNIQUE INDEX IF NOT EXISTS uniq_workspace_directories_user_path ON workspace_directories(user_id, path_key)',
+  idx_workspace_directories_user_recent: 'CREATE INDEX IF NOT EXISTS idx_workspace_directories_user_recent ON workspace_directories(user_id, last_used DESC)',
+}
 
 export const SESSION_CATEGORIES_SCHEMA: Record<string, string> = {
   id: 'INTEGER PRIMARY KEY AUTOINCREMENT',
@@ -105,9 +160,11 @@ export const SESSIONS_SCHEMA: Record<string, string> = {
   agent: 'TEXT NOT NULL DEFAULT \'\'',
   agent_mode: 'TEXT NOT NULL DEFAULT \'\'',
   agent_preset: 'TEXT NOT NULL DEFAULT \'\'',
+  bot_type: 'TEXT NOT NULL DEFAULT \'\'',
   agent_session_id: 'TEXT NOT NULL DEFAULT \'\'',
   agent_native_session_id: 'TEXT NOT NULL DEFAULT \'\'',
   user_id: 'TEXT',
+  studio_user_id: 'TEXT',
   model: 'TEXT NOT NULL DEFAULT \'\'',
   provider: 'TEXT NOT NULL DEFAULT \'\'',
   api_mode: 'TEXT NOT NULL DEFAULT \'\'',
@@ -137,6 +194,12 @@ export const SESSIONS_SCHEMA: Record<string, string> = {
   workspace: 'TEXT',
   category_id: 'INTEGER',
   history_revision: 'INTEGER NOT NULL DEFAULT 0',
+  task_summary_revision: 'INTEGER NOT NULL DEFAULT 0',
+  task_summary_updated_at: 'INTEGER NOT NULL DEFAULT 0',
+  /** Milliseconds of the last history clear; provider usage before it describes deleted history. */
+  history_cleared_at: 'INTEGER NOT NULL DEFAULT 0',
+  /** Context estimate after a history edit, separate from cumulative billed usage. */
+  context_usage_estimate: 'TEXT',
 }
 
 export const SESSIONS_INDEXES = {
@@ -514,22 +577,42 @@ export const USER_PROFILES_INDEXES = {
 }
 
 export const USER_THEMES_TABLE = 'user_themes'
+export const USER_NAVIGATION_TABLE = 'user_navigation'
+export const USER_NAVIGATION_SCHEMA: Record<string, string> = {
+  user_id: 'INTEGER PRIMARY KEY',
+  items_json: "TEXT NOT NULL DEFAULT '[]'",
+  schema_version: 'INTEGER NOT NULL DEFAULT 0',
+  updated_at: 'INTEGER NOT NULL',
+}
+export const USER_THEME_PRESETS_TABLE = 'user_theme_presets'
+
+export const USER_THEME_PRESETS_SCHEMA: Record<string, string> = {
+  id: 'TEXT PRIMARY KEY',
+  user_id: 'INTEGER NOT NULL',
+  name: 'TEXT NOT NULL',
+  settings_json: 'TEXT NOT NULL',
+  background_filename: 'TEXT',
+  created_at: 'INTEGER NOT NULL',
+  updated_at: 'INTEGER NOT NULL',
+}
+
 
 export const USER_THEMES_SCHEMA: Record<string, string> = {
   user_id: 'INTEGER PRIMARY KEY',
+  active_preset_id: 'TEXT',
+  brightness: 'TEXT',
+  style: 'TEXT',
   font_size: 'INTEGER NOT NULL DEFAULT 14',
   text_color: 'TEXT',
   accent_color: 'TEXT',
   background_filename: 'TEXT',
   background_original_name: 'TEXT',
   background_mime: 'TEXT',
+  appearance_json: "TEXT NOT NULL DEFAULT '{}'",
+  background_updated_at: 'INTEGER NOT NULL DEFAULT 0',
   created_at: 'INTEGER NOT NULL',
   updated_at: 'INTEGER NOT NULL',
 }
-
-// ============================================================================
-// Social Messages
-// ============================================================================
 
 export const STT_PROVIDER_SETTINGS_TABLE = 'stt_provider_settings'
 
@@ -652,6 +735,7 @@ export const GC_ROOMS_SCHEMA: Record<string, string> = {
   summaryApiMode: "TEXT NOT NULL DEFAULT ''",
   summaryEveryTurns: 'INTEGER NOT NULL DEFAULT 20',
   summaryGeneration: 'INTEGER NOT NULL DEFAULT 0',
+  messageDeletionRevision: 'INTEGER NOT NULL DEFAULT 0',
   triggerTokens: 'INTEGER NOT NULL DEFAULT 100000',
   maxHistoryTokens: 'INTEGER NOT NULL DEFAULT 32000',
   tailMessageCount: 'INTEGER NOT NULL DEFAULT 10',
@@ -1009,6 +1093,184 @@ export const GC_SESSION_PROFILES_SCHEMA: Record<string, string> = {
 // ============================================================================
 
 import { getDb, getStoragePath } from './index'
+import { initPersonTables } from './person-schema'
+import { initPersonWorkspaceBindings } from './person-workspace-schema'
+import { initSessionStateTables } from './session-state-schema'
+import { BUILTIN_HISTORY_SOURCES, BUILTIN_HUB_AGENT_IDS, LEGACY_EKKO_AGENT_IDS } from '../../contracts/history-source'
+
+const LEGACY_RUNTIME_ALIASES = new Set(['ekko', 'ekko-agent', 'ekko_agent', 'hub-agent', 'hub_agent'])
+const LEGACY_GROUP_ALIASES = ['ekko', 'ekko-agent', 'ekko_agent', 'hub-agent', 'hub_agent'] as const
+const LEGACY_WORKFLOW_AGENT_ALIASES = new Set(['ekko', 'ekko-agent', 'ekko_agent', 'hub', 'hub_agent'])
+
+function normalizeJsonWorkflowNodes(rawJson: string): string | null {
+  try {
+    const parsed = JSON.parse(rawJson)
+    if (!Array.isArray(parsed)) return null
+    let changed = false
+    for (const node of parsed) {
+      const data = node?.data
+      if (!data || typeof data !== 'object') continue
+      for (const field of ['agent', 'codingAgentId'] as const) {
+        const value = typeof data[field] === 'string' ? data[field].trim() : ''
+        if (value && LEGACY_WORKFLOW_AGENT_ALIASES.has(value.toLowerCase()) && value !== 'hub-agent') {
+          data[field] = 'hub-agent'
+          changed = true
+        }
+      }
+    }
+    return changed ? JSON.stringify(parsed) : null
+  } catch {
+    return null
+  }
+}
+
+function normalizeJsonPersonSelection(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false
+  let changed = false
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      if (normalizeJsonPersonSelection(item)) changed = true
+    }
+    return changed
+  }
+  const obj = value as Record<string, unknown>
+  if (typeof obj.runtime === 'string' && LEGACY_RUNTIME_ALIASES.has(obj.runtime.trim().toLowerCase()) && obj.runtime !== 'hub') {
+    obj.runtime = 'hub'
+    changed = true
+  }
+  for (const nested of Object.values(obj)) {
+    if (normalizeJsonPersonSelection(nested)) changed = true
+  }
+  return changed
+}
+
+function normalizeJsonTaskPlanSnapshot(rawJson: string): string | null {
+  try {
+    const parsed = JSON.parse(rawJson)
+    if (!parsed || typeof parsed !== 'object') return null
+    let changed = false
+    if (typeof parsed.agent === 'string' && LEGACY_WORKFLOW_AGENT_ALIASES.has(parsed.agent.trim().toLowerCase()) && parsed.agent !== 'hub-agent') {
+      parsed.agent = 'hub-agent'
+      changed = true
+    }
+    if (typeof parsed.runtime === 'string' && LEGACY_RUNTIME_ALIASES.has(parsed.runtime.trim().toLowerCase()) && parsed.runtime !== 'hub') {
+      parsed.runtime = 'hub'
+      changed = true
+    }
+    return changed ? JSON.stringify(parsed) : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Idempotently migrate legacy 'ekko' / 'ekko-agent' / 'ekko_agent' database values
+ * to 'hub' / 'hub-agent' / 'hub_agent' across session, usage, group chat, workflow,
+ * skill, task plan, and Person tables. Safe to invoke repeatedly or on partial fixtures.
+ */
+export function migrateLegacyEkkoIdentifiers(db: NonNullable<ReturnType<typeof getDb>>): void {
+  const runInTx = !db.isTransaction
+  if (runInTx) db.exec('BEGIN IMMEDIATE')
+  try {
+    if (tableExists(db, SESSIONS_TABLE)) {
+      const legacyBuiltinSources = [...BUILTIN_HISTORY_SOURCES, ...LEGACY_EKKO_AGENT_IDS]
+      db.prepare(`UPDATE ${SESSIONS_TABLE} SET source = 'builtin_agent', agent = 'hub-agent'
+        WHERE source IN (${legacyBuiltinSources.map(() => '?').join(', ')})
+        AND LOWER(TRIM(COALESCE(agent, ''))) IN (${BUILTIN_HUB_AGENT_IDS.map(() => '?').join(', ')})
+        AND (source <> 'builtin_agent' OR agent <> 'hub-agent')`)
+        .run(...legacyBuiltinSources, ...BUILTIN_HUB_AGENT_IDS)
+
+      const remainingAliases = [...LEGACY_EKKO_AGENT_IDS, 'hub', 'hub_agent']
+      db.prepare(`UPDATE ${SESSIONS_TABLE} SET agent = 'hub-agent'
+        WHERE LOWER(TRIM(COALESCE(agent, ''))) IN (${remainingAliases.map(() => '?').join(', ')})
+        AND agent <> 'hub-agent'`)
+        .run(...remainingAliases)
+    }
+
+    if (tableExists(db, USAGE_TABLE)) {
+      db.prepare(`UPDATE ${USAGE_TABLE} SET source = 'hub_agent'
+        WHERE LOWER(TRIM(COALESCE(source, ''))) = 'ekko_agent'
+        AND (run_id = '' OR NOT EXISTS (
+          SELECT 1 FROM ${USAGE_TABLE} u2
+          WHERE u2.session_id = ${USAGE_TABLE}.session_id AND u2.run_id = ${USAGE_TABLE}.run_id AND u2.source = 'hub_agent'
+        ))`).run()
+      const usageAgentAliases = [...LEGACY_EKKO_AGENT_IDS, 'hub', 'hub-agent']
+      db.prepare(`UPDATE ${USAGE_TABLE} SET agent = 'hub_agent'
+        WHERE LOWER(TRIM(COALESCE(agent, ''))) IN (${usageAgentAliases.map(() => '?').join(', ')})
+        AND agent <> 'hub_agent'`)
+        .run(...usageAgentAliases)
+    }
+
+    for (const table of [GC_ROOM_AGENTS_TABLE, GC_AGENT_PRESETS_TABLE]) {
+      if (!tableExists(db, table)) continue
+      db.prepare(`UPDATE ${table} SET agent = 'hub'
+        WHERE LOWER(TRIM(COALESCE(agent, ''))) IN (${LEGACY_GROUP_ALIASES.map(() => '?').join(', ')})
+        AND agent <> 'hub'`).run(...LEGACY_GROUP_ALIASES)
+    }
+
+    for (const [table, canonical] of [
+      [WORKFLOW_RUN_NODE_SESSIONS_TABLE, 'hub-agent'],
+      [SKILL_USAGE_EVENTS_TABLE, 'hub-agent'],
+    ] as const) {
+      if (!tableExists(db, table)) continue
+      const aliases = [...LEGACY_EKKO_AGENT_IDS, 'hub', 'hub_agent']
+      db.prepare(`UPDATE ${table} SET agent = ?
+        WHERE LOWER(TRIM(COALESCE(agent, ''))) IN (${aliases.map(() => '?').join(', ')})
+        AND agent <> ?`).run(canonical, ...aliases, canonical)
+    }
+
+    if (tableExists(db, WORKFLOWS_TABLE)) {
+      const rows = db.prepare(`SELECT id, nodes_json FROM ${WORKFLOWS_TABLE} WHERE LOWER(nodes_json) LIKE '%ekko%'`).all() as Array<{ id: string; nodes_json: string }>
+      const update = db.prepare(`UPDATE ${WORKFLOWS_TABLE} SET nodes_json = ? WHERE id = ?`)
+      for (const row of rows) {
+        const next = normalizeJsonWorkflowNodes(row.nodes_json)
+        if (next) update.run(next, row.id)
+      }
+    }
+
+    if (tableExists(db, WORKFLOW_RUNS_TABLE)) {
+      const rows = db.prepare(`SELECT id, snapshot_nodes_json FROM ${WORKFLOW_RUNS_TABLE} WHERE LOWER(snapshot_nodes_json) LIKE '%ekko%'`).all() as Array<{ id: string; snapshot_nodes_json: string }>
+      const update = db.prepare(`UPDATE ${WORKFLOW_RUNS_TABLE} SET snapshot_nodes_json = ? WHERE id = ?`)
+      for (const row of rows) {
+        const next = normalizeJsonWorkflowNodes(row.snapshot_nodes_json)
+        if (next) update.run(next, row.id)
+      }
+    }
+
+    for (const [table, column, keyCol] of [
+      ['person_accounts', 'settings_json', 'user_id'],
+      ['person_conversation_settings', 'settings_json', 'session_id'],
+      ['person_executions', 'selection_json', 'id'],
+      [SESSION_TASKS_TABLE, 'selection_json', 'id'],
+    ] as const) {
+      if (!tableExists(db, table)) continue
+      const rows = db.prepare(`SELECT ${keyCol} AS key_val, ${column} AS json_val FROM ${table} WHERE LOWER(${column}) LIKE '%ekko%'`).all() as Array<{ key_val: string | number; json_val: string }>
+      const update = db.prepare(`UPDATE ${table} SET ${column} = ? WHERE ${keyCol} = ?`)
+      for (const row of rows) {
+        try {
+          const parsed = JSON.parse(row.json_val)
+          if (normalizeJsonPersonSelection(parsed)) update.run(JSON.stringify(parsed), row.key_val)
+        } catch {
+          // Leave malformed legacy JSON untouched.
+        }
+      }
+    }
+
+    if (tableExists(db, TASK_PLANS_TABLE)) {
+      const rows = db.prepare(`SELECT session_id, plan_id, snapshot FROM ${TASK_PLANS_TABLE} WHERE LOWER(snapshot) LIKE '%ekko%'`).all() as Array<{ session_id: string; plan_id: string; snapshot: string }>
+      const update = db.prepare(`UPDATE ${TASK_PLANS_TABLE} SET snapshot = ? WHERE session_id = ? AND plan_id = ?`)
+      for (const row of rows) {
+        const next = normalizeJsonTaskPlanSnapshot(row.snapshot)
+        if (next) update.run(next, row.session_id, row.plan_id)
+      }
+    }
+
+    if (runInTx) db.exec('COMMIT')
+  } catch (err) {
+    if (runInTx) db.exec('ROLLBACK')
+    throw err
+  }
+}
 
 function quoteIdentifier(identifier: string): string {
   return `"${identifier.replace(/"/g, '""')}"`
@@ -1397,6 +1659,47 @@ export function syncTable(
   addMissingSafeColumns(db, tableName, schema)
 }
 
+/** Rebuild constraints for account-owned tasks, preserving rows and custom schema objects. */
+function migrateSessionTaskSchema(db: NonNullable<ReturnType<typeof getDb>>): void {
+  const legacyCheck = /CHECK\s*\(\s*status\s+IN\s*\(\s*'open'\s*,\s*'completed'\s*\)\s*\)/i
+  const upgradedSql = (sql: string) => sql
+    .replace(legacyCheck, "CHECK(status IN ('open', 'completed', 'closed'))")
+    .replace(/((?:"session_id"|\bsession_id)\s+TEXT)\s+NOT\s+NULL\b/i, '$1')
+    .replace(/((?:"source_message_id"|\bsource_message_id)\s+INTEGER)\s+NOT\s+NULL\b/i, '$1')
+  const readSql = () => (db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?")
+    .get(SESSION_TASKS_TABLE) as { sql: string } | undefined)?.sql
+  const original = readSql() || ''
+  if (upgradedSql(original) === original) return
+  db.exec('BEGIN IMMEDIATE')
+  try {
+    const sql = readSql() || ''
+    if (upgradedSql(sql) !== sql) {
+      const objects = db.prepare("SELECT sql FROM sqlite_master WHERE tbl_name = ? AND type IN ('index', 'trigger') AND sql IS NOT NULL")
+        .all(SESSION_TASKS_TABLE) as Array<{ sql: string }>
+      const columns = (db.prepare(`PRAGMA table_info(${quoteIdentifier(SESSION_TASKS_TABLE)})`).all() as Array<{ name: string }>)
+        .map(column => quoteIdentifier(column.name)).join(', ')
+      const temporary = 'session_tasks_schema_upgrade'
+      const createSql = upgradedSql(sql)
+        .replace(/^(CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?)(?:"session_tasks"|session_tasks)(?=\s*\()/i, `$1${quoteIdentifier(temporary)}`)
+      db.exec(createSql)
+      db.exec(`INSERT INTO ${quoteIdentifier(temporary)} (${columns}) SELECT ${columns} FROM ${quoteIdentifier(SESSION_TASKS_TABLE)}`)
+      // This cross-table gate references session_tasks from person_executions.
+      // SQLite validates all triggers during RENAME, including the short gap after DROP.
+      // Retire and restore only our gate inside this same transaction; rollback preserves it on failure.
+      const acceptanceGate = db.prepare("SELECT sql FROM sqlite_master WHERE type='trigger' AND name='person_acceptance_execution_gate'").get() as { sql: string } | undefined
+      const acceptanceView = db.prepare("SELECT sql FROM sqlite_master WHERE type='view' AND name='person_acceptance_passes'").get() as {sql:string} | undefined
+      if (acceptanceGate) db.exec('DROP TRIGGER person_acceptance_execution_gate')
+      if (acceptanceView) db.exec('DROP VIEW person_acceptance_passes')
+      db.exec(`DROP TABLE ${quoteIdentifier(SESSION_TASKS_TABLE)}`)
+      db.exec(`ALTER TABLE ${quoteIdentifier(temporary)} RENAME TO ${quoteIdentifier(SESSION_TASKS_TABLE)}`)
+      for (const object of objects) db.exec(object.sql)
+      if (acceptanceView) db.exec(acceptanceView.sql)
+      if (acceptanceGate) db.exec(acceptanceGate.sql)
+    }
+    db.exec('COMMIT')
+  } catch (error) { db.exec('ROLLBACK'); throw error }
+}
+
 function cleanupHistoricalZeroLineWorkspaceDiffs(
   db: NonNullable<ReturnType<typeof getDb>>,
 ): void {
@@ -1456,7 +1759,7 @@ function cleanupHistoricalZeroLineWorkspaceDiffs(
 
 /**
  * Initialize missing Hermes SQLite tables with proper schemas.
- * Existing tables only receive safe additive columns.
+ * Existing tables receive safe additive columns and explicit domain migrations.
  * Call this once at application bootstrap.
  */
 export function initAllHermesTables(): void {
@@ -1466,6 +1769,7 @@ export function initAllHermesTables(): void {
   try {
     // Usage store
     syncTable(USAGE_TABLE, USAGE_SCHEMA, { primaryKey: 'id' })
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_usage_model_api_key ON ${USAGE_TABLE}(model_api_key_id, account_id)`)
     syncTable(USAGE_PRICING_TABLE, USAGE_PRICING_SCHEMA, { primaryKey: 'profile' })
     db.exec(USAGE_RUN_INDEX)
     syncTable(RUN_USAGE_TABLE, RUN_USAGE_SCHEMA, { indexes: RUN_USAGE_INDEXES })
@@ -1475,6 +1779,9 @@ export function initAllHermesTables(): void {
     db.exec(`CREATE INDEX IF NOT EXISTS idx_usage_parent_run ON ${USAGE_TABLE}(session_id, parent_run_id)`)
 
     // Session store
+    syncTable(WORKSPACE_DIRECTORIES_TABLE, WORKSPACE_DIRECTORIES_SCHEMA, {
+      indexes: WORKSPACE_DIRECTORIES_INDEXES,
+    })
     syncTable(SESSION_CATEGORIES_TABLE, SESSION_CATEGORIES_SCHEMA, {
       indexes: SESSION_CATEGORIES_INDEXES,
     })
@@ -1485,13 +1792,24 @@ export function initAllHermesTables(): void {
         idx_task_plans_latest: 'CREATE INDEX IF NOT EXISTS idx_task_plans_latest ON task_plans(session_id, created_at DESC)',
       },
     })
+    syncTable(SESSION_TASKS_TABLE, SESSION_TASKS_SCHEMA, {
+      indexes: { idx_session_tasks_session: 'CREATE INDEX IF NOT EXISTS idx_session_tasks_session ON session_tasks(session_id, created_at, id)' },
+    })
+    migrateSessionTaskSchema(db)
+    initPersonTables(db)
     syncTable(SESSIONS_TABLE, SESSIONS_SCHEMA, {
       indexes: SESSIONS_INDEXES,
     })
+    initPersonWorkspaceBindings(db)
+    db.prepare(`UPDATE ${SESSIONS_TABLE} SET bot_type = 'zhezhe'
+      WHERE id LIKE 'person-main-%' AND bot_type = ''`).run()
     createIndexes(db, SESSION_CATEGORIES_INDEXES)
     createIndexes(db, SESSIONS_INDEXES)
     syncTable(MESSAGES_TABLE, MESSAGES_SCHEMA)
+    initSessionStateTables(db)
     db.exec(MESSAGES_INDEX)
+    db.exec('CREATE INDEX IF NOT EXISTS idx_messages_session_run ON messages(session_id,run_marker,id)')
+    db.exec("CREATE INDEX IF NOT EXISTS idx_messages_person_timeline ON messages(session_id,timestamp*1000,printf('%020d',id))")
     syncTable(SKILL_USAGE_EVENTS_TABLE, SKILL_USAGE_EVENTS_SCHEMA, {
       indexes: SKILL_USAGE_EVENTS_INDEXES,
     })
@@ -1539,11 +1857,18 @@ export function initAllHermesTables(): void {
 
     // Users and profile access
     syncTable(USERS_TABLE, USERS_SCHEMA)
+    syncTable(MODEL_API_KEYS_TABLE, MODEL_API_KEYS_SCHEMA, {
+      indexes: { idx_model_api_keys_owner: `CREATE INDEX IF NOT EXISTS idx_model_api_keys_owner ON ${MODEL_API_KEYS_TABLE}(user_id)` },
+    })
     syncTable(USER_PROFILES_TABLE, USER_PROFILES_SCHEMA, {
       primaryKey: 'user_id, profile_name',
       indexes: USER_PROFILES_INDEXES,
     })
     syncTable(USER_THEMES_TABLE, USER_THEMES_SCHEMA)
+    syncTable(USER_NAVIGATION_TABLE, USER_NAVIGATION_SCHEMA)
+    syncTable(USER_THEME_PRESETS_TABLE, USER_THEME_PRESETS_SCHEMA, {
+      indexes: { idx_user_theme_presets_user: 'CREATE INDEX IF NOT EXISTS idx_user_theme_presets_user ON user_theme_presets(user_id)' },
+    })
 
     syncTable(STT_PROVIDER_SETTINGS_TABLE, STT_PROVIDER_SETTINGS_SCHEMA, {
       indexes: STT_PROVIDER_SETTINGS_INDEXES,
@@ -1648,8 +1973,9 @@ export function initAllHermesTables(): void {
     syncTable(GC_ROOM_MEMBERS_TABLE, GC_ROOM_MEMBERS_SCHEMA, {
       indexes: {
         idx_gc_room_members_user: 'CREATE INDEX idx_gc_room_members_user ON gc_room_members(userId)',
-      }
+      },
     })
+    migrateLegacyEkkoIdentifiers(db)
   } catch (e) {
     console.error('Error initializing Hermes SQLite tables:', e)
     console.error(`[Schema] Database initialization failed. Existing database was left untouched: ${getStoragePath()}`)

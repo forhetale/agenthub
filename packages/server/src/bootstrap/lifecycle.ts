@@ -5,9 +5,8 @@ import { forceStopManagedGateways, shutdownManagedGateways } from '../modules/he
 import { closeDb } from '../modules/studio/infrastructure/database'
 import { logger } from '../modules/studio/public/logging'
 import { shutdownLocalSttRuntime } from '../modules/studio/services/voice/stt/local-model-manager'
-import { closeGlobalEkkoAgent } from '../modules/ekko/services/manager'
+import { closeGlobalHubAgent } from '../modules/hub-agent/services/manager'
 import { stopChatWebhookDispatcher } from '../modules/studio/services/webhooks'
-import { stopPreviewRuntime } from './update'
 
 const DEFAULT_SHUTDOWN_FORCE_EXIT_MS = 10_000
 const DEFAULT_DESKTOP_SHUTDOWN_FORCE_EXIT_MS = 10_000
@@ -131,7 +130,6 @@ export function createShutdownHandler(
           logger.info('[shutdown] leaving managed gateways running')
         }
 
-        await runShutdownStep('Preview runtime', stopPreviewRuntime)
         await runShutdownStep('DSH plugin operations', shutdownDshPluginOperations)
         await runShutdownStep('DSH management host', shutdownDshManagement)
         await runShutdownStep('Local STT runtime', shutdownLocalSttRuntime)
@@ -161,7 +159,6 @@ export function createShutdownHandler(
           logger.info('Leaving agent bridge running across Web UI shutdown')
         }
 
-
         // Disconnect Socket.IO before HTTP server to prevent hanging, and wait
         // for adapter/namespace cleanup instead of racing process.exit().
         if (groupChatServer) {
@@ -182,7 +179,7 @@ export function createShutdownHandler(
           ))).then(() => undefined))
         }
       } finally {
-        await runShutdownStep('Global Ekko agent', () => closeGlobalEkkoAgent())
+        await runShutdownStep('Global Hub Agent', () => closeGlobalHubAgent())
         await runShutdownStep('Database', () => closeDb())
         clearTimeout(forceExitTimer)
         logger.info({ durationMs: Date.now() - shutdownStartedAt }, 'Shutdown cleanup complete')

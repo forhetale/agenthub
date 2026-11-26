@@ -5,6 +5,7 @@ import type { CodingAgentImageInput } from '../../protocol/types'
 import { dshReasoningEffort } from './runtime-config'
 import { DSH_STREAM_METHOD, DSH_USAGE_METHOD } from './stream-plugin'
 import { logger } from '../../../studio/public/logging'
+import { timeoutFromEnv } from '../../protocol/timeouts'
 
 interface StreamedText { agent_message_chunk: string; agent_thought_chunk: string }
 
@@ -40,7 +41,7 @@ export class DshAcpTurn {
         while ((end = this.buffer.indexOf('\n')) >= 0) {
           const line = this.buffer.slice(0, end).trim()
           this.buffer = this.buffer.slice(end + 1)
-          if (line) this.receive(JSON.parse(line))
+          if (line) this.receiveLine(line)
         }
       } catch (error) { this.dispose(error instanceof Error ? error : new Error(String(error))) }
     })
@@ -49,12 +50,24 @@ export class DshAcpTurn {
     child.stdin?.on('error', error => this.dispose(error))
   }
 
+  // A valid ACP frame is always a JSON object, so any line not starting with '{'
+  // is dependency stdout noise (e.g. the MCP SDK's console.debug), not the
+  // protocol. Skip and warn instead of disposing the whole turn; only a line that
+  // looks like JSON but fails to parse is a real protocol break and stays fatal.
+  private receiveLine(line: string) {
+    if (!line.startsWith('{')) {
+      logger.warn({ line: line.slice(0, 500) }, '[dsh] skipping non-JSON line on ACP stdout')
+      return
+    }
+    this.receive(JSON.parse(line))
+  }
+
   private write(message: unknown) {
     if (this.closed || !this.child.stdin?.writable) throw new Error('DSH ACP connection is closed')
     this.child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', ...message as object })}\n`)
   }
 
-  private request(method: string, params: unknown, timeout = 60_000): Promise<any> {
+  private request(method: string, params: unknown, timeout = timeoutFromEnv('AGENTHUB_DSH_ACP_TIMEOUT_MS', 'EKKO_STUDIO_DSH_ACP_TIMEOUT_MS', 'HERMES_DSH_ACP_TIMEOUT_MS', 60_000)): Promise<any> {
     const id = ++this.sequence
     return new Promise((resolve, reject) => {
       const timer = timeout ? setTimeout(() => {
@@ -146,7 +159,7 @@ export class DshAcpTurn {
     images: CodingAgentImageInput[]
   }): Promise<string> {
     const initialized = await this.request('initialize', {
-      protocolVersion: 1, clientCapabilities: {}, clientInfo: { name: 'ekko-studio', version: '1.0.0' },
+      protocolVersion: 1, clientCapabilities: {}, clientInfo: { name: 'agenthub', version: '1.0.0' },
     })
     if (initialized?.protocolVersion !== 1) throw new Error('Unsupported DSH ACP protocol version')
     if (input.images.length && !initialized.agentCapabilities?.promptCapabilities?.image) {

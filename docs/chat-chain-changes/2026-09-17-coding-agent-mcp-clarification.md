@@ -7,19 +7,19 @@ impact: Headless coding agents can ask a question in the existing Studio/App int
 
 ## Transport and scope
 
-The renamed `ekko-studio-interaction` MCP exposes both `ekko_studio_update_plan`
-and `ekko_studio_clarify` as direct tools. Task cards and user questions share
+The renamed `agenthub-interaction` MCP exposes both `agenthub_update_plan`
+and `agenthub_clarify` as direct tools. Task cards and user questions share
 one managed MCP server. Claude Code, Codex, Pi, Grok, OpenCode, and
 DSH receive it through their existing managed configuration paths. It accepts
 `context_id`, a `question`, and optional string `choices`; free-text answers are
 allowed even when choices are supplied. There are no new client components.
-Hermes receives the same server with only `ekko_studio_update_plan`: clarification
+Hermes receives the same server with only `agenthub_update_plan`: clarification
 is hidden from discovery, omitted from instructions, and rejected on direct calls.
 Only Coding Agent injection sets `HERMES_MCP_USER_CLARIFICATION=1`; the default is
-off, and Hermes explicitly sets it to `0`. Ekko does not receive this server and
+off, and Hermes explicitly sets it to `0`. Hub Agent does not receive this server and
 keeps its native tools. Pi keeps its native RPC UI support.
 
-Existing managed `ekko-studio-plan` entries are renamed without registering a
+Legacy managed `ekko-studio-plan` / `ekko-studio-interaction` entries are migrated to `agenthub-interaction` without registering a
 second server. Stored Coding Agent overrides and disable settings follow the new
 name. The internal `plan` launch argument is retained for existing configurations.
 

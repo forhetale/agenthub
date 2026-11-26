@@ -1,10 +1,12 @@
+import { preservedModelKeys } from '../services/models/model-section'
 import { existsSync, readFileSync } from 'fs'
 import { writeFile } from 'fs/promises'
 import { join } from 'path'
-import { getActiveProfileName, getProfileDir } from '../services/profiles/profile'
-import { updateConfigYamlForProfile, saveEnvValueForProfile, PROVIDER_ENV_MAP } from '../../studio/public/profile-config'
+import { getActiveProfileName } from '../services/profiles/profile'
+import { getProfileDir } from '../../studio/public/provider-config'
+import { updateConfigYamlForProfile, saveEnvValueForProfile, PROVIDER_ENV_MAP } from '../../studio/public/provider-config'
 import { getCompatibleCustomProviders, normalizeCustomProviderEntry } from '../../studio/contracts/provider-compat'
-import { PROVIDER_PRESETS } from '../../studio/contracts/providers'
+import { PROVIDER_PRESETS, isRetiredProvider, RETIRED_PROVIDER_MESSAGE } from '../../studio/contracts/providers'
 import { logger } from '../../studio/public/logging'
 import {
   getProviderEditorDetail,
@@ -17,10 +19,17 @@ import {
 import { refreshProviderModels, restoreProviderModels } from '../services/providers/provider-model-refresh'
 import { appendProviderAuditEvent } from '../../studio/public/provider-audit'
 import { invalidateProviderRuntime } from '../../studio/public/provider-runtime'
-import { OPENCODE_FREE_PROVIDER, OPENCODE_FREE_BASE_URL, isOpenCodeFreeModel } from '../../studio/contracts/opencode-free'
+import { clearClaudeOAuthCredentials } from '../services/providers/clear-claude-oauth'
+import { removeAccountProvider } from '../../studio/public/provider-management'
+import { readConfigYamlForProfile } from '../../studio/public/provider-config'
+import { providerProfiles } from '../../studio/public/provider-account'
 
-const OPTIONAL_API_KEY_PROVIDERS = new Set(['cliproxyapi', 'xai-oauth', 'openai-codex', 'claude-oauth', 'minimax-oauth', OPENCODE_FREE_PROVIDER])
-const DIRECT_CONFIG_PROVIDERS = new Set(['xai-oauth', 'openai-codex', 'claude-oauth', 'minimax-oauth', OPENCODE_FREE_PROVIDER])
+function invalidateAccountProvider(providerId: string): void {
+  for (const profile of providerProfiles()) invalidateProviderRuntime(profile, providerId)
+}
+
+const OPTIONAL_API_KEY_PROVIDERS = new Set(['cliproxyapi', 'xai-oauth', 'openai-codex', 'claude-oauth', 'minimax-oauth'])
+const DIRECT_CONFIG_PROVIDERS = new Set(['xai-oauth', 'openai-codex', 'claude-oauth', 'minimax-oauth'])
 type ProviderApiMode = 'chat_completions' | 'codex_responses' | 'anthropic_messages' | 'bedrock_converse' | 'codex_app_server'
 
 function requestedProfile(ctx: any): string {
@@ -115,6 +124,14 @@ function buildProviderEntry(name: string, base_url: string, api_key: string, mod
   return entry
 }
 
+function applyCustomProviderApiMode(entry: Record<string, any>, mode: ProviderApiMode | null | undefined): void {
+  if (mode === undefined) return
+  delete entry.api_mode
+  delete entry.transport
+  delete entry.apiMode
+  if (mode !== null) entry.api_mode = mode
+}
+
 function normalizeBaseUrl(url: string): string {
   return String(url || '').trim().replace(/\/+$/, '')
 }
@@ -175,7 +192,7 @@ export async function patchEditor(ctx: any) {
       expectedRevision(ctx),
     )
     if (result.changed.some(field => field === 'api_key_replaced' || field === 'api_key_cleared' || field === 'base_url' || field === 'api_mode')) {
-      invalidateProviderRuntime(profile, providerId)
+      invalidateAccountProvider(providerId)
     }
     setRevisionHeader(ctx, result.detail.revision)
     appendAuditSafely({
@@ -289,13 +306,16 @@ export async function restoreModels(ctx: any) {
 }
 
 export async function create(ctx: any) {
-  const { name, base_url, api_key, model, context_length, providerKey, api_mode } = ctx.request.body as {
-    name: string; base_url: string; api_key: string; model: string; context_length?: number; providerKey?: string | null; api_mode?: ProviderApiMode
+  const { name, base_url, api_key, model, context_length, providerKey, api_mode, create_only } = ctx.request.body as {
+    name: string; base_url: string; api_key: string; model: string; context_length?: number; providerKey?: string | null; api_mode?: ProviderApiMode | null; create_only?: boolean
   }
   const normalizedName = String(name || '').trim()
   const poolKey = providerKey || `custom:${normalizedName.toLowerCase().replace(/ /g, '-')}`
+  if (isRetiredProvider(poolKey)) {
+    ctx.status = 400; ctx.body = { error: RETIRED_PROVIDER_MESSAGE }; return
+  }
   const isBuiltin = poolKey in PROVIDER_ENV_MAP
-  const effectiveBaseUrl = poolKey === OPENCODE_FREE_PROVIDER ? OPENCODE_FREE_BASE_URL : isBuiltin ? builtinBaseUrl(poolKey, base_url) : base_url
+  const effectiveBaseUrl = isBuiltin ? builtinBaseUrl(poolKey, base_url) : base_url
   const customApiMode = normalizeApiMode(api_mode)
   if (!normalizedName || !effectiveBaseUrl || !model) {
     ctx.status = 400; ctx.body = { error: 'Missing name, base_url, or model' }; return
@@ -303,13 +323,33 @@ export async function create(ctx: any) {
   if (!api_key && !OPTIONAL_API_KEY_PROVIDERS.has(String(providerKey || ''))) {
     ctx.status = 400; ctx.body = { error: 'Missing API key' }; return
   }
-  if (poolKey === OPENCODE_FREE_PROVIDER && !isOpenCodeFreeModel(model)) {
-    ctx.status = 400; ctx.body = { error: 'Select an OpenCode Free model' }; return
-  }
   try {
     const profile = requestedProfile(ctx)
     await updateConfigYamlForProfile(profile, async (config) => {
+      if (create_only === true && (isBuiltin
+        || findLegacyCustomProviderIndex(config, poolKey) !== -1
+        || Object.keys(config.providers || {}).some(key => providerKeyForCustomName(key) === poolKey)
+        || getCompatibleCustomProviders(config).some(cp => providerKeyForCustomName(cp.name) === poolKey))) {
+        throw Object.assign(new Error('Provider already exists; choose another name'), { status: 409 })
+      }
       if (typeof config.model !== 'object' || config.model === null) { config.model = {} }
+      if (config.studio_provider_pool === 2) {
+        config.providers ||= {}
+        const previous = config.providers[poolKey]
+        if (create_only === true && previous) throw Object.assign(new Error('Provider already exists; choose another name'), { status: 409 })
+        const preset = PROVIDER_PRESETS.find(p => p.value === poolKey)
+        const entry = { ...previous, name: normalizedName, base_url: effectiveBaseUrl, api_key,
+          catalog_provider: poolKey, runtime_provider: previous?.runtime_provider || poolKey,
+          api_mode: customApiMode || previous?.api_mode || preset?.catalog_api_mode || preset?.api_mode || 'chat_completions',
+          model, models: { ...previous?.models, [model]: { ...previous?.models?.[model], ...(context_length && context_length > 0 ? { context_length } : {}) } } }
+        for (const key of ['key_env', 'auth_provider', 'auth_scope']) delete entry[key]
+        config.providers[poolKey] = entry
+        config.model.default = model
+        config.model.provider = poolKey
+        delete config.model.base_url
+        delete config.model.api_key
+        return config
+      }
       if (!isBuiltin) {
         if (!Array.isArray(config.custom_providers)) { config.custom_providers = [] }
         const existing = (config.custom_providers as any[]).find(
@@ -320,8 +360,7 @@ export async function create(ctx: any) {
           existing.api_key = api_key
           existing.model = model
           const preset = PROVIDER_PRESETS.find(p => p.value === poolKey.replace('custom:', ''))
-          if (preset?.api_mode) existing.api_mode = preset.api_mode
-          else if (customApiMode) existing.api_mode = customApiMode
+          applyCustomProviderApiMode(existing, api_mode === null ? null : customApiMode || preset?.api_mode)
           if (context_length && context_length > 0) {
             if (!existing.models) existing.models = {}
             existing.models[model] = existing.models[model] || {}
@@ -330,7 +369,7 @@ export async function create(ctx: any) {
         } else {
           const entry = buildProviderEntry(normalizedName.toLowerCase().replace(/ /g, '-'), effectiveBaseUrl, api_key, model, context_length, customApiMode)
           const preset = PROVIDER_PRESETS.find(p => p.value === poolKey.replace('custom:', ''))
-          if (preset?.api_mode) entry.api_mode = preset.api_mode
+          applyCustomProviderApiMode(entry, api_mode === null ? null : customApiMode || preset?.api_mode)
           config.custom_providers.push(entry)
         }
         config.model.default = model
@@ -376,22 +415,36 @@ export async function create(ctx: any) {
       delete config.model.api_key
       return config
     })
+    invalidateAccountProvider(poolKey)
     // TODO: Test if provider works without gateway restart
     // try { await hermesCli.restartGateway() } catch (e: any) { logger.error(e, 'Gateway restart failed') }
     ctx.body = { success: true }
   } catch (err: any) {
-    ctx.status = 500; ctx.body = { error: err.message }
+    ctx.status = err.status === 409 ? 409 : 500; ctx.body = { error: err.message }
   }
 }
 
 export async function update(ctx: any) {
   const poolKey = decodeURIComponent(ctx.params.poolKey)
   const { name, base_url, api_key, model, api_mode } = ctx.request.body as {
-    name?: string; base_url?: string; api_key?: string; model?: string; api_mode?: ProviderApiMode
+    name?: string; base_url?: string; api_key?: string; model?: string; api_mode?: ProviderApiMode | null
   }
   const customApiMode = normalizeApiMode(api_mode)
   try {
     const profile = requestedProfile(ctx)
+    if ((await readConfigYamlForProfile(profile)).studio_provider_pool === 2) {
+      const before = await getProviderEditorDetail(profile, poolKey)
+      await updateProviderEditorDetail(profile, poolKey, {
+        ...(name !== undefined ? { label: name } : {}),
+        ...(base_url !== undefined ? { base_url } : {}),
+        ...(model !== undefined ? { preferred_model: model } : {}),
+        ...(api_mode !== undefined ? { api_mode } : {}),
+        ...(api_key !== undefined ? { credential_action: api_key ? 'replace' : 'clear', api_key } : {}),
+      }, before.revision)
+      invalidateAccountProvider(poolKey)
+      ctx.body = { success: true }
+      return
+    }
     const isCustom = poolKey.startsWith('custom:')
     if (isCustom) {
       const found = await updateConfigYamlForProfile(profile, (config) => {
@@ -404,7 +457,7 @@ export async function update(ctx: any) {
         if (base_url !== undefined) entry.base_url = base_url
         if (api_key !== undefined) entry.api_key = api_key
         if (model !== undefined) entry.model = model
-        if (customApiMode !== undefined) entry.api_mode = customApiMode
+        applyCustomProviderApiMode(entry, api_mode === null ? null : customApiMode)
         return { data: config, result: true }
       })
       if (!found) {
@@ -422,7 +475,7 @@ export async function update(ctx: any) {
     // try { await hermesCli.restartGateway() } catch (e: any) { logger.error(e, 'Gateway restart failed') }
     ctx.body = { success: true }
   } catch (err: any) {
-    ctx.status = 500; ctx.body = { error: err.message }
+    ctx.status = err.status === 409 ? 409 : 500; ctx.body = { error: err.message }
   }
 }
 
@@ -435,6 +488,15 @@ export async function remove(ctx: any) {
   const requestedProviderKey = typeof query?.providerKey === 'string' ? query.providerKey.trim() : ''
   try {
     const profile = requestedProfile(ctx)
+    const accountRemoved = await removeAccountProvider(profile, poolKey)
+    if (accountRemoved !== null) {
+      if (!accountRemoved) {
+        ctx.status = 404; ctx.body = { error: `Provider "${poolKey}" not found` }; return
+      }
+      invalidateAccountProvider(poolKey)
+      ctx.body = { success: true }
+      return
+    }
     const isCustom = poolKey.startsWith('custom:')
     const removed = await updateConfigYamlForProfile(profile, async (config) => {
       if (isCustom) {
@@ -476,7 +538,7 @@ export async function remove(ctx: any) {
           delete config.model.base_url
           delete config.model.api_key
         } else {
-          config.model = {}
+          config.model = preservedModelKeys(config.model)
         }
       }
       return { data: config, result: true }
@@ -490,12 +552,13 @@ export async function remove(ctx: any) {
         ctx.status = 404; ctx.body = { error: `Provider "${poolKey}" not found` }; return
       }
     }
-    await clearStoredAuthProvider(profile, poolKey)
+    if (poolKey === 'claude-oauth') await clearClaudeOAuthCredentials(profile)
+    else await clearStoredAuthProvider(profile, poolKey)
     invalidateProviderRuntime(profile, poolKey)
     // TODO: Test if provider works without gateway restart
     // try { await hermesCli.restartGateway() } catch (e: any) { logger.error(e, 'Gateway restart failed') }
     ctx.body = { success: true }
   } catch (err: any) {
-    ctx.status = 500; ctx.body = { error: err.message }
+    ctx.status = err.status === 409 ? 409 : 500; ctx.body = { error: err.message }
   }
 }

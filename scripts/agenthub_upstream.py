@@ -33,12 +33,22 @@ DEFAULT_LEASE_MINUTES = 180
 
 FORBIDDEN_PATHS = [
     "packages/esp32-c3",
+    "packages/mcu",
+    "packages/ekko-agent",
+    "packages/server/src/modules/ekko",
     "packages/server/src/modules/studio/controllers/app-connections.ts",
     "packages/server/src/modules/studio/controllers/app-relay.ts",
     "packages/server/src/modules/studio/controllers/devices.ts",
     "packages/server/src/modules/studio/controllers/mcu-devices.ts",
     "packages/server/src/modules/studio/controllers/mcu-firmware.ts",
     "packages/server/src/modules/studio/controllers/social-messages.ts",
+    "packages/server/src/modules/studio/routes/app-connections.ts",
+    "packages/server/src/modules/studio/routes/app-relay.ts",
+    "packages/server/src/modules/studio/routes/app-upload.ts",
+    "packages/server/src/modules/studio/routes/mcu-devices.ts",
+    "packages/server/src/modules/studio/routes/mcu-firmware.ts",
+    "packages/server/src/modules/studio/routes/social-messages.ts",
+    "packages/server/src/modules/studio/routes/session-shares.ts",
     "packages/client/src/api/studio/app-connections.ts",
     "packages/client/src/api/studio/app-relay.ts",
     "packages/client/src/views/social-messages",
@@ -51,7 +61,8 @@ REQUIRED_BIN_ENTRIES = {
     "hermes-web-ui": "./bin/hermes-web-ui.mjs",
     "hermes-web-ui-mcp": "./bin/hermes-web-ui-mcp.mjs",
     "hermes-studio-mcp": "./bin/hermes-studio-mcp.mjs",
-    "ekko-studio-mcp": "./bin/ekko-studio-mcp.mjs",
+    "agenthub": "./bin/hermes-web-ui.mjs",
+    "agenthub-mcp": "./bin/agenthub-mcp.mjs",
 }
 
 REQUIRED_VERIFY_STEPS = [

@@ -9,7 +9,23 @@ import { isPathWithin } from './path'
 import { resolveHermesBin } from './process'
 
 const execFileAsync = promisify(execFile)
-const HERMES_VERSION_PROBE = "import importlib.util, hermes_cli; assert importlib.util.find_spec('hermes_cli.main'); print(hermes_cli.__version__)"
+const HERMES_VERSION_PROBE = [
+  'import sys',
+  // Source launchers add the checkout root, including packages that an older
+  // editable install does not know about. Keep this probe free of bootstrap's
+  // dependency installation and update-recovery side effects.
+  'if sys.argv[1]: sys.path.insert(0, sys.argv[1])',
+  'import importlib.util, hermes_cli',
+  "assert importlib.util.find_spec('hermes_cli.main')",
+  'try:',
+  '    from hermes_cli.version_info import get_version_info',
+  'except ModuleNotFoundError as exc:',
+  "    if exc.name != 'hermes_cli.version_info': raise",
+  '    version = hermes_cli.__version__',
+  'else:',
+  '    version = get_version_info().display_version',
+  'print(version)',
+].join('\n')
 
 export interface HermesManagedRuntimeLocation {
   version: string
@@ -67,10 +83,12 @@ async function findHermesCommandPaths(env: NodeJS.ProcessEnv): Promise<string[]>
 }
 
 function normalizeVersion(raw: string): string {
-  return raw
+  const version = raw
     .split(/\r?\n/)[0]
     ?.replace(/^Hermes(?: Agent)?\s+/i, '')
     .trim() || ''
+  // An unstamped Hermes compatibility version is not a release identity.
+  return /^(?:v?0\.0\.0|unknown)$/i.test(version) ? '' : version
 }
 
 function versionProbeError(error: unknown): string {
@@ -107,7 +125,7 @@ export async function probeHermesCliVersion(
   }
 
   try {
-    const { stdout } = await execFileAsync(installation.python, ['-c', HERMES_VERSION_PROBE], {
+    const { stdout } = await execFileAsync(installation.python, ['-c', HERMES_VERSION_PROBE, installation.agentRoot || ''], {
       encoding: 'utf8',
       timeout: 5000,
       windowsHide: true,

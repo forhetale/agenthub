@@ -2,7 +2,7 @@ import { existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 
 const ARCH_NAMES = ['ia32', 'x64', 'armv7l', 'arm64', 'universal']
-const EKKO_BUILTIN_SKILLS = [
+const HUB_AGENT_BUILTIN_SKILLS = [
   '1password',
   'apple-notes',
   'apple-reminders',
@@ -27,7 +27,7 @@ const EKKO_BUILTIN_SKILLS = [
   'xlsx',
 ]
 
-const EKKO_REQUIRED_SKILL_FILES = [
+const HUB_AGENT_REQUIRED_SKILL_FILES = [
   ['hermes-studio-installation', 'references', 'coding-agents.md'],
   ['hermes-studio-installation', 'references', 'hermes-runtime.md'],
   ['hermes-studio-installation', 'references', 'studio.md'],
@@ -137,12 +137,12 @@ export default async function verifyPackagedWebUi(context) {
     join(webUiRoot, 'package.json'),
     join(webUiRoot, 'bin', 'hermes-web-ui.mjs'),
     join(webUiRoot, 'dist', 'server', 'index.js'),
-    join(webUiRoot, 'dist', 'ekko-skills', 'THIRD_PARTY_NOTICES.md'),
-    ...EKKO_BUILTIN_SKILLS.map(skill => (
-      join(webUiRoot, 'dist', 'ekko-skills', skill, 'SKILL.md')
+    join(webUiRoot, 'dist', 'hub-agent-skills', 'THIRD_PARTY_NOTICES.md'),
+    ...HUB_AGENT_BUILTIN_SKILLS.map(skill => (
+      join(webUiRoot, 'dist', 'hub-agent-skills', skill, 'SKILL.md')
     )),
-    ...EKKO_REQUIRED_SKILL_FILES.map(parts => (
-      join(webUiRoot, 'dist', 'ekko-skills', ...parts)
+    ...HUB_AGENT_REQUIRED_SKILL_FILES.map(parts => (
+      join(webUiRoot, 'dist', 'hub-agent-skills', ...parts)
     )),
     join(nodePtyRoot, 'package.json'),
     join(webUiRoot, 'node_modules', 'socket.io', 'package.json'),

@@ -1,3 +1,5 @@
+import { isPluginAgentId, agentDescriptor } from '../agents/registry'
+import { isNativeCodingAgent, isGlobalOnlyCodingAgent } from '../../contracts/agents/native-coding-agents'
 import { EventEmitter } from 'events'
 import { randomUUID } from 'crypto'
 import {
@@ -45,18 +47,19 @@ import {
 } from '../../public/workflow-runtime'
 import { logger } from '../../public/logging'
 import { assertAgentAvailable } from '../agent-availability'
+import { cancelPluginWorkflow, parsePluginAction, runPluginWorkflow } from '../plugins/workflow'
 
 export type { WorkflowCreateInput, WorkflowRecord, WorkflowUpdateInput }
 
 export type WorkflowRuntimeState = 'idle' | 'queued' | 'running' | 'pending_approval' | 'completed' | 'skipped' | 'failed' | 'approval_rejected' | 'canceled'
 export type WorkflowRunType = 'workflow'
-export type WorkflowNodeAgent = 'hermes' | 'ekko-agent' | 'claude-code' | 'codex' | 'pi' | 'grok' | 'opencode' | 'dsh' | 'cursor' | 'antigravity'
+export type WorkflowNodeAgent = `plugin:${string}/${string}` | 'hermes' | 'hub-agent' | 'claude-code' | 'codex' | 'pi' | 'grok' | 'opencode' | 'dsh' | 'cursor' | 'antigravity' | 'qwen' | 'kimi' | 'codebuddy' | 'qoder' | 'copilot' | 'zcode'
 
 export interface WorkflowNodeRunTarget {
   type: WorkflowRunType
   source: 'workflow'
-  agent: 'hermes' | 'ekko-agent' | 'claude' | 'codex' | 'pi' | 'grok' | 'opencode' | 'dsh' | 'cursor' | 'antigravity'
-  codingAgentId?: 'ekko-agent' | 'claude-code' | 'codex' | 'pi' | 'grok' | 'opencode' | 'dsh' | 'cursor' | 'antigravity'
+  agent: `plugin:${string}/${string}` | 'hermes' | 'hub-agent' | 'claude' | 'codex' | 'pi' | 'grok' | 'opencode' | 'dsh' | 'cursor' | 'antigravity' | 'qwen' | 'kimi' | 'codebuddy' | 'qoder' | 'copilot' | 'zcode'
+  codingAgentId?: `plugin:${string}/${string}` | 'hub-agent' | 'claude-code' | 'codex' | 'pi' | 'grok' | 'opencode' | 'dsh' | 'cursor' | 'antigravity' | 'qwen' | 'kimi' | 'codebuddy' | 'qoder' | 'copilot' | 'zcode'
 }
 
 export interface WorkflowRuntimeStatus {
@@ -109,6 +112,8 @@ export interface WorkflowNodeSnapshot {
   type: string
   position?: { x: number; y: number }
   data: {
+    pluginAction?: string
+    pluginInput?: string
     title: string
     agent: string
     agentMode: 'scoped' | 'global'
@@ -126,7 +131,7 @@ export interface WorkflowNodeSnapshot {
 }
 
 export function assertWorkflowAgentDependencies(nodes: WorkflowNodeSnapshot[]): void {
-  for (const node of nodes) assertAgentAvailable(node.data.agent)
+  for (const node of nodes) if (!node.data.pluginAction) assertAgentAvailable(node.data.agent)
 }
 
 type WorkflowEdgeRoute = 'success' | 'failure' | 'always'
@@ -235,12 +240,13 @@ function idleStatus(workflowId: string): WorkflowRuntimeStatus {
 }
 
 export function resolveWorkflowNodeRunTarget(agent?: string | null): WorkflowNodeRunTarget {
-  if (agent === 'ekko-agent') {
+  if (isPluginAgentId(agent)) return { type: 'workflow', source: 'workflow', agent, codingAgentId: agent }
+  if (agent === 'hub-agent' || agent === 'ekko-agent') {
     return {
       type: 'workflow',
       source: 'workflow',
-      agent: 'ekko-agent',
-      codingAgentId: 'ekko-agent',
+      agent: 'hub-agent',
+      codingAgentId: 'hub-agent',
     }
   }
   if (agent === 'claude-code') {
@@ -275,7 +281,7 @@ export function resolveWorkflowNodeRunTarget(agent?: string | null): WorkflowNod
       codingAgentId: 'grok',
     }
   }
-  if ((agent === 'cursor' || agent === 'antigravity')) {
+  if ((agent === 'cursor' || agent === 'antigravity' || isNativeCodingAgent(agent))) {
     return {
       type: 'workflow',
       source: 'workflow',
@@ -305,7 +311,7 @@ function stringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter(item => typeof item === 'string' && item.trim()).map(item => item.trim()) : []
 }
 
-const WORKFLOW_REASONING_EFFORTS = new Set(['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'])
+const WORKFLOW_REASONING_EFFORTS = new Set(['default', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra', 'disabled', 'enabled', 'off', 'on'])
 const WORKFLOW_API_MODES = new Set(['chat_completions', 'codex_responses', 'anthropic_messages'])
 export function normalizeWorkflowNode(raw: unknown): WorkflowNodeSnapshot | null {
   const record = raw && typeof raw === 'object' ? raw as Record<string, any> : {}
@@ -313,7 +319,14 @@ export function normalizeWorkflowNode(raw: unknown): WorkflowNodeSnapshot | null
   if (!id) return null
   const type = typeof record.type === 'string' && record.type ? record.type : 'agent'
   if (type !== 'agent') throw new Error(`workflow node ${id} must be an Agent node`)
-  const data = record.data && typeof record.data === 'object' ? record.data as Record<string, any> : {}
+  const data = record.data && typeof record.data === 'object' ? { ...record.data } as Record<string, any> : {}
+  const pluginAction = typeof data.pluginAction === 'string' && data.pluginAction ? data.pluginAction : undefined
+  if (pluginAction) {
+    parsePluginAction(pluginAction)
+    const args = JSON.parse(data.pluginInput || '{}')
+    if (!args || typeof args !== 'object' || Array.isArray(args)) throw new Error(`workflow node ${id} requires JSON object arguments`)
+    Object.assign(data, { agent: 'hub-agent', agentMode: 'scoped', provider: '', model: '', apiMode: '', skills: [], images: [], agentPreset: undefined })
+  }
   let join: 'all' | 'any' = 'all'
   if (Object.prototype.hasOwnProperty.call(data, 'orchestration')) {
     const orchestration = data.orchestration
@@ -323,25 +336,32 @@ export function normalizeWorkflowNode(raw: unknown): WorkflowNodeSnapshot | null
     }
     join = orchestration.join
   }
-  const agent = typeof data.agent === 'string' && data.agent.trim() ? data.agent.trim() : 'hermes'
-  if (agent !== 'hermes' && agent !== 'ekko-agent' && agent !== 'claude-code' && agent !== 'codex' && agent !== 'pi' && agent !== 'grok' && (agent !== 'cursor' && agent !== 'antigravity') && (agent !== 'opencode' && agent !== 'dsh')) {
+  const rawAgent = typeof data.agent === 'string' && data.agent.trim() ? data.agent.trim() : 'hermes'
+  const agent = rawAgent === 'ekko-agent' ? 'hub-agent' : rawAgent
+  if (!isPluginAgentId(agent) && agent !== 'hermes' && agent !== 'hub-agent' && agent !== 'claude-code' && agent !== 'codex' && agent !== 'pi' && agent !== 'grok' && (agent !== 'cursor' && (agent !== 'antigravity' && !isNativeCodingAgent(agent))) && (agent !== 'opencode' && agent !== 'dsh')) {
     throw new Error(`workflow node ${id} has unsupported agent runtime`)
   }
-  const agentMode = agent === 'cursor' ? 'global' : data.agentMode === 'global' ? 'global' : 'scoped'
-  if (agentMode === 'global' && agent !== 'claude-code' && agent !== 'codex' && agent !== 'pi' && agent !== 'grok' && agent !== 'cursor' && (agent !== 'opencode' && agent !== 'dsh')) {
+  const agentMode = (isGlobalOnlyCodingAgent(agent) || isPluginAgentId(agent) && agentDescriptor(agent)?.modes.length === 1 && agentDescriptor(agent)?.modes[0] === 'global') ? 'global' : data.agentMode === 'global' ? 'global' : 'scoped'
+  if (agentMode === 'global' && !isPluginAgentId(agent) && !isNativeCodingAgent(agent) && agent !== 'claude-code' && agent !== 'codex' && agent !== 'pi' && agent !== 'grok' && agent !== 'cursor' && agent !== 'antigravity' && (agent !== 'opencode' && agent !== 'dsh')) {
     throw new Error(`workflow node ${id} cannot use global mode with this agent runtime`)
   }
-  const provider = typeof data.provider === 'string' ? data.provider.trim() : ''
-  const model = typeof data.model === 'string' ? data.model.trim() : ''
-  const apiMode = typeof data.apiMode === 'string' ? data.apiMode.trim() : ''
+  // Old Global nodes retained their ignored Model-mode fields. Native overrides
+  // have no Studio provider; migrate before discarding that legacy marker.
+  const hasLegacyGlobalSelection = agentMode === 'global' && (
+    (typeof data.provider === 'string' && Boolean(data.provider.trim()))
+    || (isGlobalOnlyCodingAgent(agent) && data.agentMode !== 'global')
+  )
+  const provider = agentMode !== 'global' && typeof data.provider === 'string' ? data.provider.trim() : ''
+  const model = hasLegacyGlobalSelection ? '' : typeof data.model === 'string' ? data.model.trim() : ''
+  const apiMode = agentMode !== 'global' && typeof data.apiMode === 'string' ? data.apiMode.trim() : ''
   const targetFieldCount = [provider, model, apiMode].filter(Boolean).length
-  if (targetFieldCount !== 0 && targetFieldCount !== 3) {
+  if (agentMode !== 'global' && targetFieldCount !== 0 && targetFieldCount !== 3) {
     throw new Error(`workflow node ${id} target must set provider, model, and apiMode together`)
   }
   if (apiMode && !WORKFLOW_API_MODES.has(apiMode)) {
     throw new Error(`workflow node ${id} has invalid apiMode`)
   }
-  const reasoningEffort = typeof data.reasoningEffort === 'string' && data.reasoningEffort.trim()
+  const reasoningEffort = hasLegacyGlobalSelection ? 'default' : typeof data.reasoningEffort === 'string' && data.reasoningEffort.trim()
     ? data.reasoningEffort.trim()
     : 'default'
   if (!WORKFLOW_REASONING_EFFORTS.has(reasoningEffort)) {
@@ -359,6 +379,7 @@ export function normalizeWorkflowNode(raw: unknown): WorkflowNodeSnapshot | null
     ...(position ? { position } : {}),
     data: {
       title: typeof data.title === 'string' && data.title.trim() ? data.title.trim() : id,
+      ...(pluginAction ? { pluginAction, pluginInput: data.pluginInput || '{}' } : {}),
       agent,
       agentMode,
       provider,
@@ -950,7 +971,7 @@ function workflowOutputConditionContext(output: string, edges: WorkflowEdgeSnaps
 
 function isWorkflowCodingAgentSession(session?: { source?: string | null; agent?: string | null; agent_session_id?: string | null } | null): boolean {
   const agent = String(session?.agent || '').trim()
-  return agent === 'ekko-agent' || agent === 'claude' || agent === 'codex' || agent === 'pi' || agent === 'grok' || (agent === 'cursor' || agent === 'antigravity') || (agent === 'opencode' || agent === 'dsh') || Boolean(session?.agent_session_id)
+  return isPluginAgentId(agent) || agent === 'hub-agent' || agent === 'ekko-agent' || agent === 'claude' || agent === 'codex' || agent === 'pi' || agent === 'grok' || (agent === 'cursor' || agent === 'antigravity' || isNativeCodingAgent(agent)) || (agent === 'opencode' || agent === 'dsh') || Boolean(session?.agent_session_id)
 }
 
 async function deleteHermesSessionIfPresent(sessionId: string, profile: string): Promise<void> {
@@ -1125,7 +1146,7 @@ export class WorkflowManager extends EventEmitter<WorkflowManagerEvents> {
   async recoverActiveRuns(workflowId?: string): Promise<{ runs: number; sessions: number }> {
     const activeRuns = listActiveWorkflowRuns().filter(run => !workflowId || run.workflow_id === workflowId)
     if (activeRuns.length === 0) return { runs: 0, sessions: 0 }
-    const reason = 'Workflow runtime cannot safely resume because the server restarted'
+    const reason = 'Workflow execution was interrupted because the server process exited or restarted. Automatic resume is unsafe; check completed work and rerun from a node in the run details.'
     const finishedAt = Date.now()
     const sessionIds = new Set<string>()
     for (const run of activeRuns) {
@@ -1179,6 +1200,7 @@ export class WorkflowManager extends EventEmitter<WorkflowManagerEvents> {
     if (!run || run.workflow_id !== workflowId) return null
     if (run.status !== 'queued' && run.status !== 'running') return run
     this.canceledRunIds.add(runId)
+    cancelPluginWorkflow(runId)
     cancelWorkflowQualityReviews(runId)
     this.cancelPendingNodeApprovals(runId)
     const finishedAt = Date.now()
@@ -1368,7 +1390,8 @@ export class WorkflowManager extends EventEmitter<WorkflowManagerEvents> {
       source: 'workflow',
       agent: args.target.agent,
       agent_mode: args.node.data.agent === 'hermes' ? '' : args.node.data.agentMode,
-      model: isGlobalCodingAgent ? '' : args.node.data.model,
+      model: args.node.data.model,
+      reasoning_effort: args.node.data.reasoningEffort === 'default' ? '' : args.node.data.reasoningEffort,
       provider: isGlobalCodingAgent ? 'global' : args.node.data.provider,
       ...(args.node.data.agent === 'hermes' || isGlobalCodingAgent ? {} : { api_mode: args.node.data.apiMode }),
       title: args.node.data.title,
@@ -1526,26 +1549,26 @@ export class WorkflowManager extends EventEmitter<WorkflowManagerEvents> {
       nodeStatuses[node.id] = 'running'
       publishRunningStatus()
       try {
-        const runResult = await runWorkflowAndWait({
+        const runResult = node.data.pluginAction ? await runPluginWorkflow(node.data.pluginAction, node.data.pluginInput || '{}', assembledInput, {
+          userId: args.user?.id || 0, profile, sessionId, runId: run.id, workspace: workspace || undefined, surface: 'workflow',
+        }, remainingTimeoutMs) : await runWorkflowAndWait({
           session_id: sessionId, source: 'workflow', session_source: 'workflow', input: assembledInput,
           workflow_id: workflowId, workflow_node_id: node.id,
           profile, workspace: workspace,
-          ...(node.data.agentMode === 'global' ? {} : {
-            model: node.data.model || undefined,
-            provider: node.data.provider || undefined,
-          }),
+          ...(node.data.model ? { model: node.data.model } : {}),
+          ...(node.data.agentMode === 'global' ? {} : { provider: node.data.provider || undefined }),
           mode: node.data.agent === 'hermes' ? undefined : node.data.agentMode,
           coding_agent_id: target.codingAgentId, agent_id: target.codingAgentId,
-          ...((node.data.agent === 'hermes' || node.data.agent === 'ekko-agent')
+          ...((node.data.agent === 'hermes' || node.data.agent === 'hub-agent')
             ? { background_delegation_enabled: false }
             : {}),
           ...(node.data.agentPreset ? { agent_preset: node.data.agentPreset } : {}),
           ...(node.data.agent === 'hermes' || node.data.agentMode === 'global' ? {} : { apiMode: node.data.apiMode || undefined }),
           one_shot_model: true,
-          ...(node.data.agentMode !== 'global' && node.data.reasoningEffort !== 'default'
+          ...(node.data.reasoningEffort !== 'default'
             ? { reasoning_effort: node.data.reasoningEffort }
             : {}),
-        }, { profile, user: args.user, timeoutMs: remainingTimeoutMs, approvalChoice: 'once' })
+        }, { profile, user: args.user, timeoutMs: remainingTimeoutMs, approvalChoice: 'once', pushRoot: { kind: 'workflow', profile, runId: run.id } })
         if (isCanceled()) throw new Error(getWorkflowRun(run.id)?.error || 'Workflow run canceled')
         if (!runResult.ok) {
           const rawError = runResult.error || `node ${node.id} failed`
@@ -2041,7 +2064,9 @@ export class WorkflowManager extends EventEmitter<WorkflowManagerEvents> {
             started_at: nodeStartedAt,
           })
           nodeSessionRecordIds.set(node.id, nodeSession.id)
-          const runResult = await runWorkflowAndWait({
+          const runResult = node.data.pluginAction ? await runPluginWorkflow(node.data.pluginAction, node.data.pluginInput || '{}', assembledInput, {
+            userId: args.user?.id || 0, profile, sessionId: nodeSessionId, runId: run.id, workspace: workspace || undefined, surface: 'workflow',
+          }, remainingTimeoutMs) : await runWorkflowAndWait({
             session_id: nodeSessionId,
             source: 'workflow',
             session_source: 'workflow',
@@ -2050,20 +2075,18 @@ export class WorkflowManager extends EventEmitter<WorkflowManagerEvents> {
             input: assembledInput,
             profile,
             workspace: workspace,
-            ...(node.data.agentMode === 'global' ? {} : {
-              model: node.data.model || undefined,
-              provider: node.data.provider || undefined,
-            }),
+            ...(node.data.model ? { model: node.data.model } : {}),
+            ...(node.data.agentMode === 'global' ? {} : { provider: node.data.provider || undefined }),
             mode: node.data.agent === 'hermes' ? undefined : node.data.agentMode,
             coding_agent_id: target.codingAgentId,
             agent_id: target.codingAgentId,
-            ...((node.data.agent === 'hermes' || node.data.agent === 'ekko-agent')
+            ...((node.data.agent === 'hermes' || node.data.agent === 'hub-agent')
               ? { background_delegation_enabled: false }
               : {}),
             ...(node.data.agentPreset ? { agent_preset: node.data.agentPreset } : {}),
             ...(node.data.agent === 'hermes' || node.data.agentMode === 'global' ? {} : { apiMode: node.data.apiMode || undefined }),
             one_shot_model: true,
-            ...(node.data.agentMode !== 'global' && node.data.reasoningEffort !== 'default'
+            ...(node.data.reasoningEffort !== 'default'
               ? { reasoning_effort: node.data.reasoningEffort }
               : {}),
           }, {
@@ -2071,6 +2094,7 @@ export class WorkflowManager extends EventEmitter<WorkflowManagerEvents> {
             user: args.user,
             timeoutMs: remainingTimeoutMs,
             approvalChoice: 'once',
+            pushRoot: { kind: 'workflow', profile, runId: run.id },
           })
           if (!runResult.ok) {
             const error = runResult.error || `node ${node.id} failed`
