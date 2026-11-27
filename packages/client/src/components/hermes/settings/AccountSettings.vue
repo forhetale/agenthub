@@ -344,14 +344,14 @@ onMounted(() => { loadLockedIps(); });
 @use "@/styles/variables" as *;
 
 .account-settings {
-  padding: 8px 0;
+  padding: calc(8px * var(--spacing-scale, 1)) 0;
 }
 
 .section-desc {
-  font-size: 13px;
+  font-size: calc(var(--font-size-base, 14px) * 13 / 14);
   color: $text-muted;
   margin: 0 0 20px;
-  line-height: 1.6;
+  line-height: var(--line-height, 1.6);
 }
 
 .action-row {
@@ -359,12 +359,12 @@ onMounted(() => { loadLockedIps(); });
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 12px 16px;
+  gap: calc(12px * var(--spacing-scale, 1)) calc(16px * var(--spacing-scale, 1));
 }
 
 .action-label {
   min-width: 0;
-  font-size: 14px;
+  font-size: calc(var(--font-size-base, 14px) * 14 / 14);
   color: $text-secondary;
   overflow-wrap: anywhere;
 }
@@ -372,18 +372,18 @@ onMounted(() => { loadLockedIps(); });
 .action-buttons {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: calc(8px * var(--spacing-scale, 1));
   flex-shrink: 0;
 }
 
 .locked-ips-section {
   margin-top: 32px;
-  padding-top: 20px;
-  border-top: 1px solid $border-color;
+  padding-top: calc(20px * var(--spacing-scale, 1));
+  border-top: var(--border-width, 1px) solid $border-color;
 }
 
 .section-title {
-  font-size: 15px;
+  font-size: calc(var(--font-size-base, 14px) * 15 / 14);
   font-weight: 600;
   color: $text-primary;
   margin: 0 0 16px;
@@ -392,7 +392,7 @@ onMounted(() => { loadLockedIps(); });
 .locked-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: calc(8px * var(--spacing-scale, 1));
 }
 
 .locked-item {
@@ -400,56 +400,56 @@ onMounted(() => { loadLockedIps(); });
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  padding: 8px 12px;
-  border: 1px solid $border-color;
+  gap: calc(8px * var(--spacing-scale, 1));
+  padding: calc(8px * var(--spacing-scale, 1)) calc(12px * var(--spacing-scale, 1));
+  border: var(--border-width, 1px) solid $border-color;
   border-radius: $radius-sm;
-  background: $bg-input;
+  background: var(--theme-input-bg, $bg-input);
 }
 
 .locked-info {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: calc(8px * var(--spacing-scale, 1));
   min-width: 0;
 }
 
 .locked-ip {
-  font-family: $font-code;
-  font-size: 13px;
+  font-family: var(--font-code, $font-code);
+  font-size: calc(var(--font-size-base, 14px) * 13 / 14);
   color: $text-primary;
 }
 
 .locked-badge {
-  font-size: 11px;
-  padding: 2px 6px;
-  border-radius: 3px;
+  font-size: calc(var(--font-size-base, 14px) * 11 / 14);
+  padding: calc(2px * var(--spacing-scale, 1)) calc(6px * var(--spacing-scale, 1));
+  border-radius: var(--radius-component, 3px);
   background: rgba($error, 0.1);
   color: $error;
 }
 
 .locked-ttl {
-  font-size: 12px;
+  font-size: calc(var(--font-size-base, 14px) * 12 / 14);
   color: $text-muted;
 }
 
 .empty-hint {
-  font-size: 13px;
+  font-size: calc(var(--font-size-base, 14px) * 13 / 14);
   color: $text-muted;
   margin: 0;
 }
 
 .avatar-section {
   margin-bottom: 32px;
-  padding-bottom: 20px;
-  border-bottom: 1px solid $border-color;
+  padding-bottom: calc(20px * var(--spacing-scale, 1));
+  border-bottom: var(--border-width, 1px) solid $border-color;
 }
 
 .avatar-row {
   display: flex;
   align-items: center;
-  gap: 24px;
+  gap: calc(24px * var(--spacing-scale, 1));
 }
 
 .avatar-display {
@@ -464,12 +464,12 @@ onMounted(() => { loadLockedIps(); });
 @media (max-width: $breakpoint-mobile) {
   .avatar-row {
     align-items: flex-start;
-    gap: 16px;
+    gap: calc(16px * var(--spacing-scale, 1));
   }
 }
 
 .avatar-hint {
-  font-size: 12px;
+  font-size: calc(var(--font-size-base, 14px) * 12 / 14);
   color: $text-muted;
   margin: 0 0 12px;
 }

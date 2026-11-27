@@ -10,8 +10,8 @@ import { groupAgentSocketAuth, normalizeCloudAgentMachineId } from './cloud-agen
 import { logger } from '../../public/logging'
 import {
   createGroupPrimaryAgentBridge,
-  respondToGroupEkkoClarification,
-  respondToGroupEkkoToolApproval,
+  respondToGroupHubAgentClarification,
+  respondToGroupHubAgentToolApproval,
 } from '../../public/group-chat-agent-runtime'
 import {
   AgentClient,
@@ -27,6 +27,7 @@ import type { GroupChatRuntimeServer } from './runtime'
 import type { GroupRuntimeContext } from './room-summary'
 import { getGroupChatAttachmentDir } from './attachments'
 import { isPathWithin } from '../files/path'
+import { ensureDirectory, normalizeDirectoryTarget } from '../workspace/directory'
 import { isReservedMentionName } from './mention-routing'
 import {
   authenticateGroupAgentConnector,
@@ -347,7 +348,7 @@ function sameRemoteAgent(
 
 class RelayGroupAgentExecutor implements GroupAgentExecutor {
   readonly agentId: string
-  agent: 'hermes' | 'ekko' | 'codex' | 'claude' | 'pi' | 'grok' | 'opencode' | 'dsh' | 'cursor' | 'antigravity'
+  agent: `plugin:${string}/${string}` | 'hermes' | 'hub' | 'codex' | 'claude' | 'pi' | 'grok' | 'opencode' | 'dsh' | 'cursor' | 'antigravity' | 'qwen' | 'kimi' | 'codebuddy' | 'qoder' | 'copilot' | 'zcode'
   agentMode: 'scoped' | 'global'
   profile: string
   provider: string
@@ -461,10 +462,12 @@ class RelayGroupAgentExecutor implements GroupAgentExecutor {
     if (!room) throw relayError('Room no longer exists', 'GROUP_AGENT_ROOM_MISSING')
     const runId = randomUUID()
     const prepared = await this.prepareMessageAttachments(roomId, message)
-    const sharedWorkspace = Number(room.allowRemoteWorkspaceAccess || 0) === 1
+    const requestedWorkspace = Number(room.allowRemoteWorkspaceAccess || 0) === 1
       ? String(room.workspace || '').trim()
       : ''
-    if (sharedWorkspace) await mkdir(sharedWorkspace, { recursive: true, mode: 0o700 })
+    const sharedWorkspace = requestedWorkspace
+      ? await ensureDirectory(requestedWorkspace, { mode: 0o700 })
+      : ''
     const workspaceGrant = sharedWorkspace
       ? issueRemoteWorkspaceGrant({
           runId,
@@ -600,7 +603,7 @@ class RelayGroupAgentExecutor implements GroupAgentExecutor {
     parentMessageId: string | null
   }): void {
     const currentRoom = this.storage.getRoom(args.roomId)
-    if (!currentRoom || String(currentRoom.workspace || '').trim() !== args.workspace) {
+    if (!currentRoom || normalizeDirectoryTarget(String(currentRoom.workspace || '').trim()) !== args.workspace) {
       discardWorkspaceRunCheckpoint({
         sessionId: args.sessionId,
         runId: args.runId,
@@ -1709,8 +1712,8 @@ class OutboundRelayConnection {
           return
         }
         try {
-          if (this.link.agent.agent === 'ekko') {
-            const result = respondToGroupEkkoToolApproval(sessionId, data.approvalId, data.choice)
+          if (this.link.agent.agent === 'hub' || (this.link.agent.agent as string) === 'ekko') {
+            const result = respondToGroupHubAgentToolApproval(sessionId, data.approvalId, data.choice)
             ack?.({ resolved: Boolean(result?.resolved) })
           } else {
             const result = await createGroupPrimaryAgentBridge().approvalRespond(data.approvalId, data.choice || 'deny')
@@ -1730,8 +1733,8 @@ class OutboundRelayConnection {
           return
         }
         try {
-          if (this.link.agent.agent === 'ekko') {
-            const result = respondToGroupEkkoClarification(sessionId, data.clarifyId, data.response || '')
+          if (this.link.agent.agent === 'hub' || (this.link.agent.agent as string) === 'ekko') {
+            const result = respondToGroupHubAgentClarification(sessionId, data.clarifyId, data.response || '')
             ack?.({ resolved: Boolean(result?.resolved) })
           } else {
             const result = await createGroupPrimaryAgentBridge().clarifyRespond(data.clarifyId, data.response || '')

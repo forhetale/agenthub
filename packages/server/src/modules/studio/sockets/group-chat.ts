@@ -1,8 +1,12 @@
-import { publishAppState, stateEvent } from '../services/webhooks/app-event-state'
+import { bindProviderSocket } from '../public/provider-account'
+import { getGroupMessageSelection, deleteGroupMessages, groupMessageDeletionError } from '../repositories/group-message-deletion'
+import { registerAppEventState, publishAppState, stateEvent, planStateEvent } from '../services/webhooks/app-event-state'
 import type { BusinessEvent } from '../services/webhooks/business-events'
 import { parseGroupTaskPlan } from '../services/group-chat/task-plan'
 import { parseGroupRunUsage } from '../services/group-chat/run-usage'
+import { registerGroupEventAccess } from '../services/webhooks/app-events'
 import { publishGroupMessage, publishGroupInteraction } from '../services/webhooks/domain-events'
+import { publishPluginObservation } from '../services/plugins/event-source'
 import { Server, Socket, Namespace } from 'socket.io'
 import type { Server as HttpServer } from 'http'
 import { mkdirSync } from 'fs'
@@ -22,8 +26,8 @@ import { countTokens } from '../services/context-compressor'
 import {
     createGroupPrimaryAgentBridge,
     drainGroupPrimaryAgentSessions,
-    respondToGroupEkkoClarification,
-    respondToGroupEkkoToolApproval,
+    respondToGroupHubAgentClarification,
+    respondToGroupHubAgentToolApproval,
 } from '../public/group-chat-agent-runtime'
 import { insertWorkspaceRunChange, deleteWorkspaceRunChangesForRoom, type SaveWorkspaceRunChangeInput, type WorkspaceRunChangeSummary } from '../repositories/workspace-run-changes-store'
 import { authenticateUserToken, isAuthEnabled, type AuthenticatedUser } from '../public/auth'
@@ -241,7 +245,7 @@ interface RoomAgent {
     id: string
     roomId: string
     agentId: string
-    agent: 'hermes' | 'ekko' | 'codex' | 'claude' | 'pi' | 'grok' | 'opencode' | 'dsh' | 'cursor' | 'antigravity'
+    agent: `plugin:${string}/${string}` | 'hermes' | 'hub' | 'codex' | 'claude' | 'pi' | 'grok' | 'opencode' | 'dsh' | 'cursor' | 'antigravity' | 'qwen' | 'kimi' | 'codebuddy' | 'qoder' | 'copilot' | 'zcode'
     agentMode: 'scoped' | 'global'
     priorAgentMode: 'scoped' | 'global' | ''
     profile: string
@@ -272,7 +276,7 @@ interface GroupAgentActivity {
 }
 
 interface RoomAgentMetadata {
-    agent?: 'hermes' | 'ekko' | 'codex' | 'claude' | 'pi' | 'grok' | 'opencode' | 'dsh' | 'cursor' | 'antigravity'
+    agent?: `plugin:${string}/${string}` | 'hermes' | 'hub' | 'codex' | 'claude' | 'pi' | 'grok' | 'opencode' | 'dsh' | 'cursor' | 'antigravity' | 'qwen' | 'kimi' | 'codebuddy' | 'qoder' | 'copilot' | 'zcode'
     agentMode?: 'scoped' | 'global'
     priorAgentMode?: 'scoped' | 'global' | ''
     provider?: string
@@ -334,6 +338,7 @@ function normalizeRoomMemberAvatar(value: unknown): string {
 }
 
 export interface RoomInfo {
+    messageDeletionRevision?: number
     id: string
     name: string
     inviteCode: string | null
@@ -363,6 +368,7 @@ export interface RoomInfo {
 }
 
 const ROOM_SELECT_COLUMNS = [
+    'messageDeletionRevision',
     'id',
     'name',
     'inviteCode',
@@ -586,7 +592,8 @@ export const GROUP_CHAT_MESSAGE_WINDOW = 500
 const GROUP_CHAT_CONTEXT_MESSAGE_WINDOW = GROUP_CHAT_MESSAGE_WINDOW
 const GROUP_CHAT_TIMESTAMP_BOUNDARY_OVERFLOW = 100
 const GROUP_CHAT_SUMMARY_SCAN_LIMIT = 10_000
-const GROUP_CHAT_TOKEN_ACCOUNTING_VERSION = 1
+// 2: array tool_calls are counted by their JSON size instead of "[object Object]".
+const GROUP_CHAT_TOKEN_ACCOUNTING_VERSION = 2
 
 function storedGroupAgentRunIdentity(row: any): {
     ownerId: string
@@ -603,7 +610,7 @@ function storedGroupAgentRunIdentity(row: any): {
     return match?.[1] ? { ownerId, idPrefix: `${match[1]}_part_` } : null
 }
 
-class ChatStorage {
+export class ChatStorage {
     private readonly trustedAgentMessageMetadata = new Map<string, { mentionDepth: number; handoffChainId: string; continuationAttemptId: string }>()
     private roomAgentOnlineProvider: ((roomId: string, agentId: string) => boolean) | null = null
 
@@ -1762,7 +1769,7 @@ class ChatStorage {
         if (role !== 'assistant' && role !== 'tool') return 0
         const reasoning = message.reasoning_content ?? message.reasoning
         return countTokens(this.contentToUsageText(message.content))
-            + countTokens(String(message.tool_calls || ''))
+            + countTokens(typeof message.tool_calls === 'string' ? message.tool_calls : message.tool_calls ? JSON.stringify(message.tool_calls) : '')
             + countTokens(String(reasoning || ''))
     }
 
@@ -1821,6 +1828,20 @@ class ChatStorage {
         return this.compactMessageAgentMetadata(
             page.map(row => this.mapStoredMessageRow(row, agentCache, roomCache)),
         ).map(buildOutboundGroupMessage)
+    }
+
+    getRunTaskPlanMessages(roomId: string, runIds: string[]): Array<{ run_id: string; content: string }> {
+        const db = this.db()
+        if (!db || !runIds.length) return []
+        const rows: Array<{ run_id: string; content: string }> = []
+        for (let start = 0; start < runIds.length; start += 200) {
+            const ids = runIds.slice(start, start + 200)
+            rows.push(...db.prepare(`SELECT run_id, content FROM gc_messages
+                WHERE roomId = ? AND tool_name = 'task_plan' AND role = 'tool' AND senderType = 'agent'
+                AND run_id IN (${ids.map(() => '?').join(',')}) ORDER BY timestamp ASC, id ASC`)
+                .all(roomId, ...ids) as Array<{ run_id: string; content: string }>)
+        }
+        return rows
     }
 
     getHistoryPageForUI(
@@ -2195,6 +2216,13 @@ class ChatStorage {
         return rows.map(row => String(row.id))
     }
 
+    refreshRoomTokensAfterDeletion(roomId: string): number {
+        const totalTokens = this.contextWindowMessageIdsForTokenDelta(roomId)
+            .reduce((total, id) => total + this.messageUsageTokens(this.getMessage(id)!), 0)
+        this.updateRoomTotalTokens(roomId, totalTokens)
+        return totalTokens
+    }
+
     private ensureCurrentRoomTokenAccounting(roomId: string): void {
         const db = this.db()
         if (!db) return
@@ -2535,6 +2563,20 @@ class ChatStorage {
 
             this.ensureCurrentRoomTokenAccounting(roomId)
             const previousIds = this.contextWindowMessageIdsForTokenDelta(roomId)
+            const summary = this.getRoomSummary(roomId)
+            let invalidatesSummary = false
+            if (summary?.summaryThroughMessageId || summary?.summarizedTurnCount) {
+                // Inspect the full cursor history, not the bounded context window;
+                // multipart replies and equal timestamps use canonical ordering.
+                const boundary = sliceGroupMessagesCanonical(
+                    db.prepare('SELECT id, timestamp FROM gc_messages WHERE roomId = ?').all(roomId) as Array<{ id: string; timestamp: number }>,
+                    { throughMessageId: summary.summaryThroughMessageId },
+                )
+                invalidatesSummary = !summary.summaryThroughMessageId
+                    || !boundary.throughMessageFound
+                    || boundary.messages.at(-1)?.timestamp !== summary.summaryThroughMessageTimestamp
+                    || boundary.messages.some(item => item.id === selected.messageId)
+            }
             const cancelledAt = Date.now()
             const queueIds = siblings.map(item => item.id)
             const placeholders = queueIds.map(() => '?').join(', ')
@@ -2569,8 +2611,14 @@ class ChatStorage {
                  SET totalTokens = ?, summaryGeneration = summaryGeneration + 1
                  WHERE id = ?`,
             ).run(totalTokens, roomId)
-            db.prepare('DELETE FROM gc_summary_reviews WHERE roomId = ?').run(roomId)
-            db.prepare('DELETE FROM gc_room_summaries WHERE roomId = ?').run(roomId)
+            if (invalidatesSummary) {
+                db.prepare('DELETE FROM gc_summary_reviews WHERE roomId = ?').run(roomId)
+                db.prepare('DELETE FROM gc_room_summaries WHERE roomId = ?').run(roomId)
+            } else {
+                this.invalidateRoomSummaryRun(roomId)
+                // A failed drain may still point at the retracted message.
+                db.prepare("UPDATE gc_room_summaries SET summaryDrainThroughMessageId = '' WHERE roomId = ? AND summaryDrainThroughMessageId != ''").run(roomId)
+            }
 
             return {
                 messageId: selected.messageId,
@@ -2633,9 +2681,9 @@ class ChatStorage {
         const agentMode = metadata.agentMode === 'global' ? 'global' : 'scoped'
         const priorAgentMode = storedPriorAgentMode(metadata.priorAgentMode)
         const provider = agentMode === 'global' ? '' : String(metadata.provider || '').trim()
-        const model = agentMode === 'global' ? '' : String(metadata.model || '').trim()
+        const model = String(metadata.model || '').trim()
         const apiMode = agent === 'hermes' || agentMode === 'global' ? '' : String(metadata.apiMode || '').trim()
-        const reasoningEffort = agentMode === 'global' ? '' : String(metadata.reasoningEffort || '').trim()
+        const reasoningEffort = String(metadata.reasoningEffort || '').trim()
         const agentPreset = typeof metadata.agentPreset === 'string' ? metadata.agentPreset.trim() : ''
         const avatar = String(metadata.avatar || '').trim()
         const executorType = metadata.executorType === 'remote' ? 'remote' : 'server'
@@ -2714,9 +2762,9 @@ class ChatStorage {
         const agentMode = metadata.agentMode === 'global' ? 'global' : 'scoped'
         const priorAgentMode = storedPriorAgentMode(metadata.priorAgentMode)
         const provider = agentMode === 'global' ? '' : String(metadata.provider || '').trim()
-        const model = agentMode === 'global' ? '' : String(metadata.model || '').trim()
+        const model = String(metadata.model || '').trim()
         const apiMode = agent === 'hermes' || agentMode === 'global' ? '' : String(metadata.apiMode || '').trim()
-        const reasoningEffort = agentMode === 'global' ? '' : String(metadata.reasoningEffort || '').trim()
+        const reasoningEffort = String(metadata.reasoningEffort || '').trim()
         const agentPreset = typeof metadata.agentPreset === 'string' ? metadata.agentPreset.trim() : ''
         const avatar = String(metadata.avatar || '').trim()
         this.db()?.prepare(
@@ -3402,6 +3450,45 @@ export class GroupChatServer {
         })
         servers.slice(1).forEach((httpServer) => this.io.attach(httpServer))
         this.nsp = this.io.of('/group-chat')
+        const eventSocket = (user: AuthenticatedUser) => ({ id: '', data: { authUser: user } } as unknown as Socket)
+        const removeGroupEventAccess = registerGroupEventAccess({ canReceive: (user, roomId, event) => {
+            const socket = eventSocket(user)
+            if (!this.canSocketReceiveRoomNotification(socket, roomId)) return false
+            if (event?.type.startsWith('group.approval.')) return this.canSocketHandleAgentApproval(socket,
+                { roomId, ownerMemberId: String(event.payload.owner_member_id || '') })
+            if (event?.type.startsWith('group.clarification.')) return this.canSocketManageRoom(socket, roomId)
+            return true
+        } })
+        const removeGroupState = registerAppEventState('group', (user) => {
+            const result: BusinessEvent[] = []
+            const socket = eventSocket(user)
+            for (const [roomId, activities] of this.roomAgentActivityState) {
+                if (!this.canSocketObserveRoom(socket, roomId)) continue
+                const profile = this.storage.getRoom(roomId)?.summaryProfile || 'default'
+                for (const activity of activities.values()) result.push(this.groupActivityEvent(activity))
+                const runs = new Set([...activities.values()].map(activity => activity.runId))
+                for (const message of this.storage.getRunTaskPlanMessages(roomId, [...runs])) {
+                    try {
+                        const event = planStateEvent(profile, { room_id: roomId, run_id: message.run_id || undefined }, JSON.parse(message.content))
+                        if (event) result.push(event)
+                    } catch { /* malformed persisted card */ }
+                }
+            }
+            for (const route of this.pendingApprovalRoutes.values()) {
+                if (!this.canSocketHandleAgentApproval(socket, route)) continue
+                result.push(stateEvent('group.approval.requested', this.storage.getRoom(route.roomId)?.summaryProfile || 'default',
+                    { room_id: route.roomId, run_id: route.runId, approval_id: route.approvalId },
+                    { owner_member_id: route.ownerMemberId, timeout_ms: route.timeoutMs, requested_at: route.requestedAt }))
+            }
+            for (const route of this.pendingClarifyRoutes.values()) {
+                if (!this.canSocketManageRoom(socket, route.roomId)) continue
+                result.push(stateEvent('group.clarification.requested', this.storage.getRoom(route.roomId)?.summaryProfile || 'default',
+                    { room_id: route.roomId, run_id: route.runId, clarification_id: route.clarifyId },
+                    { timeout_ms: route.timeoutMs, requested_at: route.requestedAt }))
+            }
+            return result
+        })
+        for (const server of servers) server.once('close', () => { removeGroupEventAccess(); removeGroupState() })
         this.nsp.use(this.authMiddleware.bind(this))
         this.nsp.on('connection', this.onConnection.bind(this))
 
@@ -3486,6 +3573,31 @@ export class GroupChatServer {
         return this.io
     }
 
+    private assertMessageDeletionIdle(roomId: string): void {
+        if (this.agentClients.hasRoomWork(roomId) || this.roomAgentActivityState?.get(roomId)?.size
+            || this.contextStatusState.get(roomId)?.size) {
+            throw groupMessageDeletionError('Group chat is busy; wait for pending work to finish')
+        }
+    }
+
+    getMessageSelection(roomId: string) {
+        this.assertMessageDeletionIdle(roomId)
+        return getGroupMessageSelection(roomId)
+    }
+
+    async deleteMessages(roomId: string, messageIds: unknown, historyRevision: unknown) {
+        return this.roomSummaryService.runExclusive(roomId, () => {
+            this.assertMessageDeletionIdle(roomId)
+            const result = deleteGroupMessages(roomId, messageIds, historyRevision,
+                () => this.storage.refreshRoomTokensAfterDeletion(roomId))
+            this.summaryReviewService.cancelRoom(roomId)
+            this.messageRoutingService.cancelRoom(roomId)
+            this.nsp.to(roomId).emit('messages_deleted', result)
+            this.nsp.to(roomId).emit('room_updated', { roomId, totalTokens: result.totalTokens })
+            return result
+        })
+    }
+
     getStorage(): ChatStorage {
         return this.storage
     }
@@ -3501,7 +3613,7 @@ export class GroupChatServer {
     private notifyGroupReply(roomId: string, message: ChatMessage): void {
         const room = this.storage.getRoom(roomId)
         if (!room) return
-        // Publish persisted message facts; HTTP webhook subscribers choose which events to handle.
+        // Publish persisted message facts; the App adapter chooses which replies notify.
         const plan = message.tool_name === 'task_plan' ? parseGroupTaskPlan(message.content) : null
         const eventKey = plan ? `${message.id}:plan:${plan.revision}` : message.id
         if (this.notifiedGroupMessages.has(eventKey)) return
@@ -4074,13 +4186,14 @@ export class GroupChatServer {
     // ─── Connection ─────────────────────────────────────────────
 
     private onConnection(socket: Socket): void {
-        const auth = socket.handshake.auth as { userId?: string; name?: string; description?: string; source?: string; agentSocketSecret?: string; authUserId?: number }
+        bindProviderSocket(socket)
+        const auth = socket.handshake.auth as { userId?: string; name?: string; description?: string; source?: string; agentSocketSecret?: string }
         const requestedSource = auth.source === 'agent' && auth.agentSocketSecret === GROUP_CHAT_AGENT_SOCKET_SECRET ? 'agent' : 'human'
         const authenticatedUser = socket.data.authUser as AuthenticatedUser | undefined
-        const authUserId = requestedSource === 'human'
-            ? authenticatedUser?.id ?? (typeof auth.authUserId === 'number' && auth.authUserId > 0 ? auth.authUserId : undefined)
-            : undefined
-        const userId = authUserId ? authenticatedGroupUserId(authUserId) : auth.userId || socket.id
+        const authUserId = requestedSource === 'human' ? authenticatedUser?.id : undefined
+        const suppliedUserId = typeof auth.userId === 'string' ? auth.userId : ''
+        const userId = authUserId ? authenticatedGroupUserId(authUserId)
+            : suppliedUserId && !suppliedUserId.startsWith('auth:') ? suppliedUserId : socket.id
         const userName = auth.name || authenticatedUser?.username || `User-${userId.slice(0, 6)}`
         const description = auth.description || ''
 
@@ -4151,9 +4264,8 @@ export class GroupChatServer {
         if (!room) return false
         const authUser = socket.data?.authUser as AuthenticatedUser | undefined
         if (!authUser) {
-            // With authentication disabled, handshake userId/authUserId values are client-controlled.
-            // They may identify a joined in-context member, but must never grant off-room global
-            // approval visibility or authority based on persisted membership alone.
+            // Unauthenticated identities may identify joined members but cannot grant
+            // off-room approval visibility or authority through persisted membership.
             const joined = this.getOnlineRoomMember(socket, roomId)
             return Boolean(joined && joined.member.source === 'human')
         }
@@ -4180,6 +4292,13 @@ export class GroupChatServer {
         const room = typeof this.storage.getRoom === 'function' ? this.storage.getRoom(roomId) : undefined
         if (!room) return false
         return this.canSocketJoinRoom(socket, roomId, room, null)
+    }
+
+    private canSocketReceiveRoomNotification(socket: Socket, roomId: string): boolean {
+        const user = socket.data?.authUser as AuthenticatedUser | undefined
+        const owner = this.storage.getRoom(roomId)?.ownerAuthUserId
+        return Boolean(user && Number.isSafeInteger(user.id) && user.id > 0
+            && owner != null && Number(owner) === user.id && this.canSocketObserveRoom(socket, roomId))
     }
 
     private roomAgentActivityKey(agentId: string, runId: string): string {
@@ -4491,8 +4610,7 @@ export class GroupChatServer {
             if (!storedRoom) this.storage.saveRoom(roomId, roomId)
         }
 
-        // Look up the user's avatar via their numeric users.id from the web UI session.
-        // Falls back to name-based lookup for clients that don't pass authUserId.
+        // Look up the authenticated account's avatar, or use the guest's room avatar.
         let userAvatar = isInviteGuest
             ? requestedAvatar || existingMember?.avatar || ''
             : existingMember?.avatar || ''
@@ -4567,6 +4685,7 @@ export class GroupChatServer {
             limit: messages.length,
             hasMore: messages.length < total,
             historyTruncated,
+            messageDeletionRevision: storedRoom?.messageDeletionRevision || 0,
             typingUsers: this.getTypingUsers(roomId),
             contextStatuses: this.getContextStatuses(roomId),
             roomSummary: this.roomSummaryService.getState(roomId),
@@ -4956,6 +5075,12 @@ export class GroupChatServer {
         }
     }
 
+    private publishPluginStream(type: string, roomId: string, messageId: string, agentName: string, delta?: string, runId?: string): void {
+        publishPluginObservation(type, this.storage.getRoom(roomId)?.summaryProfile || 'default', 'group_chat',
+            { room_id: roomId, message_id: messageId || undefined, run_id: runId || undefined },
+            { agent_name: agentName, ...(delta === undefined ? {} : { delta }) })
+    }
+
     private handleMessageStreamStart(socket: Socket, data: { roomId?: string; id?: string; senderId?: string; senderName?: string; timestamp?: number; run_id?: string; agentSessionId?: string }): void {
         const roomId = data.roomId || 'general'
         const member = this.getCurrentAgentEventMember(socket, roomId, '', data.agentSessionId)
@@ -4978,6 +5103,7 @@ export class GroupChatServer {
         }
         this.streamSnapshots.start(message, String(data.agentSessionId).trim())
         this.nsp.to(roomId).emit('message_stream_start', message)
+        this.publishPluginStream('group.message.started', roomId, id, member.name, undefined, message.run_id || undefined)
     }
 
     private handleMessageStreamDelta(socket: Socket, data: { roomId?: string; id?: string; delta?: string; agentSessionId?: string }): void {
@@ -4987,6 +5113,7 @@ export class GroupChatServer {
         const id = this.normalizeClientMessageId(data.id)
         if (!id || !data.delta) return
         this.streamSnapshots.append(roomId, id, member.userId, String(data.agentSessionId).trim(), 'content', String(data.delta))
+        this.publishPluginStream('group.message.delta', roomId, id, member.name, String(data.delta))
         this.nsp.to(roomId).emit('message_stream_delta', {
             roomId,
             id,
@@ -5001,6 +5128,7 @@ export class GroupChatServer {
         const id = this.normalizeClientMessageId(data.id)
         if (!id || !data.delta) return
         this.streamSnapshots.append(roomId, id, member.userId, String(data.agentSessionId).trim(), 'reasoning', String(data.delta))
+        this.publishPluginStream('group.reasoning.delta', roomId, id, member.name, String(data.delta))
         this.nsp.to(roomId).emit('message_reasoning_delta', {
             roomId,
             id,
@@ -5016,6 +5144,7 @@ export class GroupChatServer {
         if (!id) return
         this.streamSnapshots.finish(roomId, id, member.userId)
         this.nsp.to(roomId).emit('message_stream_end', { roomId, id })
+        this.publishPluginStream('group.message.completed', roomId, id, member.name)
     }
 
     private handleTyping(socket: Socket, data: { roomId?: string }): void {
@@ -5141,7 +5270,7 @@ export class GroupChatServer {
             activeGeneration?.agentSessionId || '',
             activeGeneration?.runId || '',
         )
-        const interruptedClarifications = this.takePendingEkkoClarificationsForGeneration(
+        const interruptedClarifications = this.takePendingHubAgentClarificationsForGeneration(
             roomId,
             agentName,
             activeGeneration?.agentSessionId || '',
@@ -5151,7 +5280,7 @@ export class GroupChatServer {
             await this.agentClients.interruptAgent(roomId, agentName)
             await Promise.all([
                 this.settleInterruptedApprovals(interruptedApprovals),
-                this.settleInterruptedEkkoClarifications(interruptedClarifications),
+                this.settleInterruptedHubAgentClarifications(interruptedClarifications),
             ])
             const roomStatuses = this.contextStatusState.get(roomId)
             roomStatuses?.delete(agentName)
@@ -5161,11 +5290,12 @@ export class GroupChatServer {
                 : null
             if (agent) this.clearRoomAgentActivities(roomId, agent.id)
             this.nsp.to(roomId).emit('context_status', { roomId, agentName, status: 'ready' })
+            this.publishPluginStream('group.run.stopped', roomId, '', agentName, undefined, activeGeneration?.runId)
             ack?.({ ok: true })
         } catch (err: any) {
             await Promise.all([
                 this.settleInterruptedApprovals(interruptedApprovals),
-                this.settleInterruptedEkkoClarifications(interruptedClarifications),
+                this.settleInterruptedHubAgentClarifications(interruptedClarifications),
             ])
             logger.warn(`[GroupChat] failed to interrupt agent ${agentName} in room ${roomId}: ${err.message}`)
             ack?.({ error: err.message || 'interrupt failed' })
@@ -5230,6 +5360,7 @@ export class GroupChatServer {
             totalTokens: retracted.totalTokens,
             lastActiveAt: retracted.lastActiveAt,
         })
+        this.nsp.to(roomId).emit('room_summary_updated', this.roomSummaryService.getState(roomId))
         this.broadcastExecutionQueue(roomId)
         this.nsp.to(roomId).emit('room_updated', {
             roomId,
@@ -5442,15 +5573,15 @@ export class GroupChatServer {
                 return
             }
         }
-        const ekkoResult = pendingRoute.agentSessionId
-            ? respondToGroupEkkoToolApproval(
+        const hubAgentResult = pendingRoute.agentSessionId
+            ? respondToGroupHubAgentToolApproval(
                 pendingRoute.agentSessionId,
                 data.approval_id,
                 data.choice,
             )
             : null
-        if (ekkoResult?.handled) {
-            if (!ekkoResult.resolved) {
+        if (hubAgentResult?.handled) {
+            if (!hubAgentResult.resolved) {
                 ack?.({ error: 'Approval does not belong to the active Agent session' })
                 return
             }
@@ -5480,17 +5611,17 @@ export class GroupChatServer {
         }
     }
 
-    private takePendingEkkoClarificationsForGeneration(
+    private takePendingHubAgentClarificationsForGeneration(
         roomId: string,
         agentName: string,
         agentSessionId: string,
         runId: string,
     ): PendingGroupClarifyRoute[] {
         if (!agentSessionId || !runId) return []
-        const ekkoExecutor = this.agentClients.getAgents(roomId).find(agent =>
-            agent.name === agentName && agent.agent === 'ekko' && typeof agent.cancelClarify === 'function'
+        const hubAgentExecutor = this.agentClients.getAgents(roomId).find(agent =>
+            agent.name === agentName && agent.agent === 'hub' && typeof agent.cancelClarify === 'function'
         )
-        if (!ekkoExecutor) return []
+        if (!hubAgentExecutor) return []
 
         const routes: PendingGroupClarifyRoute[] = []
         for (const [routeKey, route] of this.pendingClarifyRoutes) {
@@ -5509,10 +5640,10 @@ export class GroupChatServer {
         return routes
     }
 
-    private async settleInterruptedEkkoClarifications(routes: PendingGroupClarifyRoute[]): Promise<void> {
+    private async settleInterruptedHubAgentClarifications(routes: PendingGroupClarifyRoute[]): Promise<void> {
         for (const route of routes) {
             const executor = this.agentClients.getAgents(route.roomId).find(agent =>
-                agent.name === route.agentName && agent.agent === 'ekko' && typeof agent.cancelClarify === 'function'
+                agent.name === route.agentName && agent.agent === 'hub' && typeof agent.cancelClarify === 'function'
             )
             let runtimeResolved = false
             try {
@@ -5522,7 +5653,7 @@ export class GroupChatServer {
                     route.runtimeRunId,
                 ))
             } catch (err: any) {
-                logger.warn(`[GroupChat] failed to cancel interrupted Ekko clarification ${route.clarifyId}: ${err?.message || err}`)
+                logger.warn(`[GroupChat] failed to cancel interrupted Hub Agent clarification ${route.clarifyId}: ${err?.message || err}`)
             }
             this.emitToRoomManagers(route.roomId, 'clarify.resolved', {
                 runId: route.runId,
@@ -5643,11 +5774,11 @@ export class GroupChatServer {
                 return
             }
         }
-        const ekkoResult = pendingRoute.agentSessionId
-            ? respondToGroupEkkoClarification(pendingRoute.agentSessionId, data.clarify_id, response)
+        const hubAgentResult = pendingRoute.agentSessionId
+            ? respondToGroupHubAgentClarification(pendingRoute.agentSessionId, data.clarify_id, response)
             : null
-        if (ekkoResult?.handled) {
-            if (!ekkoResult.resolved) {
+        if (hubAgentResult?.handled) {
+            if (!hubAgentResult.resolved) {
                 ack?.({ error: 'Clarification does not belong to the active Agent session' })
                 return
             }

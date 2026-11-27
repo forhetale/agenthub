@@ -1,7 +1,13 @@
+import { isPersonSession, isPrivatePersonSession } from '../../contracts/person-session'
+import { personDisplayEvent } from '../chat-run/person-display'
+import { publishPluginObservation } from '../plugins/event-source'
 import { randomUUID } from 'crypto'
 import { businessEvents } from './business-events'
 import { ensureBusinessConsumers } from './business-consumers'
 import { acceptTaskPlanRevision, taskPlanWebhookSnapshot } from './task-plan'
+import { sessionTaskWebhookContent } from './session-task'
+import type { SessionTask, SessionTasksSnapshot } from '../../contracts/session-task'
+import { logger } from '../../public/logging'
 import {
   stableChatWebhookEventId,
   truncateChatWebhookContent,
@@ -88,7 +94,18 @@ function occurredAt(value: unknown): string {
 }
 
 export function observeChatRunWebhookEvent(input: ObserveChatRunWebhookEventInput): boolean {
-  const payload = input.payload || {}
+  const person = isPersonSession(input.sessionId)
+  // Main assistant notices share the notification bus; worker/tool/history data stays private.
+  if (isPrivatePersonSession(input.sessionId) && (!person || ![
+    'run.completed', 'run.failed', 'approval.requested', 'approval.resolved', 'clarify.requested', 'clarify.resolved',
+  ].includes(input.event))) return false
+  const payload = person ? personDisplayEvent(input.sessionId, input.event, input.payload) || {} : input.payload || {}
+  const observation = ({ 'message.delta': 'chat.message.delta', 'reasoning.delta': 'chat.reasoning.delta', 'thinking.delta': 'chat.reasoning.delta' } as Record<string, string>)[input.event]
+  if (observation && input.sessionId && !isPrivatePersonSession(input.sessionId)) {
+    publishPluginObservation(observation, input.profile || 'default', normalizeSource(input.source),
+      { session_id: input.sessionId, run_id: identifierValue(payload.run_id) || undefined, room_id: input.roomId, workflow_id: input.workflowId },
+      { ...(typeof payload.delta === 'string' ? { delta: payload.delta } : {}) })
+  }
   const sessionId = stringValue(input.sessionId)
   const plan = input.event === 'plan.updated' ? taskPlanWebhookSnapshot(payload, sessionId) : null
   // Group cards publish only after their message snapshot has been persisted.
@@ -163,9 +180,45 @@ export function observeChatRunWebhookEvent(input: ObserveChatRunWebhookEventInpu
   }
   if (plan && !acceptTaskPlanRevision(`${mapping.type}:${event.profile}`, plan)) return false
   ensureBusinessConsumers()
-  return businessEvents.publish({ schema_version: 1, id: event.id, type: event.type, occurred_at: event.occurred_at,
-    profile: event.profile.trim() || 'default', source: event.source, subject: event.subject, payload, chat: event })
+  return businessEvents.publish({ schema_version: 1, id: event.id, type: person ? event.type.replace(/^chat\./, 'person.') : event.type, occurred_at: event.occurred_at,
+    profile: event.profile.trim() || 'default', source: person ? 'person' : event.source, subject: event.subject, payload,
+    // HTTP webhooks never receive private assistant events.
+    ...(!person ? { chat: event } : {}) })
 }
 
 export * from './dispatcher'
 export * from './envelope'
+
+/** Only persisted task creation and transitions into completed produce notifications. */
+export function publishSessionTaskEvents(input: {
+  profile: string; source: string; previous: SessionTask[]; snapshot: SessionTasksSnapshot
+}): void {
+  try {
+    const previous = new Map(input.previous.map(task => [task.id, task]))
+    const { session_id: sessionId, revision } = input.snapshot
+    const profile = input.profile.trim() || 'default'
+    const events: ChatRunWebhookEvent[] = []
+    for (const task of input.snapshot.tasks) {
+      const old = previous.get(task.id)
+      const types: Array<'chat.task.created' | 'chat.task.completed'> = []
+      if (!old) types.push('chat.task.created')
+      if (task.status === 'completed' && old?.status !== 'completed') types.push('chat.task.completed')
+      for (const type of types) events.push({
+        id: stableChatWebhookEventId(JSON.stringify([type, profile, sessionId, task.id, revision])),
+        type, occurred_at: new Date(task.updated_at).toISOString(), profile, source: normalizeSource(input.source),
+        subject: { session_id: sessionId, task_id: task.id },
+        summary: { status: type === 'chat.task.created' ? 'created' : 'completed' },
+        session_task: sessionTaskWebhookContent({ ...task, revision }, true),
+      })
+    }
+    if (!events.length) return
+    ensureBusinessConsumers()
+    for (const event of events) businessEvents.publish({
+      schema_version: 1, id: event.id, type: event.type, occurred_at: event.occurred_at,
+      profile, source: event.source, subject: event.subject, payload: {}, chat: event,
+    })
+  } catch {
+    // Notification failures must not invalidate the committed task write.
+    logger.warn('[session-tasks] Webhook event publication failed')
+  }
+}

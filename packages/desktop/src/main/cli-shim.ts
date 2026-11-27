@@ -72,11 +72,11 @@ function executableForShim(options: Required<Pick<CliShimInstallOptions, 'env' |
 }
 
 export function shimPathForPlatform(binDir: string, platform: NodeJS.Platform = process.platform): string {
-  return join(binDir, platform === 'win32' ? 'ekko-studio.cmd' : 'ekko-studio')
+  return join(binDir, platform === 'win32' ? 'agenthub.cmd' : 'agenthub')
 }
 
 export function mcpShimPathForPlatform(binDir: string, platform: NodeJS.Platform = process.platform): string {
-  return join(binDir, platform === 'win32' ? 'ekko-studio-mcp.cmd' : 'ekko-studio-mcp')
+  return join(binDir, platform === 'win32' ? 'agenthub-mcp.cmd' : 'agenthub-mcp')
 }
 
 function shellQuote(value: string): string {
@@ -107,7 +107,7 @@ function windowsCliForwarder(runtimePlatform: string, runtimeVersion: string): s
     "let python=path.join(virtualEnv,'Scripts','python.exe')",
     "if(!fs.existsSync(python))python=path.join(virtualEnv,'python.exe')",
     "if(!fs.existsSync(python)){virtualEnv=path.join(runtime,'python');python=path.join(virtualEnv,'python.exe')}",
-    "if(!fs.existsSync(python)){console.error('AgentHub Python runtime not found at '+python);console.error('Open AgentHub once to finish runtime setup, then retry ekko-studio cli.');process.exit(127)}",
+    "if(!fs.existsSync(python)){console.error('AgentHub Python runtime not found at '+python);console.error('Open AgentHub once to finish runtime setup, then retry agenthub cli.');process.exit(127)}",
     "const inheritedPath=process.env.PATH||process.env.Path||''",
     'const env={...process.env,VIRTUAL_ENV:virtualEnv,UV_PROJECT_ENVIRONMENT:virtualEnv,UV_PYTHON:python,HERMES_AGENT_ROOT:path.join(runtime,\'python\'),HERMES_AGENT_NODE:path.join(runtime,\'node\',\'node.exe\'),HERMES_AGENT_NODE_ROOT:path.join(runtime,\'node\'),AGENT_BROWSER_HOME:path.join(runtime,\'python\',\'agent-browser\'),PLAYWRIGHT_BROWSERS_PATH:path.join(runtime,\'python\',\'ms-playwright\')}',
     "for(const key of Object.keys(env))if(key.toLowerCase()==='path')delete env[key]",
@@ -126,11 +126,11 @@ function powershellUtf8Value(value: string): string {
   return `[System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${utf8Base64(value)}'))`
 }
 
-function windowsPowerShellSidecarName(name: 'ekko-studio' | 'ekko-studio-mcp'): string {
+function windowsPowerShellSidecarName(name: 'agenthub' | 'agenthub-mcp'): string {
   return `${name}.ps1`
 }
 
-function windowsCmdShimContent(name: 'ekko-studio' | 'ekko-studio-mcp', marker: string): string {
+function windowsCmdShimContent(name: 'agenthub' | 'agenthub-mcp', marker: string): string {
   return [
     '@echo off',
     `rem ${marker}`,
@@ -161,7 +161,7 @@ export function createPowerShellShimContent(
     '  $ForwardArgs = [string[]]$CommandArgs[1..($CommandArgs.Count - 1)]',
     '}',
     'function Show-HermesStudioHelp {',
-    "  [Console]::Out.WriteLine('Usage: ekko-studio [command] [options]')",
+    "  [Console]::Out.WriteLine('Usage: agenthub [command] [options]')",
     "  [Console]::Out.WriteLine('')",
     "  [Console]::Out.WriteLine('Commands:')",
     "  [Console]::Out.WriteLine('  (no command)       Open AgentHub desktop app')",
@@ -184,7 +184,7 @@ export function createPowerShellShimContent(
     "  'cli' {",
     '    if (!(Test-Path -LiteralPath $Node -PathType Leaf)) {',
     "      [Console]::Error.WriteLine('AgentHub Node runtime not found at ' + $Node)",
-    "      [Console]::Error.WriteLine('Open AgentHub once to finish runtime setup, then retry ekko-studio cli.')",
+    "      [Console]::Error.WriteLine('Open AgentHub once to finish runtime setup, then retry agenthub cli.')",
     '      exit 127',
     '    }',
     '    & $Node -e $CliForwarder @ForwardArgs',
@@ -193,7 +193,7 @@ export function createPowerShellShimContent(
     "  'web' {",
     '    if (!(Test-Path -LiteralPath $Node -PathType Leaf)) {',
     "      [Console]::Error.WriteLine('AgentHub Node runtime not found at ' + $Node)",
-    "      [Console]::Error.WriteLine('Open AgentHub once to finish runtime setup, then retry ekko-studio web.')",
+    "      [Console]::Error.WriteLine('Open AgentHub once to finish runtime setup, then retry agenthub web.')",
     '      exit 127',
     '    }',
     '    if (!(Test-Path -LiteralPath $WebUiScript -PathType Leaf)) {',
@@ -205,7 +205,7 @@ export function createPowerShellShimContent(
     '  }',
     '  default {',
     "    [Console]::Error.WriteLine('Unknown AgentHub command: ' + $Command)",
-    "    [Console]::Error.WriteLine('Run ekko-studio --help for usage.')",
+    "    [Console]::Error.WriteLine('Run agenthub --help for usage.')",
     '    exit 2',
     '  }',
     '}',
@@ -222,7 +222,7 @@ export function createShimContent(
   webUiScriptPath = resolve(process.cwd(), 'bin', 'hermes-web-ui.mjs'),
 ): string {
   if (platform === 'win32') {
-    return windowsCmdShimContent('ekko-studio', SHIM_MARKER)
+    return windowsCmdShimContent('agenthub', SHIM_MARKER)
   }
 
   return [
@@ -233,7 +233,7 @@ export function createShimContent(
     `WEBUI_SCRIPT=${shellQuote(webUiScriptPath)}`,
     'show_help() {',
     '  cat <<\'EOF\'',
-    'Usage: ekko-studio [command] [options]',
+    'Usage: agenthub [command] [options]',
     '',
     'Commands:',
     '  (no command)       Open AgentHub desktop app',
@@ -259,7 +259,7 @@ export function createShimContent(
     '    shift',
     '    if [ ! -x "$NODE" ]; then',
     '      echo "AgentHub Node runtime not found at $NODE" >&2',
-    '      echo "Open AgentHub once to finish runtime setup, then retry ekko-studio web." >&2',
+    '      echo "Open AgentHub once to finish runtime setup, then retry agenthub web." >&2',
     '      exit 127',
     '    fi',
     '    if [ ! -f "$WEBUI_SCRIPT" ]; then',
@@ -274,7 +274,7 @@ export function createShimContent(
     '    ;;',
     '  *)',
     '    echo "Unknown AgentHub command: $1" >&2',
-    '    echo "Run ekko-studio --help for usage." >&2',
+    '    echo "Run agenthub --help for usage." >&2',
     '    exit 2',
     '    ;;',
     'esac',
@@ -289,7 +289,7 @@ export function createMcpShimContent(
   platform: NodeJS.Platform = process.platform,
 ): string {
   if (platform === 'win32') {
-    return windowsCmdShimContent('ekko-studio-mcp', MCP_SHIM_MARKER)
+    return windowsCmdShimContent('agenthub-mcp', MCP_SHIM_MARKER)
   }
 
   return [
@@ -299,7 +299,7 @@ export function createMcpShimContent(
     `SCRIPT=${shellQuote(scriptPath)}`,
     'if [ ! -x "$NODE" ]; then',
     '  echo "AgentHub Node runtime not found at $NODE" >&2',
-    '  echo "Open AgentHub once to finish runtime setup, then retry ekko-studio-mcp." >&2',
+    '  echo "Open AgentHub once to finish runtime setup, then retry agenthub-mcp." >&2',
     '  exit 127',
     'fi',
     'if [ ! -f "$SCRIPT" ]; then',
@@ -315,7 +315,7 @@ export function createMcpShimContent(
     'fi',
     'export HERMES_WEB_UI_URL',
     'if [ -z "${HERMES_MCP_SERVER_NAME:-}" ]; then',
-    '  HERMES_MCP_SERVER_NAME=ekko-studio-mcp',
+    '  HERMES_MCP_SERVER_NAME=agenthub-mcp',
     'fi',
     'export HERMES_MCP_SERVER_NAME',
     'exec "$NODE" "$SCRIPT" "$@"',
@@ -335,7 +335,7 @@ export function createMcpPowerShellShimContent(
     `$DefaultWebUiUrl = ${powershellUtf8Value(webUiUrl)}`,
     'if (!(Test-Path -LiteralPath $Node -PathType Leaf)) {',
     "  [Console]::Error.WriteLine('AgentHub Node runtime not found at ' + $Node)",
-    "  [Console]::Error.WriteLine('Open AgentHub once to finish runtime setup, then retry ekko-studio-mcp.')",
+    "  [Console]::Error.WriteLine('Open AgentHub once to finish runtime setup, then retry agenthub-mcp.')",
     '  exit 127',
     '}',
     'if (!(Test-Path -LiteralPath $Script -PathType Leaf)) {',
@@ -350,7 +350,7 @@ export function createMcpPowerShellShimContent(
     '  }',
     '}',
     "if ([string]::IsNullOrWhiteSpace($env:HERMES_MCP_SERVER_NAME)) {",
-    "  $env:HERMES_MCP_SERVER_NAME = 'ekko-studio-mcp'",
+    "  $env:HERMES_MCP_SERVER_NAME = 'agenthub-mcp'",
     '}',
     '& $Node $Script @args',
     'exit $LASTEXITCODE',
@@ -404,7 +404,7 @@ function shellProfilePaths(homeDir: string, platform: NodeJS.Platform, env: Node
 
   const shell = env.SHELL?.trim() || ''
   const name = shell.split('/').pop() || ''
-  if (name === 'fish') return [join(homeDir, '.config', 'fish', 'conf.d', 'ekko-studio.fish')]
+  if (name === 'fish') return [join(homeDir, '.config', 'fish', 'conf.d', 'agenthub.fish')]
   if (name === 'bash') return [join(homeDir, '.bash_profile'), join(homeDir, '.bashrc')]
   if (name === 'zsh' || platform === 'darwin') return [join(homeDir, '.zprofile'), join(homeDir, '.zshrc')]
   return [join(homeDir, '.profile')]
@@ -562,7 +562,7 @@ export async function installHermesStudioCliShim(options: CliShimInstallOptions 
     shimPath,
     status,
     pathUpdated,
-    reason: status === 'skipped' ? 'existing ekko-studio shim is not managed by AgentHub' : undefined,
+    reason: status === 'skipped' ? 'existing agenthub shim is not managed by AgentHub' : undefined,
   }
 }
 
@@ -573,7 +573,7 @@ export async function installHermesStudioMcpShim(options: McpShimInstallOptions 
   const binDir = resolve(homeDir, 'bin')
   const shimPath = mcpShimPathForPlatform(binDir, platform)
   const nodePath = options.nodePath || process.execPath
-  const scriptPath = options.scriptPath || resolve(process.cwd(), 'bin', 'ekko-studio-mcp.mjs')
+  const scriptPath = options.scriptPath || resolve(process.cwd(), 'bin', 'agenthub-mcp.mjs')
   const webUiUrl = options.webUiUrl || 'http://127.0.0.1:8748'
 
   mkdirSync(binDir, { recursive: true })
@@ -591,7 +591,7 @@ export async function installHermesStudioMcpShim(options: McpShimInstallOptions 
     if (platform === 'win32') {
       writeWindowsShimPair(
         legacyShimPath,
-        commandContent.replace('ekko-studio-mcp.ps1', 'hermes-studio-mcp.ps1'),
+        commandContent.replace('agenthub-mcp.ps1', 'hermes-studio-mcp.ps1'),
         createMcpPowerShellShimContent(nodePath, scriptPath, webUiUrl),
         MCP_SHIM_MARKER,
       )
@@ -608,6 +608,6 @@ export async function installHermesStudioMcpShim(options: McpShimInstallOptions 
     shimPath,
     status,
     pathUpdated,
-    reason: status === 'skipped' ? 'existing ekko-studio-mcp shim is not managed by AgentHub' : undefined,
+    reason: status === 'skipped' ? 'existing agenthub-mcp shim is not managed by AgentHub' : undefined,
   }
 }

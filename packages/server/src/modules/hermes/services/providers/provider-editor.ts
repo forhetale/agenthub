@@ -4,14 +4,16 @@ import { chmod } from 'fs/promises'
 import { join, resolve } from 'path'
 import YAML from 'js-yaml'
 import { normalizeCustomProviderEntry } from '../../../studio/contracts/provider-compat'
+import { assertUniqueProviderNames } from '../../../studio/contracts/provider-identity'
 import { PROVIDER_PRESETS } from '../../../studio/contracts/providers'
 import {
   appConfigFilePath,
   invalidateAppConfigCache,
+  readAppConfig,
   type AppConfig,
-} from '../../../studio/public/app-config'
+} from '../../../studio/public/provider-config'
 import { readProviderContextLengths, writeProviderContextLengths } from '../../../studio/public/provider-context'
-import { getProfileDir, PROVIDER_ENV_MAP } from '../../../studio/public/profile-config'
+import { getProfileDir, PROVIDER_ENV_MAP } from '../../../studio/public/provider-config'
 import { safeFileStore, type MultiTextUpdate } from '../../../studio/public/safe-file-store'
 
 export type ProviderApiMode = 'chat_completions' | 'codex_responses' | 'anthropic_messages' | 'bedrock_converse' | 'codex_app_server'
@@ -56,7 +58,7 @@ export interface ProviderEditorPatch {
   revision?: string
   label?: string
   base_url?: string
-  api_mode?: ProviderApiMode
+  api_mode?: ProviderApiMode | null
   preferred_model?: string
   credential_action?: CredentialAction
   api_key?: string
@@ -149,6 +151,11 @@ function updateEnv(raw: string | undefined, key: string, value: string | undefin
 }
 
 function findSource(config: Record<string, any>, providerId: string): ProviderSource | null {
+  for (const [key, value] of Object.entries(config.providers || {})) {
+    if ((value as any)?.catalog_provider === providerId) {
+      return { id: providerId, builtin: false, source: 'providers', sourceKey: key, configEntry: value as Record<string, any> }
+    }
+  }
   if (providerId.startsWith('custom:')) {
     if (Array.isArray(config.custom_providers)) {
       const entry = (config.custom_providers as any[]).find(item => providerKeyForCustomName(item?.name) === providerId)
@@ -237,7 +244,7 @@ function credentialInfo(
   }
   const normalized = normalizeCustomProviderEntry(source.configEntry, source.sourceKey || '', source.source === 'providers' ? 'providers' : 'custom_providers')
   const envKey = normalized?.key_env
-  const value = envKey ? env.get(envKey) || '' : String(normalized?.api_key || '')
+  const value = String(normalized?.api_key || '') || (envKey ? env.get(envKey) || '' : '')
   return { configured: !!value.trim(), value, ...(envKey ? { envKey } : {}) }
 }
 
@@ -262,10 +269,12 @@ function editableFields(source: ProviderSource): ProviderEditableField[] {
   return fields
 }
 
-export function providerEditorCapabilities(providerId: string): {
+export function providerEditorCapabilities(providerId: string, config?: Record<string, any>): {
   editable: boolean
   editable_fields: ProviderEditableField[]
 } {
+  const source = config && findSource(config, providerId)
+  if (source && !source.configEntry?.auth_provider) return { editable: true, editable_fields: editableFields(source) }
   if (providerId.startsWith('custom:')) {
     return { editable: true, editable_fields: [...CUSTOM_PROVIDER_EDITABLE_FIELDS] }
   }
@@ -281,7 +290,7 @@ function contextLengths(profile: string, providerId: string): Record<string, num
 }
 
 function appProfileValue(appConfig: AppConfig, key: 'providerLabels' | 'providerPreferredModels', profile: string, providerId: string): string {
-  const value = appConfig[key]?.[profile]?.[providerId]
+  const value = (appConfig[key]?.account || appConfig[key]?.[profile])?.[providerId]
   return typeof value === 'string' ? value.trim() : ''
 }
 
@@ -386,6 +395,7 @@ function profilePaths(profile: string) {
 }
 
 export async function getProviderEditorDetail(profile: string, providerId: string): Promise<ProviderEditorDetail> {
+  await readAppConfig()
   const paths = profilePaths(profile)
   const [rawConfig, rawEnv, rawApp] = await Promise.all([
     safeFileStore.readText(paths.config).catch(() => ''),
@@ -473,10 +483,12 @@ export async function fetchProviderCatalogForTest(baseUrl: string, apiKey: strin
       }
       let body: any
       try { body = JSON.parse(text) } catch { throw new ProviderEditorError('Provider returned invalid JSON', 422, 'PROVIDER_TEST_FAILED') }
-      const rawModels = endpoint.protocol === 'gemini' ? body?.models : body?.data
+      const rawModels = endpoint.protocol === 'gemini'
+        ? body?.models
+        : Array.isArray(body?.data) ? body.data : body?.models
       if (!Array.isArray(rawModels)) throw new ProviderEditorError('Provider returned an unsupported model catalog', 422, 'PROVIDER_TEST_FAILED')
       if (rawModels.length > PROVIDER_TEST_MAX_MODELS) throw new ProviderEditorError('Provider returned more than 10,000 models', 422, 'PROVIDER_MODEL_LIMIT_EXCEEDED')
-      const models = rawModels.map((item: any) => String(item?.id || item?.name || '').replace(/^models\//, '').trim()).filter(Boolean)
+      const models = rawModels.map((item: any) => String(item?.id || item?.slug || item?.name || '').replace(/^models\//, '').trim()).filter(Boolean)
       if (models.length === 0) throw new ProviderEditorError('Provider returned an empty model catalog', 422, 'PROVIDER_EMPTY_CATALOG')
       return [...new Set(models)]
     }
@@ -495,6 +507,7 @@ export async function testProviderEditorDraft(
   providerId: string,
   patch: ProviderEditorPatch,
 ): Promise<{ models: string[]; model_count: number; catalog_unavailable?: boolean }> {
+  await readAppConfig()
   const paths = profilePaths(profile)
   const [rawConfig, rawEnv, rawApp] = await Promise.all([
     safeFileStore.readText(paths.config).catch(() => ''),
@@ -509,7 +522,7 @@ export async function testProviderEditorDraft(
   const apiKey = patch.credential_action === 'replace' ? String(patch.api_key || '') : existingCredential
   if (patch.credential_action === 'clear') throw new ProviderEditorError('Cannot test a cleared credential', 422, 'PROVIDER_TEST_NO_CREDENTIAL')
   const baseUrl = patch.base_url !== undefined ? normalizeUrl(patch.base_url) : detail.base_url
-  const apiMode = patch.api_mode || detail.api_mode
+  const apiMode = patch.api_mode === undefined ? detail.api_mode : patch.api_mode ?? undefined
   const capability = connectionTestCapability(apiMode)
   if (!capability.supported) {
     throw new ProviderEditorError(capability.reason || 'Provider connection testing is not supported', 422, 'PROVIDER_TEST_UNSUPPORTED')
@@ -587,7 +600,7 @@ function changedFields(before: ProviderEditorDetail, patch: ProviderEditorPatch)
   const fields: string[] = []
   if (patch.label !== undefined && patch.label.trim() !== before.label) fields.push('label')
   if (patch.base_url !== undefined && patch.base_url.replace(/\/+$/, '') !== before.base_url.replace(/\/+$/, '')) fields.push('base_url')
-  if (patch.api_mode !== undefined && patch.api_mode !== before.api_mode) fields.push('api_mode')
+  if (patch.api_mode !== undefined && patch.api_mode !== (before.api_mode ?? null)) fields.push('api_mode')
   if (patch.preferred_model !== undefined && patch.preferred_model.trim() !== before.preferred_model) fields.push('preferred_model')
   if (patch.discover_models !== undefined && patch.discover_models !== before.discover_models) fields.push('discover_models')
   if (patch.rate_limit_delay !== undefined && patch.rate_limit_delay !== (before.rate_limit_delay ?? null)) fields.push('rate_limit_delay')
@@ -620,7 +633,7 @@ function validatePatch(before: ProviderEditorDetail, patch: ProviderEditorPatch)
   if (patch.credential_action && patch.credential_action !== 'keep' && !allowed.has('api_key')) throw new ProviderEditorError('Provider credential is read-only', 400, 'FIELD_READ_ONLY')
   if (patch.label !== undefined && (!patch.label.trim() || patch.label.trim().length > 100)) throw new ProviderEditorError('Provider label must contain 1-100 characters', 400, 'INVALID_LABEL')
   if (patch.base_url !== undefined) normalizeUrl(patch.base_url)
-  if (patch.api_mode !== undefined && !normalizeApiMode(patch.api_mode)) throw new ProviderEditorError('Invalid API mode', 400, 'INVALID_API_MODE')
+  if (patch.api_mode != null && !normalizeApiMode(patch.api_mode)) throw new ProviderEditorError('Invalid API mode', 400, 'INVALID_API_MODE')
   if (patch.preferred_model !== undefined && (!patch.preferred_model.trim() || /[\r\n]/.test(patch.preferred_model))) throw new ProviderEditorError('Preferred model is invalid', 400, 'INVALID_MODEL')
   if (patch.credential_action === 'replace' && (!String(patch.api_key || '').trim() || /[\r\n]/.test(String(patch.api_key)))) throw new ProviderEditorError('A non-empty API key is required', 400, 'INVALID_API_KEY')
   validateOptionalRuntimeNumber(patch.rate_limit_delay, 'rate_limit_delay')
@@ -642,6 +655,7 @@ export async function updateProviderEditorDetail(
   patch: ProviderEditorPatch,
   expectedRevision: string,
 ): Promise<{ before: ProviderEditorDetail; detail: ProviderEditorDetail; changed: string[] }> {
+  await readAppConfig()
   const paths = profilePaths(profile)
   let before!: ProviderEditorDetail
   let nextDetail!: ProviderEditorDetail
@@ -663,9 +677,10 @@ export async function updateProviderEditorDetail(
     const credentialAction = patch.credential_action || 'keep'
     const apiKey = String(patch.api_key || '')
 
-    if (patch.label !== undefined) setNestedProfileValue(appConfig, 'providerLabels', profile, providerId, patch.label.trim())
+    const preferenceScope = config.studio_provider_pool === 2 ? 'account' : profile
+    if (patch.label !== undefined) setNestedProfileValue(appConfig, 'providerLabels', preferenceScope, providerId, patch.label.trim())
     if (patch.preferred_model !== undefined) {
-      setNestedProfileValue(appConfig, 'providerPreferredModels', profile, providerId, patch.preferred_model.trim())
+      setNestedProfileValue(appConfig, 'providerPreferredModels', preferenceScope, providerId, patch.preferred_model.trim())
       if (!source.builtin) setExistingAlias(source.configEntry!, ['model', 'default_model', 'defaultModel'], patch.preferred_model.trim(), source.source === 'providers' ? 'default_model' : 'model')
     }
 
@@ -681,7 +696,8 @@ export async function updateProviderEditorDetail(
       }
     }
     if (patch.api_mode !== undefined && !source.builtin) {
-      setExistingAlias(source.configEntry!, ['api_mode', 'transport', 'apiMode'], patch.api_mode, 'api_mode')
+      if (patch.api_mode === null) deleteAliases(source.configEntry!, ['api_mode', 'transport', 'apiMode'])
+      else setExistingAlias(source.configEntry!, ['api_mode', 'transport', 'apiMode'], patch.api_mode, 'api_mode')
     }
     if (!source.builtin) {
       if (patch.discover_models !== undefined) {
@@ -702,12 +718,23 @@ export async function updateProviderEditorDetail(
     }
 
     if (credentialAction !== 'keep') {
+      // An explicit key edit replaces the grant on this Provider record only.
+      if (source.configEntry?.auth_provider) {
+        delete source.configEntry.auth_provider
+        delete source.configEntry.auth_scope
+      }
       if (source.source === 'builtin_env') {
         env = updateEnv(env, source.envMapping!.api_key_env, credentialAction === 'replace' ? apiKey : undefined)
+      } else if (config.studio_provider_pool === 2) {
+        // Imported environment keys can be shared by several records. Detach
+        // this record instead of modifying another Provider's credential.
+        deleteAliases(source.configEntry!, ['key_env', 'api_key_env', 'keyEnv', 'apiKeyEnv', 'api_key', 'apiKey'])
+        if (credentialAction === 'replace') source.configEntry!.api_key = apiKey
       } else {
         const normalized = normalizeCustomProviderEntry(source.configEntry, source.sourceKey || '', source.source === 'providers' ? 'providers' : 'custom_providers')
         if (normalized?.key_env) {
           env = updateEnv(env, normalized.key_env, credentialAction === 'replace' ? apiKey : undefined)
+          deleteAliases(source.configEntry!, ['api_key', 'apiKey'])
         } else if (credentialAction === 'replace') {
           setExistingAlias(source.configEntry!, ['api_key', 'apiKey'], apiKey, 'api_key')
         } else {
@@ -715,7 +742,9 @@ export async function updateProviderEditorDetail(
         }
       }
     }
-    syncAuthMetadata(auth, source, providerId, baseUrl, credentialAction, apiKey)
+    if (config.studio_provider_pool !== 2) syncAuthMetadata(auth, source, providerId, baseUrl, credentialAction, apiKey)
+    try { assertUniqueProviderNames(config, appConfig.providerLabels?.[preferenceScope]) }
+    catch (error: any) { throw new ProviderEditorError(error.message, 409, 'DUPLICATE_PROVIDER_NAME') }
 
     const files: MultiTextUpdate = {
       [paths.config]: dumpYaml(config),

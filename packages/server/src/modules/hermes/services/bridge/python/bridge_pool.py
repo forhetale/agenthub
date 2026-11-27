@@ -27,6 +27,7 @@ from bridge_runtime import (
     _install_execute_code_approval_memory_patch,
     _jsonable,
     _load_cfg,
+    _load_disabled_toolsets,
     _load_enabled_toolsets,
     _load_fallback_model,
     _load_reasoning_config,
@@ -44,9 +45,16 @@ from bridge_runtime import (
     _tool_names_from_definitions,
 )
 
+CLARIFY_TIMEOUT_SECONDS = 300
+
 
 def _bind_session_workspace_cwd(session_id: str, workspace: str | None) -> bool:
     workspace_cwd = str(workspace or "").strip()
+    required = session_id.startswith("person-task-")
+    if required and (not workspace_cwd or not os.path.isabs(workspace_cwd)
+                     or not os.path.isdir(workspace_cwd)
+                     or not os.access(workspace_cwd, os.R_OK | os.W_OK | os.X_OK)):
+        raise RuntimeError(f"Workspace directory is unavailable: {workspace_cwd or '(not selected)'}")
     if not workspace_cwd:
         return False
     bound = False
@@ -60,8 +68,12 @@ def _bind_session_workspace_cwd(session_id: str, workspace: str | None) -> bool:
 
             register_task_env_overrides(session_id, {"cwd": workspace_cwd})
         except Exception:
-            pass
+            if required:
+                raise
     except Exception:
+        if required:
+            _clear_session_workspace_cwd()
+            raise RuntimeError("Hermes runtime cannot bind the required Person workspace")
         return bound
     return bound
 
@@ -152,6 +164,7 @@ class RunRecord:
     error: str | None = None
     deltas: list[str] = field(default_factory=list)
     events: list[dict[str, Any]] = field(default_factory=list)
+    worker_thread: threading.Thread | None = field(default=None, repr=False)
 
 
 @dataclass
@@ -162,6 +175,7 @@ class AgentSession:
     config: dict[str, Any] = field(default_factory=dict)
     running: bool = False
     current_run_id: str | None = None
+    pending_gateway_runtime: dict[str, Any] | None = field(default=None, repr=False)
     lock: threading.RLock = field(default_factory=threading.RLock)
     created_at: float = field(default_factory=time.time)
     last_used_at: float = field(default_factory=time.time)
@@ -196,6 +210,44 @@ class AgentPool:
         self._approval_handlers: dict[str, Callable[..., str]] = {}
         self._exec_ask_depth = 0
         self._exec_ask_previous: str | None = None
+        self._mcp_generation = 0
+        self._pending_mcp_refresh: Callable[[], None] | None = None
+        self._retired_mcp_tools: set[str] = set()
+
+    def schedule_mcp_refresh(self, refresh: Callable[[], None]) -> bool:
+        with self._lock:
+            self._pending_mcp_refresh = refresh
+            return self.refresh_mcp_if_idle()
+
+    def refresh_mcp_if_idle(self) -> bool:
+        """Shared transports cannot be replaced while any foreground/background task uses them."""
+        with self._lock:
+            refresh = self._pending_mcp_refresh
+            if refresh is None or any(session.running or self.has_active_background_for_session(session.session_id) for session in self._sessions.values()):
+                return False
+            try:
+                refresh()
+            except Exception as exc:
+                print(f"[hermes_bridge] plugin MCP refresh pending: {exc}", file=sys.stderr, flush=True)
+                return False
+            self._pending_mcp_refresh = None
+            self._mcp_generation += 1
+            return True
+
+    def _filter_retired_mcp_tools(self, agent: Any) -> None:
+        if not self._retired_mcp_tools or not isinstance(getattr(agent, "tools", None), list):
+            return
+        # Native discovery may finish registering a transport after register_mcp_servers returns.
+        # Recheck live registrations after discovery before filtering the new Agent snapshot.
+        try:
+            from tools.mcp_tool import _servers, _lock
+            with _lock:
+                for task in _servers.values():
+                    self._retired_mcp_tools.difference_update(getattr(task, "_registered_tool_names", None) or [])
+                    self._retired_mcp_tools.difference_update(_tool_names_from_definitions(getattr(task, "_tools", [])))
+        except ImportError:
+            pass
+        agent.tools = [tool for tool in agent.tools if not self._retired_mcp_tools.intersection(_tool_names_from_definitions([tool]))]
 
     def _install_usage_hook(self) -> None:
         """Observe exact per-request model usage without requiring a user plugin."""
@@ -392,6 +444,7 @@ class AgentPool:
         model: str | None = None,
         provider: str | None = None,
         background_delegation_enabled: bool | None = None,
+        gateway_runtime: dict[str, Any] | None = None,
     ) -> AgentSession:
         requested_model = str(model or "").strip()
         requested_provider = str(provider or "").strip()
@@ -400,7 +453,26 @@ class AgentPool:
         # cached AgentSession.
         _refresh_worker_profile_env()
         with self._lock:
+            self.refresh_mcp_if_idle()
             existing = self._sessions.get(session_id)
+            if gateway_runtime and existing is not None and not existing.running:
+                if (gateway_runtime.get("api_key") != getattr(existing.agent, "api_key", None)
+                        or (requested_model and existing.config.get("model") != requested_model)
+                        or (requested_provider and existing.config.get("provider") != requested_provider)):
+                    self._destroy_session(session_id)
+                    existing = None
+            refresh_session = None
+            if (existing is not None and not existing.running
+                    and existing.config.get("mcp_generation", 0) != self._mcp_generation
+                    and not self.has_active_background_for_session(session_id)
+                    and (not profile or existing.config.get("profile") == profile)):
+                # Reuse the session and history; only rebuild the idle AIAgent's tool snapshot.
+                refresh_session = existing
+                requested_model = requested_model or str(existing.config.get("model") or "")
+                requested_provider = requested_provider or str(existing.config.get("provider") or "")
+                if background_delegation_enabled is None:
+                    background_delegation_enabled = existing.config.get("background_delegation_enabled")
+                existing = None
             if existing is not None:
                 # If profile changed, destroy old session and recreate
                 profile_changed = bool(profile and existing.config.get("profile") != profile)
@@ -481,7 +553,7 @@ class AgentPool:
                 discovered_mcp_tools = _discover_bridge_mcp_tools()
                 cfg = _load_cfg()
                 resolved_model = requested_model or _resolve_model(cfg)
-                runtime = _resolve_runtime(resolved_model, requested_provider or None)
+                runtime = gateway_runtime or _resolve_runtime(resolved_model, requested_provider or None)
                 agent_cfg = cfg.get("agent") or {}
                 prompt = str(agent_cfg.get("system_prompt", "") or "").strip() or None
 
@@ -501,6 +573,7 @@ class AgentPool:
                     reasoning_config=_load_reasoning_config(resolved_model),
                     service_tier=_load_service_tier(),
                     enabled_toolsets=_load_enabled_toolsets(),
+                    disabled_toolsets=_load_disabled_toolsets(),
                     platform=_bridge_platform(),
                     session_id=session_id,
                     session_db=self._db.get_for_profile(profile),
@@ -515,6 +588,9 @@ class AgentPool:
                     tool_complete_callback=self._tool_complete_callback(session_id),
                     clarify_callback=self._clarify_callback(session_id),
                 )
+                # Some native registries retain definitions after their transport shuts down.
+                # Never advertise those retired names in a newly built model tool snapshot.
+                self._filter_retired_mcp_tools(agent)
                 agent.compression_enabled = False
                 self._install_compression_hook(agent, session_id)
                 self._install_prepersist_dedup_hook(agent)
@@ -540,12 +616,28 @@ class AgentPool:
                         "resumed_message_count": 0,
                         "mcp_tool_count": len(discovered_mcp_tools),
                         "active_mcp_tool_count": len(mcp_tool_names),
+                        "mcp_generation": self._mcp_generation,
                         "db_error": self._db.error,
                         # This is an Agent-session policy, not a per-turn flag.
                         # Callers select it when the cached AIAgent is created.
                         "background_delegation_enabled": background_delegation_enabled is not False,
                     },
                 )
+                if refresh_session is not None:
+                    refresh_session.agent = agent
+                    refresh_session.config.update({
+                        "profile": session.config["profile"],
+                        "model": session.config["model"],
+                        "provider": session.config["provider"],
+                        "base_url": session.config["base_url"],
+                        "api_mode": session.config["api_mode"],
+                        "mcp_generation": self._mcp_generation,
+                        "mcp_tool_count": len(discovered_mcp_tools),
+                        "active_mcp_tool_count": len(mcp_tool_names),
+                        "mcp_restore_history": True,
+                    })
+                    refresh_session.last_used_at = time.time()
+                    session = refresh_session
                 self._install_boundary_interrupt(session)
                 session.config["boundary_interrupt_supported"] = session.boundary_supported
                 if session.boundary_error:
@@ -566,12 +658,14 @@ class AgentPool:
         model: str,
         provider: str,
         profile: str | None,
+        gateway_runtime: dict[str, Any] | None = None,
     ) -> None:
         requested_model = str(model or "").strip()
         requested_provider = str(provider or "").strip()
         if not requested_model:
             return
         old_model = str(session.config.get("model") or getattr(session.agent, "model", "") or "")
+        session.pending_gateway_runtime = gateway_runtime
         session.config["pending_model_switch"] = {
             "model": requested_model,
             "provider": requested_provider,
@@ -591,6 +685,7 @@ class AgentPool:
         profile: str | None,
         *,
         add_note: bool,
+        gateway_runtime: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         requested_model = str(model or "").strip()
         requested_provider = str(provider or "").strip()
@@ -602,7 +697,7 @@ class AgentPool:
 
         with _profile_env(target_profile):
             _refresh_worker_profile_env()
-            runtime = _resolve_runtime(requested_model, requested_provider or None)
+            runtime = gateway_runtime or _resolve_runtime(requested_model, requested_provider or None)
 
         resolved_provider = str(runtime.get("provider") or requested_provider or "")
         effective_provider = requested_provider or resolved_provider
@@ -635,6 +730,7 @@ class AgentPool:
                 "api_mode": runtime.get("api_mode"),
             })
             session.config.pop("pending_model_switch", None)
+            session.pending_gateway_runtime = None
             session.last_used_at = time.time()
             return {
                 "switched": True,
@@ -670,6 +766,7 @@ class AgentPool:
             "api_mode": runtime.get("api_mode"),
         })
         session.config.pop("pending_model_switch", None)
+        session.pending_gateway_runtime = None
         if add_note:
             session.config["pending_model_switch_note"] = self._model_switch_note(
                 old_model,
@@ -741,6 +838,7 @@ class AgentPool:
                 str(pending.get("provider") or ""),
                 str(pending.get("profile") or session.config.get("profile") or "default"),
                 add_note=False,
+                gateway_runtime=session.pending_gateway_runtime,
             )
         except Exception as exc:
             print(
@@ -766,6 +864,7 @@ class AgentPool:
         model: str,
         provider: str | None = None,
         profile: str | None = None,
+        gateway_runtime: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         requested_model = str(model or "").strip()
         requested_provider = str(provider or "").strip()
@@ -789,6 +888,7 @@ class AgentPool:
                     requested_model,
                     requested_provider,
                     profile or str(session.config.get("profile") or "default"),
+                    gateway_runtime=gateway_runtime,
                 )
                 return {
                     "session_id": session_id,
@@ -805,6 +905,7 @@ class AgentPool:
                 requested_provider,
                 profile or str(session.config.get("profile") or "default"),
                 add_note=True,
+                gateway_runtime=gateway_runtime,
             )
 
     def _install_prepersist_dedup_hook(self, agent: Any) -> None:
@@ -973,6 +1074,7 @@ class AgentPool:
         provider: str | None = None,
         workspace: str | None = None,
         background_delegation_enabled: bool | None = None,
+        gateway_runtime: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         session = self.get_or_create(
             session_id,
@@ -980,6 +1082,7 @@ class AgentPool:
             model=model,
             provider=provider,
             background_delegation_enabled=background_delegation_enabled,
+            gateway_runtime=gateway_runtime,
         )
         session_cwd_bound = _bind_session_workspace_cwd(session.session_id, workspace)
         try:
@@ -1434,28 +1537,108 @@ class AgentPool:
         return callback
 
     def _clarify_callback(self, session_id: str):
-        def callback(question: str, choices: list[str] | None = None) -> str:
-            clarify_id = uuid.uuid4().hex
-            response_queue: queue.Queue[str] = queue.Queue(maxsize=1)
+        def callback(
+            question: str | list[dict[str, Any]],
+            choices: list[str] | None = None,
+            *,
+            multi_select: bool = False,
+            questions: list[dict[str, Any]] | None = None,
+        ) -> str | dict[str, Any]:
+            # 5eea87882a calls callback(normalized_questions) directly. Earlier
+            # kernels use two positional arguments, optionally with batch kwargs.
+            modern = isinstance(question, list)
+            batch = question if modern else questions
+            deadline = time.monotonic() + CLARIFY_TIMEOUT_SECONDS
             with self._lock:
-                self._clarify_requests[clarify_id] = response_queue
+                session = self._sessions.get(session_id)
+                run_id = session.current_run_id if session else None
+            if session is None:
+                notice = "The Studio session is no longer available; no question was delivered."
+                if modern:
+                    return {"answers": {}, "outcome": "undelivered", "notice": notice}
+                if batch is not None:
+                    return {"answers": {}, "timed_out": True, "notice": notice}
+                return ""
+
+            def cancelled() -> bool:
+                with self._lock:
+                    return (
+                        self._sessions.get(session_id) is not session
+                        or session.current_run_id != run_id
+                        or bool(getattr(session.agent, "_interrupt_requested", False))
+                    )
+
+            if batch is not None:
+                answers: dict[str, Any] = {}
+                outcome = "submitted"
+                for entry in batch:
+                    response, outcome = self._clarify_question(
+                        session_id, entry["question"], entry.get("choices"),
+                        bool(entry.get("multi_select")), deadline, cancelled,
+                    )
+                    if outcome != "submitted":
+                        break
+                    # None is a deliberate skip; absent qids remain unanswered.
+                    answers[entry["qid"]] = response if response else None
+                if modern:
+                    return {"answers": answers, "outcome": outcome}
+                return {"answers": answers, "timed_out": outcome != "submitted"}
+
+            response, outcome = self._clarify_question(
+                session_id, str(question or ""), choices, multi_select, deadline, cancelled,
+            )
+            if outcome == "timed_out":
+                from tools import clarify_tool
+
+                return getattr(clarify_tool, "TIMEOUT_RESPONSE", "[user did not respond within 5m]")
+            return response or ""
+
+        return callback
+
+    def _clarify_question(
+        self, session_id: str, question: str, choices: list[str] | None,
+        multi_select: bool, deadline: float, cancelled: Callable[[], bool],
+    ) -> tuple[str | None, str]:
+        if cancelled():
+            return None, "cancelled"
+        if time.monotonic() >= deadline:
+            return None, "timed_out"
+        clarify_id = uuid.uuid4().hex
+        response_queue: queue.Queue[str] = queue.Queue(maxsize=1)
+        with self._lock:
+            self._clarify_requests[clarify_id] = response_queue
+        outcome = "submitted"
+        try:
             self._append_event(session_id, {
                 "event": "clarify.requested",
                 "clarify_id": clarify_id,
-                "question": str(question or ""),
+                "question": question,
                 "choices": list(choices) if choices else None,
-                "timeout_ms": 300_000,
+                "multi_select": multi_select,
+                "timeout_ms": max(0, int((deadline - time.monotonic()) * 1000)),
             })
-            try:
-                user_response = response_queue.get(timeout=300)
-            except queue.Empty:
-                user_response = "[user did not respond within 5m]"
-            finally:
-                with self._lock:
-                    self._clarify_requests.pop(clarify_id, None)
-            return user_response
-
-        return callback
+            while True:
+                if cancelled():
+                    outcome = "cancelled"
+                    return None, outcome
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    outcome = "timed_out"
+                    return None, outcome
+                try:
+                    return response_queue.get(timeout=min(0.1, remaining)), outcome
+                except queue.Empty:
+                    continue
+        finally:
+            with self._lock:
+                self._clarify_requests.pop(clarify_id, None)
+            if outcome != "submitted":
+                self._append_event(session_id, {
+                    "event": "clarify.resolved",
+                    "clarify_id": clarify_id,
+                    "resolved": False,
+                    "reason": outcome,
+                })
 
     def _approval_dispatcher(self, command: str, description: str, *, allow_permanent: bool = True) -> str:
         session_id = str(getattr(self._run_context, "session_id", "") or "")
@@ -1678,6 +1861,7 @@ class AgentPool:
         source: str | None = None,
         reasoning_effort: str | None = None,
         background_delegation_enabled: bool | None = None,
+        gateway_runtime: dict[str, Any] | None = None,
     ) -> RunRecord:
         session = self.get_or_create(
             session_id,
@@ -1685,6 +1869,7 @@ class AgentPool:
             model=model,
             provider=provider,
             background_delegation_enabled=background_delegation_enabled,
+            gateway_runtime=gateway_runtime,
         )
         # Install after agent construction so any runtime plugin initialization
         # has completed. Rechecking on every run also recovers from a forced
@@ -1699,21 +1884,27 @@ class AgentPool:
         with session.lock:
             if session.running:
                 raise RuntimeError(f"session {session_id} is already running")
+            if session.config.pop("mcp_restore_history", False) and conversation_history is None:
+                conversation_history = copy.deepcopy(session.history)
             run_id = uuid.uuid4().hex
             record = RunRecord(run_id=run_id, session_id=session_id)
             with self._lock:
                 self._runs[run_id] = record
-            session.running = True
+                session.running = True
             session.current_run_id = run_id
             session.boundary_phase = "model"
             session.boundary_pending_run_id = None
             session.boundary_reached_run_id = None
             session.last_used_at = time.time()
-            session_cwd_bound = _bind_session_workspace_cwd(session.session_id, workspace)
+            session_cwd_bound = False
             try:
+                session_cwd_bound = _bind_session_workspace_cwd(session.session_id, workspace)
                 context_event = self._bridge_context_ready_event(session, instructions, profile)
                 if context_event:
                     record.events.append(_jsonable(context_event))
+            except BaseException as exc:
+                self._fail_unexpected_run(session, record, exc)
+                raise
             finally:
                 if session_cwd_bound:
                     _clear_session_workspace_cwd()
@@ -1724,10 +1915,50 @@ class AgentPool:
             daemon=True,
             name=f"hermes-bridge-run-{run_id[:8]}",
         )
-        thread.start()
+        # Status readers take the same session lock, so they cannot mistake a
+        # registered thread which has not started yet for a dead worker.
+        with session.lock:
+            record.worker_thread = thread
+            try:
+                thread.start()
+            except BaseException as exc:
+                self._fail_unexpected_run(session, record, exc)
+                raise
         return record
 
     def _run_chat(self, session: AgentSession, record: RunRecord, message: Any, storage_message: Any | None = None, instructions: str | None = None, conversation_history: list[dict[str, Any]] | None = None, profile: str | None = None, force_compress: bool = False, workspace: str | None = None, source: str | None = None, reasoning_effort: str | None = None) -> None:
+        try:
+            self._run_chat_inner(session, record, message, storage_message, instructions, conversation_history, profile, force_compress, workspace, source, reasoning_effort)
+        except BaseException as exc:
+            # Includes setup failures outside the inner try and SystemExit from
+            # agent/tool code. These terminate this run, not the bridge worker.
+            self._fail_unexpected_run(session, record, exc)
+        finally:
+            self._fail_unexpected_run(session, record, RuntimeError("Hermes run worker exited without a terminal result"))
+            self.refresh_mcp_if_idle()
+
+    def _fail_unexpected_run(self, session: AgentSession | None, record: RunRecord, exc: BaseException) -> None:
+        with session.lock if session else self._lock:
+            if record.status != "running":
+                return
+            record.error = f"{type(exc).__name__}: {exc}"
+            record.result = {"error": record.error, "failed": True}
+            record.ended_at = time.time()
+            record.status = "error"
+            if session is not None and session.current_run_id == record.run_id:
+                self._reset_boundary_run(session, record.run_id)
+                session.running = False
+                session.current_run_id = None
+                session.last_used_at = time.time()
+
+    def _check_run_worker(self, record: RunRecord) -> None:
+        with self._lock:
+            session = self._sessions.get(record.session_id)
+        with session.lock if session else self._lock:
+            if record.status == "running" and record.worker_thread is not None and not record.worker_thread.is_alive():
+                self._fail_unexpected_run(session, record, RuntimeError("Hermes run worker exited without a terminal result"))
+
+    def _run_chat_inner(self, session: AgentSession, record: RunRecord, message: Any, storage_message: Any | None = None, instructions: str | None = None, conversation_history: list[dict[str, Any]] | None = None, profile: str | None = None, force_compress: bool = False, workspace: str | None = None, source: str | None = None, reasoning_effort: str | None = None) -> None:
         with _profile_env(profile):
             _refresh_approval_allowlist()
             _install_execute_code_approval_memory_patch()
@@ -1900,7 +2131,6 @@ class AgentPool:
                 with session.lock:
                     if isinstance(result.get("messages"), list):
                         session.history = result["messages"]
-                    record.status = "interrupted" if result.get("interrupted") else "complete"
                     record.result = result
                     record.ended_at = time.time()
                     if boundary_interrupted:
@@ -1910,6 +2140,7 @@ class AgentPool:
                             "finish_reason": "boundary_interrupt",
                         })
                         self._clear_completed_boundary_interrupt(session.agent)
+                    record.status = "interrupted" if result.get("interrupted") else "complete"
                     self._reset_boundary_run(session, record.run_id)
                     session.running = False
                     session.current_run_id = None
@@ -1933,7 +2164,6 @@ class AgentPool:
                         pass
                 with session.lock:
                     if boundary_interrupted:
-                        record.status = "interrupted"
                         record.error = None
                         record.result = {
                             "interrupted": True,
@@ -1947,10 +2177,10 @@ class AgentPool:
                         })
                         self._clear_completed_boundary_interrupt(session.agent)
                     else:
-                        record.status = "error"
                         record.error = str(exc)
                         record.result = {"error": str(exc), "traceback": traceback.format_exc()}
                     record.ended_at = time.time()
+                    record.status = "interrupted" if boundary_interrupted else "error"
                     self._reset_boundary_run(session, record.run_id)
                     session.running = False
                     session.current_run_id = None
@@ -2082,6 +2312,21 @@ class AgentPool:
                 del session.background_events[:-self.MAX_BACKGROUND_EVENTS_PER_SESSION]
             return interrupted
 
+    def _stop_session_processes(self, session_id: str) -> int:
+        try:
+            from tools.process_registry import process_registry
+        except ImportError:
+            return 0
+        stopped = 0
+        for process in process_registry.list_sessions(session_key=session_id):
+            if process.get("status") != "running":
+                continue
+            process_id = str(process.get("session_id") or "")
+            if process_id:
+                process_registry.kill_process(process_id)
+                stopped += 1
+        return stopped
+
     def interrupt(self, session_id: str, message: str | None = None) -> dict[str, Any]:
         with self._lock:
             session = self._sessions.get(session_id)
@@ -2101,6 +2346,10 @@ class AgentPool:
         if not hasattr(session.agent, "interrupt"):
             raise RuntimeError("agent does not support interrupt")
         session.agent.interrupt(message)
+        try:
+            self._stop_session_processes(session_id)
+        except Exception as exc:
+            print(f"[hermes_bridge] session process cleanup failed: {exc}", file=sys.stderr, flush=True)
         self._cancel_pending_approvals_for_generation(session_id, interrupted_run_id)
         deadline = time.time() + 10.0
         synced = False
@@ -2161,6 +2410,25 @@ class AgentPool:
                 "reason": "Session interrupted",
             })
         return len(terminal_queues) + len(gateway_approvals)
+
+    def cancel_boundary_interrupt(self, session_id: str, expected_run_id: str | None = None) -> dict[str, Any]:
+        with self._lock:
+            session = self._sessions.get(session_id)
+        if session is None:
+            return {"status": "not_running", "session_id": session_id}
+        with session.lock:
+            run_id = session.current_run_id
+            if not expected_run_id or run_id != expected_run_id:
+                return {"status": "run_mismatch", "session_id": session_id}
+            # Model cancellation may already have escaped the worker thread.
+            # Only a still-running tool batch has a safely recallable boundary.
+            if session.boundary_reached_run_id == run_id or session.boundary_phase != "tool_batch":
+                return {"status": "too_late", "session_id": session_id}
+            if session.boundary_pending_run_id != run_id:
+                return {"status": "not_pending", "session_id": session_id}
+            session.boundary_pending_run_id = None
+            self._clear_completed_boundary_interrupt(session.agent)
+            return {"status": "cancelled", "session_id": session_id, "run_id": run_id}
 
     def request_boundary_interrupt(
         self,
@@ -2339,6 +2607,19 @@ class AgentPool:
         arg = parts[1] if len(parts) > 1 else ""
 
         with _profile_env(profile):
+            if name == "plan":
+                try:
+                    from agent.plan_prompt import build_plan_prompt
+                except ImportError:
+                    return {
+                        "session_id": session_id, "command": name, "handled": False,
+                        "type": "plan",
+                        "message": "/plan requires a newer Hermes Agent runtime with agent.plan_prompt.",
+                    }
+                return {
+                    "session_id": session_id, "command": name, "handled": True,
+                    "type": "plan", "message": build_plan_prompt(arg),
+                }
             if name == "goal":
                 return self._dispatch_goal_command(session_id, arg)
             if name == "subgoal":
@@ -2697,6 +2978,7 @@ class AgentPool:
             record = self._runs.get(run_id)
         if record is None:
             raise KeyError(f"unknown run: {run_id}")
+        self._check_run_worker(record)
         return {
             "run_id": record.run_id,
             "session_id": record.session_id,
@@ -2715,6 +2997,10 @@ class AgentPool:
             record = self._runs.get(run_id)
         if record is None:
             raise KeyError(f"unknown run: {run_id}")
+        self._check_run_worker(record)
+        # Read status first. If the worker finishes while deltas are copied,
+        # report running once more so the next poll can include the final tail.
+        status = record.status
         cursor = max(0, int(cursor or 0))
         deltas = list(record.deltas)
         next_cursor = len(deltas)
@@ -2725,12 +3011,12 @@ class AgentPool:
         return {
             "run_id": record.run_id,
             "session_id": record.session_id,
-            "status": record.status,
+            "status": status,
             "delta": "".join(deltas[cursor:]),
             "cursor": next_cursor,
             "output": "".join(deltas),
-            "done": record.status != "running",
-            "result": record.result if record.status != "running" else None,
+            "done": status != "running",
+            "result": record.result if status != "running" else None,
             "error": record.error,
             "events": new_events,
             "event_cursor": next_event_cursor,
@@ -2847,6 +3133,7 @@ class AgentPool:
     def status(self, session_id: str) -> dict[str, Any]:
         with self._lock:
             session = self._sessions.get(session_id)
+            record = self._runs.get(session.current_run_id) if session else None
         if session is None:
             return {
                 "session_id": session_id,
@@ -2854,6 +3141,8 @@ class AgentPool:
                 "running": False,
                 "message_count": 0,
             }
+        if record is not None:
+            self._check_run_worker(record)
         with session.lock:
             return {
                 "session_id": session_id,
@@ -2876,7 +3165,18 @@ class AgentPool:
     def list_sessions(self) -> dict[str, Any]:
         with self._lock:
             sessions = list(self._sessions.values())
+        running_processes = 0
+        try:
+            from tools.process_registry import process_registry
+
+            running_processes = sum(
+                1 for process in process_registry.list_sessions()
+                if process.get("status") == "running"
+            )
+        except ImportError:
+            pass
         return {
+            **({"running_count": running_processes} if running_processes else {}),
             "sessions": [
                 {
                     "session_id": s.session_id,

@@ -1,5 +1,7 @@
 <script setup lang="ts">
+import { fetchAgentAvailabilitySnapshot } from '@/api/agent-status'
 import PageSidebar from "@/components/layout/PageSidebar.vue"
+import SidebarResizeHandle from "@/components/layout/SidebarResizeHandle.vue"
 import { usePageSidebarState } from "@/composables/usePageSidebar"
 import PageLoading from '@/components/common/PageLoading.vue'
 import PageHeader from '@/components/layout/PageHeader.vue'
@@ -12,6 +14,7 @@ import { useProfilesStore } from '@/stores/hermes/profiles'
 import { NSpin, NButton, NDropdown, NPopconfirm, NTooltip, useMessage, type DropdownOption } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import { getSourceLabel } from '@/shared/session-display'
+import { historySessionSource, sessionAgentFields } from '@/utils/hermes/session-agent'
 import { copyToClipboard } from '@/utils/clipboard'
 import { mergeTaskPlanMessages } from '@/utils/task-plan'
 import HistoryMessageList from '@/components/hermes/chat/HistoryMessageList.vue'
@@ -39,7 +42,7 @@ const routeProfile = computed(() => {
   return typeof value === 'string' && value.trim() ? value : null
 })
 
-const effectiveHistoryProfile = computed(() => profilesStore.activeProfileName || routeProfile.value || null)
+const effectiveHistoryProfile = computed(() => routeProfile.value || profilesStore.activeProfileName || null)
 
 // Hermes history sessions grouped by source, including Web UI/API Server.
 const hermesSessions = ref<SessionSummary[]>([])
@@ -52,6 +55,7 @@ const pageLoading = computed(() => initializingPage.value || hermesSessionsLoadi
 let historySessionRequestId = 0
 let pendingHistorySessionKey: string | null = null
 let disposed = false
+let historyNavigationId = 0
 // History page's own selected session (independent from chatStore)
 const historySessionId = ref<string | null>(null)
 const historySession = ref<Session | null>(null)
@@ -80,13 +84,14 @@ function handleOutlineNavigate(target: { messageId: string; anchorId: string }) 
 
 async function loadHermesSessions() {
   const requestId = ++hermesSessionsRequestId
+  const requestedProfile = effectiveHistoryProfile.value
   hermesSessionsLoading.value = true
   hermesSessionsLoadFailed.value = false
   try {
     const includedIds: string[] = []
     if (routeSessionId.value && !includedIds.includes(routeSessionId.value)) includedIds.push(routeSessionId.value)
-    const result = await fetchHermesSessionGroups(HISTORY_GROUP_PAGE_SIZE, effectiveHistoryProfile.value, includedIds)
-    if (requestId !== hermesSessionsRequestId) return
+    const result = await fetchHermesSessionGroups(HISTORY_GROUP_PAGE_SIZE, requestedProfile, includedIds)
+    if (disposed || requestId !== hermesSessionsRequestId || requestedProfile !== effectiveHistoryProfile.value) return false
     const sessionsByKey = new Map<string, SessionSummary>()
     for (const session of result.groups.flatMap(group => group.sessions)) {
       sessionsByKey.set(`${session.profile || 'default'}\u0000${session.id}`, session)
@@ -99,10 +104,12 @@ async function loadHermesSessions() {
     sourceOffsets.value = Object.fromEntries(result.groups.map(group => [group.source, group.sessions.length]))
     sourceLoading.value = {}
     hermesSessionsLoaded.value = true
+    return true
   } catch (err) {
     console.error('Failed to load Hermes sessions:', err)
     // An empty list here would read as "no sessions"; show the failure with a retry instead.
     if (requestId === hermesSessionsRequestId) hermesSessionsLoadFailed.value = true
+    return false
   } finally {
     if (requestId === hermesSessionsRequestId) {
       hermesSessionsLoading.value = false
@@ -206,28 +213,13 @@ function mapHistoryMessages(messages: HermesMessage[]): Session['messages'] {
   })
 }
 
-function codingAgentFields(summary: SessionSummary): Pick<Session, 'agent' | 'agentSessionId' | 'agentNativeSessionId' | 'codingAgentId' | 'codingAgentMode'> {
-  const isCodingAgentSession = summary.source === 'coding_agent' || summary.agent === 'claude' || summary.agent === 'codex' || summary.agent === 'pi' || summary.agent === 'grok' || (summary.agent === 'cursor' || summary.agent === 'antigravity') || (summary.agent === 'opencode' || summary.agent === 'dsh')
-  return {
-    agent: summary.agent || undefined,
-    agentSessionId: summary.agent_session_id || undefined,
-    agentNativeSessionId: summary.agent_native_session_id || undefined,
-    codingAgentId: summary.agent === 'codex' ? 'codex' : summary.agent === 'pi' ? 'pi' : summary.agent === 'grok' ? 'grok' : (summary.agent === 'cursor' || summary.agent === 'antigravity') ? summary.agent : summary.agent === 'dsh' ? 'dsh' : summary.agent === 'opencode' ? 'opencode' : summary.agent === 'claude' ? 'claude-code' : undefined,
-    codingAgentMode: isCodingAgentSession
-      ? (summary.agent_mode === 'global' || summary.agent_mode === 'scoped'
-          ? summary.agent_mode
-          : summary.provider === 'global' ? 'global' : 'scoped')
-      : undefined,
-  }
-}
-
 function sessionFromSummary(summary: SessionSummary, messages: Session['messages'] = []): Session {
   return {
     id: summary.id,
     profile: summary.profile || undefined,
     title: summary.title || '',
-    source: summary.source,
-    ...codingAgentFields(summary),
+    source: historySessionSource(summary),
+    ...sessionAgentFields(summary),
     createdAt: summary.started_at * 1000,
     updatedAt: (summary.last_active || summary.ended_at || summary.started_at) * 1000,
     model: summary.model,
@@ -286,7 +278,8 @@ async function loadHistorySession(sessionId: string, profile?: string | null) {
         id: sessionDetail.id,
         profile: sessionDetail.profile || sessionProfile || undefined,
         title: sessionDetail.title || '',
-        source: sessionDetail.source,
+        source: historySessionSource(sessionDetail),
+        ...sessionAgentFields(sessionDetail),
         createdAt: sessionDetail.started_at * 1000,
         updatedAt: (sessionDetail.last_active || sessionDetail.started_at) * 1000,
         model: sessionDetail.model,
@@ -349,10 +342,11 @@ async function loadOlderHistoryMessages(sessionId: string): Promise<boolean> {
 }
 
 function openHistorySession(sessionId: string, profile?: string | null) {
+  // Ordinary list navigation follows the active profile; only explicit links stay scoped.
   return router.push({
     name: 'hermes.historySession',
     params: { sessionId },
-    query: profile ? { profile } : undefined,
+    query: routeProfile.value && profile ? { profile } : undefined,
   })
 }
 
@@ -371,14 +365,14 @@ async function openDefaultHistorySession(replace = false) {
     return
   }
 
-  if (collapsedGroups.value.has(firstSession.source)) {
-    collapsedGroups.value = new Set([...collapsedGroups.value].filter(source => source !== firstSession.source))
+  if (collapsedGroups.value.has(historySessionSource(firstSession))) {
+    collapsedGroups.value = new Set([...collapsedGroups.value].filter(source => source !== historySessionSource(firstSession)))
   }
 
   const location = {
     name: 'hermes.historySession',
     params: { sessionId: firstSession.id },
-    query: firstSession.profile ? { profile: firstSession.profile } : undefined,
+    query: routeProfile.value && firstSession.profile ? { profile: firstSession.profile } : undefined,
   }
   if (replace) await router.replace(location)
   else await router.push(location)
@@ -396,8 +390,8 @@ async function syncRouteSession() {
     return
   }
 
-  if (collapsedGroups.value.has(summary.source)) {
-    collapsedGroups.value = new Set([...collapsedGroups.value].filter(source => source !== summary.source))
+  if (collapsedGroups.value.has(historySessionSource(summary))) {
+    collapsedGroups.value = new Set([...collapsedGroups.value].filter(source => source !== historySessionSource(summary)))
     localStorage.setItem('hermes_collapsed_groups', JSON.stringify([...collapsedGroups.value]))
   }
 
@@ -412,6 +406,7 @@ async function syncRouteSession() {
 
 
 onMounted(async () => {
+  void fetchAgentAvailabilitySnapshot().catch(() => {})
 
 
 
@@ -438,28 +433,40 @@ onUnmounted(() => {
 
 watch(
   [routeSessionId, routeProfile],
-  async ([sessionId]) => {
+  async ([sessionId, profile], [, previousProfile]) => {
+    const navigationId = ++historyNavigationId
+    const requestedRoute = route.fullPath
     if (!sessionId) {
       historySessionRequestId++
       historySessionLoading.value = false
       historySessionId.value = null
       historySession.value = null
-      return
     }
     if (!hermesSessionsLoaded.value) return
-    if (routeProfile.value && !hermesSessions.value.some(s => s.profile === routeProfile.value)) {
-      await loadHermesSessions()
+    if (profile !== previousProfile || (profile && !hermesSessions.value.some(s => s.profile === profile))) {
+      if (!await loadHermesSessions()) return
     }
-    await syncRouteSession()
+    if (disposed || navigationId !== historyNavigationId || route.fullPath !== requestedRoute) return
+    if (sessionId) await syncRouteSession()
   },
 )
 
-watch(() => profilesStore.activeProfileName, async () => {
-  if (!hermesSessionsLoaded.value) return
+let lastHistoryProfile = profilesStore.activeProfileName
+watch([() => profilesStore.activeProfileName, () => profilesStore.switching], async () => {
   if (profilesStore.switching) return
+  const profile = profilesStore.activeProfileName
+  const previousProfile = lastHistoryProfile
+  lastHistoryProfile = profile
+  if (!hermesSessionsLoaded.value || profile === previousProfile || routeProfile.value) return
+  const navigationId = historyNavigationId
+  const requestedRoute = route.fullPath
+  historySessionRequestId++
+  historySessionLoading.value = false
   historySessionId.value = null
   historySession.value = null
-  await loadHermesSessions()
+  const loaded = await loadHermesSessions()
+  if (!loaded || disposed || navigationId !== historyNavigationId || profilesStore.switching || profilesStore.activeProfileName !== profile
+    || routeProfile.value || route.fullPath !== requestedRoute) return
   await openDefaultHistorySession(true)
 })
 
@@ -469,8 +476,8 @@ function sessionSummaryToSession(summary: SessionSummary): Session {
     id: summary.id,
     profile: summary.profile || undefined,
     title: summary.title || '',
-    source: summary.source,
-    ...codingAgentFields(summary),
+    source: historySessionSource(summary),
+    ...sessionAgentFields(summary),
     createdAt: summary.started_at * 1000,
     updatedAt: (summary.last_active || summary.started_at) * 1000,
     model: summary.model,
@@ -559,6 +566,10 @@ const allSessionsSelected = computed(() =>
 )
 
 // Source sort order: api_server first, cron last, others alphabetical
+function historySourceLabel(source: string): string {
+  return source === 'builtin_agent' ? t('chat.builtinAgent') : source ? getSourceLabel(source) : t('chat.other')
+}
+
 function sourceSortKey(source: string): number {
   if (source === 'api_server') return -1
   if (source === 'cron') return 999
@@ -588,7 +599,7 @@ const groupedSessions = computed<SessionGroup[]>(() => {
   const map = new Map<string, Session[]>()
   for (const s of historySessions.value) {
     if (s.isPinned) continue
-    const key = s.source || ''
+    const key = historySessionSource(s)
     if (!map.has(key)) map.set(key, [])
     map.get(key)!.push(s)
   }
@@ -607,7 +618,7 @@ const groupedSessions = computed<SessionGroup[]>(() => {
     const sessions = sortSessionsWithActiveFirst(map.get(key) || [])
     return {
       source: key,
-      label: key ? getSourceLabel(key) : t('chat.other'),
+      label: historySourceLabel(key),
       sessions,
       hasMore: Boolean(sourceHasMore.value[key]),
       loading: Boolean(sourceLoading.value[key]),
@@ -673,7 +684,7 @@ function toggleGroup(source: string) {
 
 watch(groupedSessions, groups => {
   if (localStorage.getItem('hermes_collapsed_groups') !== null) {
-    const activeSource = historySession.value?.source
+    const activeSource = historySessionSource(historySession.value)
     if (activeSource && collapsedGroups.value.has(activeSource)) {
       collapsedGroups.value = new Set([...collapsedGroups.value].filter(source => source !== activeSource))
       localStorage.setItem('hermes_collapsed_groups', JSON.stringify([...collapsedGroups.value]))
@@ -699,7 +710,7 @@ const activeSessionTitle = computed(() =>
 )
 
 const activeSessionSource = computed(() =>
-  historySession.value?.source || '',
+  historySessionSource(historySession.value),
 )
 
 async function copySessionId(id?: string) {
@@ -809,10 +820,11 @@ async function handleDeleteSession(id: string, profile?: string | null) {
   }
 
   hermesSessions.value = hermesSessions.value.filter(s => s.id !== id)
-  if (summary?.source && sourceOffsets.value[summary.source]) {
+  const source = historySessionSource(summary)
+  if (source && sourceOffsets.value[source]) {
     sourceOffsets.value = {
       ...sourceOffsets.value,
-      [summary.source]: Math.max(0, sourceOffsets.value[summary.source] - 1),
+      [source]: Math.max(0, sourceOffsets.value[source] - 1),
     }
   }
 
@@ -878,6 +890,7 @@ function handleBatchDeleteConfirm() {
   <PageLoading :show="pageLoading" initial-only class="history-panel">
     <PageSidebar>
     <aside class="session-list" :class="{ collapsed: !showSessions }">
+      <SidebarResizeHandle />
       <div v-if="showSessions" class="page-sidebar-top">
         <PageSidebarNav active="history">
           <template #actions>
@@ -1070,7 +1083,7 @@ function handleBatchDeleteConfirm() {
             @toggle="showSessions = !showSessions"
           />
           <span class="header-session-title">{{ activeSessionTitle }}</span>
-          <span v-if="activeSessionSource" class="source-badge">{{ getSourceLabel(activeSessionSource) }}</span>
+          <span v-if="activeSessionSource" class="source-badge">{{ historySourceLabel(activeSessionSource) }}</span>
         </div>
         <div v-if="historySession" class="header-actions">
           <NTooltip trigger="hover">
@@ -1125,7 +1138,7 @@ function handleBatchDeleteConfirm() {
   height: 100%;
   position: relative;
   overflow: hidden;
-  background: $bg-card;
+  background: var(--theme-card-bg, $bg-card);
 }
 
 .history-content-wrapper {
@@ -1144,12 +1157,13 @@ function handleBatchDeleteConfirm() {
 }
 
 .session-list {
+  position: relative;
   width: $sidebar-width;
   min-height: 0;
   align-self: stretch;
   margin: 0;
-  background: $bg-sidebar-surface;
-  border-inline-end: 1px solid $border-color;
+  background: var(--theme-sidebar-bg, $bg-sidebar-surface);
+  border-inline-end: var(--border-width, 1px) solid $border-color;
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
@@ -1202,14 +1216,14 @@ function handleBatchDeleteConfirm() {
 
 .page-sidebar-top {
   flex-shrink: 0;
-  padding: 12px;
+  padding: calc(12px * var(--spacing-scale, 1));
 }
 
 .session-list-toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: calc(8px * var(--spacing-scale, 1));
   margin-top: 8px;
 }
 
@@ -1217,14 +1231,14 @@ function handleBatchDeleteConfirm() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px;
+  padding: calc(12px * var(--spacing-scale, 1));
   flex-shrink: 0;
 }
 
 .session-list-actions {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: calc(4px * var(--spacing-scale, 1));
   height: 22px;
 
   .n-button { height: 22px; min-height: 22px; }
@@ -1240,7 +1254,7 @@ function handleBatchDeleteConfirm() {
   background: none;
   cursor: pointer;
   color: $text-secondary;
-  padding: 4px;
+  padding: calc(4px * var(--spacing-scale, 1));
   border-radius: $radius-sm;
 
   &:hover {
@@ -1250,15 +1264,15 @@ function handleBatchDeleteConfirm() {
 
 .session-selection-count {
   min-width: 0;
-  font-size: 12px;
+  font-size: calc(var(--font-size-base, 14px) * 12 / 14);
   color: $text-secondary;
 }
 
 .session-group-header {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 6px 10px 4px;
+  gap: calc(4px * var(--spacing-scale, 1));
+  padding: calc(6px * var(--spacing-scale, 1)) calc(10px * var(--spacing-scale, 1)) calc(4px * var(--spacing-scale, 1));
   cursor: pointer;
   user-select: none;
 
@@ -1275,7 +1289,7 @@ function handleBatchDeleteConfirm() {
 .session-group-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: calc(4px * var(--spacing-scale, 1));
   min-width: 0;
   padding: 0;
   border: 0;
@@ -1302,7 +1316,7 @@ function handleBatchDeleteConfirm() {
 }
 
 .session-group-label {
-  font-size: 10px;
+  font-size: calc(var(--font-size-base, 14px) * 10 / 14);
   font-weight: 600;
   color: $text-muted;
   text-transform: uppercase;
@@ -1310,7 +1324,7 @@ function handleBatchDeleteConfirm() {
 }
 
 .session-group-count {
-  font-size: 10px;
+  font-size: calc(var(--font-size-base, 14px) * 10 / 14);
   color: $text-muted;
   font-weight: 400;
 }
@@ -1328,13 +1342,13 @@ function handleBatchDeleteConfirm() {
 .session-items {
   flex: 1;
   overflow-y: auto;
-  padding: 0 6px 12px;
+  padding: 0 calc(6px * var(--spacing-scale, 1)) calc(12px * var(--spacing-scale, 1));
 }
 
 .session-loading,
 .session-empty {
-  padding: 16px 10px;
-  font-size: 12px;
+  padding: calc(16px * var(--spacing-scale, 1)) calc(10px * var(--spacing-scale, 1));
+  font-size: calc(var(--font-size-base, 14px) * 12 / 14);
   color: $text-muted;
   text-align: center;
 }
@@ -1343,7 +1357,7 @@ function handleBatchDeleteConfirm() {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: calc(8px * var(--spacing-scale, 1));
 }
 
 .chat-main {
@@ -1353,9 +1367,9 @@ function handleBatchDeleteConfirm() {
   overflow: hidden;
   min-width: 0;
   margin: 10px 10px 10px 0;
-  background: $bg-main-surface;
-  border: 1px solid $border-color;
-  border-radius: 14px;
+  background: var(--theme-content-bg, $bg-main-surface);
+  border: var(--border-width, 1px) solid $border-color;
+  border-radius: var(--radius-component, 14px);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
 
   &--sidebar-collapsed {
@@ -1367,15 +1381,15 @@ function handleBatchDeleteConfirm() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 21px 20px;
-  border-bottom: 1px solid $border-color;
+  padding: calc(21px * var(--spacing-scale, 1)) calc(20px * var(--spacing-scale, 1));
+  border-bottom: var(--border-width, 1px) solid $border-color;
   flex-shrink: 0;
 }
 
 .header-left {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: calc(8px * var(--spacing-scale, 1));
   overflow: hidden;
   flex: 1;
   min-width: 0;
@@ -1386,10 +1400,10 @@ function handleBatchDeleteConfirm() {
 }
 
 .header-session-title {
-  font-size: 16px;
+  font-size: calc(var(--font-size-base, 14px) * 16 / 14);
   font-weight: 600;
   color: $text-primary;
-  line-height: 28px;
+  line-height: var(--line-height, calc(var(--font-size-base, 14px) * 28 / 14));
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1398,21 +1412,21 @@ function handleBatchDeleteConfirm() {
 .source-badge {
   display: inline-flex;
   align-items: center;
-  font-size: 10px;
+  font-size: calc(var(--font-size-base, 14px) * 10 / 14);
   color: $text-muted;
   background: rgba($text-muted, 0.12);
-  padding: 1px 7px;
-  border-radius: 8px;
+  padding: calc(1px * var(--spacing-scale, 1)) calc(7px * var(--spacing-scale, 1));
+  border-radius: var(--radius-component, 8px);
   flex-shrink: 0;
   white-space: nowrap;
   height: 18px;
-  line-height: 16px;
+  line-height: var(--line-height, calc(var(--font-size-base, 14px) * 16 / 14));
 }
 
 .header-actions {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: calc(4px * var(--spacing-scale, 1));
   flex-shrink: 0;
 }
 
@@ -1425,7 +1439,7 @@ function handleBatchDeleteConfirm() {
   }
 
   .chat-header {
-    padding: 16px 12px 16px 52px;
+    padding: calc(16px * var(--spacing-scale, 1)) calc(12px * var(--spacing-scale, 1)) calc(16px * var(--spacing-scale, 1)) 52px;
   }
 
   .history-sidebar-toggle {

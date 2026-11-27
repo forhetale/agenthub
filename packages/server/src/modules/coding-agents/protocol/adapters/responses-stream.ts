@@ -1,9 +1,12 @@
+import type { ReasoningCodec } from '../../../studio/public/model-reasoning-codec'
 // Shared Responses stream translation for Coding Agent provider proxies.
 import { readSseFrameTexts } from '../sse'
-import { normalizeResponseFunctionCall, responseToolNamespaceForName } from './responses'
+import { type McpToolRoutes, normalizeResponseFunctionCall, responseToolNamespaceForName } from './responses'
 
 export interface ResponsesStreamAdapterTarget {
+  reasoningCodec?: ReasoningCodec
   model: string
+  mcpToolRoutes?: McpToolRoutes
   annotateMcpToolNamespaces?: boolean
 }
 
@@ -39,6 +42,9 @@ export async function* normalizeResponsesSseEvents(
   const createdAtByResponseId = new Map<string, number>()
 
   for await (const event of events) {
+    // Codex subscription streams include transport metadata outside the public
+    // Responses event schema. Typed CLI clients reject that extension.
+    if (event.type === 'response.metadata') continue
     const currentSequenceNumber = Number(event.data.sequence_number)
     const sequenceNumber = Number.isSafeInteger(currentSequenceNumber) && currentSequenceNumber >= 0
       ? currentSequenceNumber
@@ -98,6 +104,7 @@ function functionCallItem(input: {
   name: string
   arguments: string
   annotateNamespace?: boolean
+  mcpToolRoutes?: McpToolRoutes
   status?: 'in_progress' | 'completed'
 }) {
   if (input.name === 'tool_search') {
@@ -110,7 +117,7 @@ function functionCallItem(input: {
     }
   }
   const normalized = input.annotateNamespace
-    ? normalizeResponseFunctionCall(input.name, input.arguments)
+    ? normalizeResponseFunctionCall(input.name, input.arguments, input.mcpToolRoutes)
     : { name: input.name, arguments: input.arguments, namespace: undefined }
   const namespace = input.annotateNamespace ? normalized.namespace || responseToolNamespaceForName(input.name) : undefined
   return {
@@ -212,12 +219,25 @@ export async function* openAiChatSseToResponsesEvents(
   }
 
   for await (const chunk of stream) {
-    buffer += decoder.decode(chunk, { stream: true })
+    buffer += typeof chunk === 'string' ? chunk : decoder.decode(chunk, { stream: true })
     const parsed = parseSseFrames(buffer)
     buffer = parsed.rest
 
     for (const event of parsed.events) {
-      for (const dataLine of extractSseData(event)) {
+      const dataLines = extractSseData(event)
+      if (!dataLines.length && /(?:^|\n):/.test(event)) {
+        // SDKs discard SSE comments. Translate upstream keep-alives into a
+        // native Responses event so clients can distinguish waiting from a
+        // dead stream without inventing text or completing the response.
+        yield {
+          type: 'response.in_progress',
+          data: {
+            type: 'response.in_progress',
+            response: { id, object: 'response', status: 'in_progress', model: target.model, output: [] },
+          },
+        }
+      }
+      for (const dataLine of dataLines) {
         if (!dataLine || dataLine === '[DONE]') continue
         const data = safeJsonParse(dataLine)
         if (data?.usage && typeof data.usage === 'object') {
@@ -325,7 +345,7 @@ export async function* openAiChatSseToResponsesEvents(
               data: {
                 type: 'response.output_item.added',
                 output_index: call.outputIndex,
-                item: functionCallItem({ id: call.id, name: call.name, arguments: '', annotateNamespace: target.annotateMcpToolNamespaces, status: 'in_progress' }),
+                item: functionCallItem({ id: call.id, name: call.name, arguments: '', mcpToolRoutes: target.mcpToolRoutes, annotateNamespace: target.annotateMcpToolNamespaces, status: 'in_progress' }),
               },
             }
           }
@@ -355,6 +375,7 @@ export async function* openAiChatSseToResponsesEvents(
       type: 'reasoning',
       id: reasoningId,
       summary: [{ type: 'summary_text', text: reasoning }],
+      ...(target.reasoningCodec ? { encrypted_content: target.reasoningCodec.encode({ text: reasoning }) } : {}),
     }
     indexedOutput.push({ outputIndex: reasoningOutputIndex, item: reasoningItem })
     yield {
@@ -406,7 +427,7 @@ export async function* openAiChatSseToResponsesEvents(
   }
 
   for (const call of toolCalls.values()) {
-    const callItem = functionCallItem({ id: call.id, name: call.name, arguments: call.arguments || '{}', annotateNamespace: target.annotateMcpToolNamespaces })
+    const callItem = functionCallItem({ id: call.id, name: call.name, arguments: call.arguments || '{}', mcpToolRoutes: target.mcpToolRoutes, annotateNamespace: target.annotateMcpToolNamespaces })
     indexedOutput.push({ outputIndex: call.outputIndex, item: callItem })
     yield {
       type: 'response.output_item.done',
@@ -443,7 +464,7 @@ export async function* openAiResponsesSseToResponsesEvents(
   let buffer = ''
 
   for await (const chunk of stream) {
-    buffer += decoder.decode(chunk, { stream: true })
+    buffer += typeof chunk === 'string' ? chunk : decoder.decode(chunk, { stream: true })
     const parsed = parseSseFrames(buffer)
     buffer = parsed.rest
 
@@ -477,6 +498,7 @@ export async function* anthropicMessagesSseToResponsesEvents(
   let textOutputIndex = -1
   let text = ''
   let reasoning = ''
+  const nativeReasoning = new Map<number, any>()
   let usage: Record<string, unknown> | undefined
   const toolBlocks = new Map<number, { id: string; name: string; arguments: string; added: boolean; outputIndex: number }>()
 
@@ -553,7 +575,7 @@ export async function* anthropicMessagesSseToResponsesEvents(
         data: {
           type: 'response.output_item.added',
           output_index: block.outputIndex,
-          item: functionCallItem({ id: block.id, name: block.name, arguments: '', annotateNamespace: target.annotateMcpToolNamespaces, status: 'in_progress' }),
+          item: functionCallItem({ id: block.id, name: block.name, arguments: '', mcpToolRoutes: target.mcpToolRoutes, annotateNamespace: target.annotateMcpToolNamespaces, status: 'in_progress' }),
         },
       }
     }
@@ -561,7 +583,7 @@ export async function* anthropicMessagesSseToResponsesEvents(
   }
 
   for await (const chunk of stream) {
-    buffer += decoder.decode(chunk, { stream: true })
+    buffer += typeof chunk === 'string' ? chunk : decoder.decode(chunk, { stream: true })
     const parsed = parseSseFrames(buffer)
     buffer = parsed.rest
 
@@ -587,6 +609,10 @@ export async function* anthropicMessagesSseToResponsesEvents(
 
         if (eventName === 'content_block_start' || data?.type === 'content_block_start') {
           const contentBlock = data?.content_block || {}
+          if (contentBlock.type === 'thinking' || contentBlock.type === 'redacted_thinking') {
+            nativeReasoning.set(Number(data.index || 0), { ...contentBlock })
+            yield* ensureReasoning()
+          }
           if (contentBlock.type === 'tool_use') {
             yield* ensureTool(Number(data.index || 0), String(contentBlock.id || ''), String(contentBlock.name || 'tool'))
           }
@@ -594,6 +620,9 @@ export async function* anthropicMessagesSseToResponsesEvents(
 
         if (eventName === 'content_block_delta' || data?.type === 'content_block_delta') {
           const delta = data?.delta || {}
+          const nativeBlock = nativeReasoning.get(Number(data.index || 0))
+          if (nativeBlock && delta.type === 'thinking_delta') nativeBlock.thinking = (nativeBlock.thinking || '') + (delta.thinking || '')
+          if (nativeBlock && delta.type === 'signature_delta') nativeBlock.signature = (nativeBlock.signature || '') + (delta.signature || '')
           if (delta.type === 'thinking_delta' && delta.thinking) {
             const textDelta = String(delta.thinking)
             yield* ensureReasoning()
@@ -651,6 +680,7 @@ export async function* anthropicMessagesSseToResponsesEvents(
       type: 'reasoning',
       id: reasoningId,
       summary: [{ type: 'summary_text', text: reasoning }],
+      ...(target.reasoningCodec ? { encrypted_content: target.reasoningCodec.encode({ text: reasoning, native: { format: 'anthropic-thinking-blocks', data: [...nativeReasoning.values()] } }) } : {}),
     }
     indexedOutput.push({ outputIndex: reasoningOutputIndex, item: reasoningItem })
     yield {
@@ -701,7 +731,7 @@ export async function* anthropicMessagesSseToResponsesEvents(
     }
   }
   for (const block of toolBlocks.values()) {
-    const item = functionCallItem({ id: block.id, name: block.name, arguments: block.arguments || '{}', annotateNamespace: target.annotateMcpToolNamespaces })
+    const item = functionCallItem({ id: block.id, name: block.name, arguments: block.arguments || '{}', mcpToolRoutes: target.mcpToolRoutes, annotateNamespace: target.annotateMcpToolNamespaces })
     indexedOutput.push({ outputIndex: block.outputIndex, item })
     yield {
       type: 'response.output_item.done',

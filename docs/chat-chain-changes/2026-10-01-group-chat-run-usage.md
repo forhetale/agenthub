@@ -6,7 +6,7 @@ card inside its reply bubble, after the response text and before the associated
 workspace diff card, matching single chat. Cards are hidden while that run is streaming.
 Unavailable metrics remain unknown rather than being reported as zero.
 
-Coding Agent and Ekko terminal `run_usage` snapshots are rebased to the group
+Coding Agent and Hub Agent terminal `run_usage` snapshots are rebased to the group
 response identity. Internal cancellation without a usage payload recovers the
 exact runtime run from its ledger before disposing the temporary session.
 Hermes model usage events use the same call ledger recorder

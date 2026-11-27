@@ -5,12 +5,20 @@ import path from 'node:path'
 import { checkServerModuleBoundaries } from './server-module-boundaries.mjs'
 import { hasManagedMcpNodeMode } from './managed-mcp-harness.mjs'
 import { checkDshModuleBoundaries } from './dsh-module-harness.mjs'
+import { checkCodingAgentModuleBoundaries } from './coding-agent-module-harness.mjs'
 import { checkJevIntegrations } from './jev-harness.mjs'
+import { checkUiTheme } from './ui-theme-harness.mjs'
+import { checkPluginDocs } from './plugin-docs-harness.mjs'
+import { checkTaskArtifacts } from './task-artifacts.mjs'
 
 const root = process.cwd()
 const failures = []
+try { await checkPluginDocs(root) } catch (error) { failures.push(error.message) }
+failures.push(...await checkTaskArtifacts(root))
 failures.push(...await checkDshModuleBoundaries(root))
+failures.push(...await checkCodingAgentModuleBoundaries(root))
 failures.push(...await checkJevIntegrations(root))
+failures.push(...await checkUiTheme(root))
 
 function fail(message) {
   failures.push(message)
@@ -43,6 +51,11 @@ for (const file of [
   'docs/harness/server-module-boundaries.md',
   'docs/harness/jev-integrations.md',
   'scripts/jev-integrations.json',
+  'docs/harness/frontend-ui.md',
+  'scripts/ui-theme-baseline.json',
+  'docs/harness/task-artifacts.md',
+  'scripts/task-artifacts.mjs',
+  'scripts/task-artifacts-cli.mjs',
 ]) {
   requireFile(file)
 }
@@ -52,9 +65,6 @@ for (const dir of [
   'packages/server/src',
   'packages/desktop',
   'packages/desktop/build/icons',
-  'tests/client',
-  'tests/server',
-  'tests/e2e',
   '.github/workflows',
 ]) {
   requireDir(dir)
@@ -94,6 +104,10 @@ for (const requiredLink of [
   }
 }
 
+if (!agents.includes('docs/harness/frontend-ui.md')) {
+  fail('AGENTS.md must link to docs/harness/frontend-ui.md')
+}
+
 const packageJson = JSON.parse(await readText('package.json'))
 for (const scriptName of [
   'harness:check',
@@ -131,7 +145,7 @@ for (const failure of await checkServerModuleBoundaries(root)) {
 
 for (const [file, factory] of [
   ['packages/server/src/modules/hermes/services/mcp/studio-autoinject.ts', 'managedConfig'],
-  ['packages/server/src/modules/ekko/services/mcp.ts', 'managedMcpServerConfig'],
+  ['packages/server/src/modules/hub-agent/services/mcp.ts', 'managedMcpServerConfig'],
   ['packages/server/src/modules/coding-agents/services/index.ts', 'hermesMcpServerConfig'],
 ]) {
   if (!hasManagedMcpNodeMode(await readText(file), factory)) {
@@ -293,8 +307,8 @@ for (const phrase of [
   }
 }
 
-if (!desktopNodeRuntimeConfig.includes("DEFAULT_DESKTOP_NODE_VERSION = '22.22.0'")) {
-  fail('desktop runtime Node.js must stay pinned to the Hermes-compatible 22.22.0 release')
+if (!desktopNodeRuntimeConfig.includes("DEFAULT_DESKTOP_NODE_VERSION = '26.13.0'")) {
+  fail('desktop runtime Node.js must stay pinned to the Hermes 0.23-compatible 26.13.0 release')
 }
 if (!desktopNodeRuntimeConfig.includes('HERMES_DESKTOP_NODE_VERSION')) {
   fail('desktop runtime Node.js pin must keep an explicit environment override')
@@ -403,7 +417,7 @@ if (desktopWebuiServer.includes('bundledBrowserExecutable()')) {
 }
 
 for (const phrase of [
-  'requestSingleInstanceLock(QUIT_EXISTING ? { quit: true } : undefined)',
+  'requestSingleInstanceLock({ quit: true })',
   'hasQuitRequest(additionalData)',
 ]) {
   if (!desktopMain.includes(phrase)) {
@@ -418,16 +432,31 @@ for (const phrase of [
   'Stop-Process -Id',
 ]) {
   if (!desktopInstallerScript.includes(phrase)) {
-    fail(`desktop installer must close stale Ekko Studio processes by installed executable path: ${phrase}`)
+    fail(`desktop installer must close stale AgentHub processes by installed executable path: ${phrase}`)
   }
 }
 
-for (const phrase of [
-  'https://download.ekkolearnai.com/latest',
-  'https://github.com/EKKOLearnAI/ekko-studio/releases/latest/download',
-]) {
-  if (!desktopUpdaterSource.includes(phrase)) {
-    fail(`desktop updater source must preserve the production primary and fallback feeds: ${phrase}`)
+if (!desktopUpdaterSource.includes('https://github.com/forhetale/agenthub/releases/latest/download')) {
+  fail('desktop updater source must use non-commercial AgentHub release feeds')
+}
+
+for (const commercialUrl of ['download.ekkolearnai.com', 'ekkostudio.xyz', 'EKKOLearnAI/ekko-studio']) {
+  if (desktopUpdaterSource.includes(commercialUrl) || electronBuilderConfig.includes(commercialUrl)) {
+    fail(`desktop updater/builder must not embed upstream commercial feed ${commercialUrl}`)
+  }
+}
+
+if (!desktopUpdater.includes('isCustomBuildWebUi') || !desktopUpdater.includes("t('update.customBuildMessage')")) {
+  fail('desktop updater must retain custom-build update protection')
+}
+
+{
+  const builderConfig = await readText('packages/desktop/electron-builder.yml')
+  const publishBlock = /^publish:\n(?:[ \t]+.*\n)*/m.exec(builderConfig)?.[0] ?? ''
+  const publishUrl = /^[ \t]+url:[ \t]*(\S+)[ \t]*$/m.exec(publishBlock)?.[1]
+  if (!publishUrl) fail('packages/desktop/electron-builder.yml must declare the desktop publish url')
+  if (!publishUrl.startsWith('https://')) {
+    fail(`desktop publish url must use HTTPS: ${publishUrl}`)
   }
 }
 
@@ -443,7 +472,7 @@ if (!desktopUpdateTestWorkflow.includes('contents: read')
   || /contents:\s*write|action-gh-release|gh\s+release/.test(desktopUpdateTestWorkflow)) {
   fail('desktop update test workflow must not have a production release publication path')
 }
-for (const phrase of ['configure-macos-signing.mjs --require-signed', 'run dist:update-test', 'run test:updater']) {
+for (const phrase of ['configure-macos-signing.mjs --require-signed', 'run dist:update-test']) {
   if (!desktopUpdateTestWorkflow.includes(phrase)) fail(`desktop update test workflow must include: ${phrase}`)
 }
 

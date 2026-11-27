@@ -2,10 +2,25 @@ import { createRouter, createWebHashHistory } from 'vue-router'
 import { hasApiKey, isStoredSuperAdmin } from '@/api/client'
 import { hasDesktopBrowserBridge } from '@/utils/desktop-bridge'
 import { resolveLoginRedirect } from '@/utils/login-redirect'
+import { captureProviderImport } from '@/utils/provider-import'
 
 const router = createRouter({
   history: createWebHashHistory(),
   routes: [
+    { path: '/home', name: 'studio.start', component: { render: () => null } },
+    { path: '/studio/plugins', name: 'studio.plugins', component: () => import('@/views/StudioPluginsView.vue') },
+    { path: '/studio/plugin-settings/:pluginId/:viewId', name: 'studio.pluginSettings', component: () => import('@/views/PluginPageView.vue') },
+    { path: '/studio/plugin-agent-settings/:pluginId/:viewId?', name: 'studio.pluginAgentSettings', component: () => import('@/views/PluginPageView.vue') },
+    { path: '/studio/plugins/:pluginId/:viewId?', name: 'studio.pluginPage', component: () => import('@/views/PluginPageView.vue') },
+    { path: '/person', name: 'hermes.person', component: () => import('@/views/hermes/PersonView.vue') },
+    {
+      path: '/hermes/tasks',
+      name: 'hermes.tasks',
+      redirect: to => ({ name: 'hermes.chat', query: {
+        tasks: '1', taskSearch: to.query.search, taskStatus: to.query.status,
+        taskOrder: to.query.order, taskPage: to.query.page,
+      } }),
+    },
     {
       path: '/desktop-pet',
       name: 'desktop.pet',
@@ -190,28 +205,28 @@ const router = createRouter({
       meta: { codingAgentConfig: true, requiresSuperAdmin: true },
     },
     {
-      path: '/ekko/memory',
-      name: 'ekko.memory',
-      component: () => import('@/views/ekko/MemoryView.vue'),
-      meta: { ekkoConfig: true, requiresSuperAdmin: true },
+      path: '/hub-agent/memory',
+      name: 'hubAgent.memory',
+      component: () => import('@/views/hub-agent/MemoryView.vue'),
+      meta: { hubAgentConfig: true, requiresSuperAdmin: true },
     },
     {
-      path: '/ekko/skills',
-      name: 'ekko.skills',
-      component: () => import('@/views/ekko/SkillsView.vue'),
-      meta: { ekkoConfig: true, requiresSuperAdmin: true },
+      path: '/hub-agent/skills',
+      name: 'hubAgent.skills',
+      component: () => import('@/views/hub-agent/SkillsView.vue'),
+      meta: { hubAgentConfig: true, requiresSuperAdmin: true },
     },
     {
-      path: '/ekko/mcp',
-      name: 'ekko.mcp',
-      component: () => import('@/views/ekko/McpView.vue'),
-      meta: { ekkoConfig: true, requiresSuperAdmin: true },
+      path: '/hub-agent/mcp',
+      name: 'hubAgent.mcp',
+      component: () => import('@/views/hub-agent/McpView.vue'),
+      meta: { hubAgentConfig: true, requiresSuperAdmin: true },
     },
     {
-      path: '/ekko/settings',
-      name: 'ekko.settings',
-      component: () => import('@/views/ekko/SettingsView.vue'),
-      meta: { ekkoConfig: true, requiresSuperAdmin: true },
+      path: '/hub-agent/settings',
+      name: 'hubAgent.settings',
+      component: () => import('@/views/hub-agent/SettingsView.vue'),
+      meta: { hubAgentConfig: true, requiresSuperAdmin: true },
     },
     {
       path: '/hermes/agents',
@@ -252,9 +267,7 @@ const router = createRouter({
     },
     {
       path: '/hermes/version-preview',
-      name: 'hermes.versionPreview',
-      component: () => import('@/views/hermes/VersionPreviewView.vue'),
-      meta: { requiresSuperAdmin: true },
+      redirect: { name: 'studio.plugins' },
     },
     {
       path: '/hermes/mcp',
@@ -268,6 +281,11 @@ const router = createRouter({
 // Desktop exposes a dedicated settings page. Actual browsing stays inside the
 // chat tool panel so this route never creates or positions a WebContentsView.
 if (hasDesktopBrowserBridge()) {
+  router.addRoute({
+    path: '/hermes/browser/downloads',
+    name: 'hermes.browserDownloads',
+    component: () => import('@/views/hermes/BrowserDownloadsView.vue'),
+  })
   router.addRoute({
     path: '/hermes/browser',
     name: 'hermes.browser',
@@ -292,6 +310,15 @@ function isDesktopShell(): boolean {
 }
 
 router.beforeEach(async (to, _from, next) => {
+  if (to.path === '/hermes/models' && Object.prototype.hasOwnProperty.call(to.query, 'importProvider')) {
+    captureProviderImport(to.query.importProvider)
+    const query = { ...to.query }
+    delete query.importProvider
+    // Replace before auth redirects; the credential-bearing fragment never
+    // becomes a persisted login redirect or a server request query.
+    next({ path: to.path, query, replace: true })
+    return
+  }
   await ensureDesktopAuth()
 
   if (to.name === 'codingAgent.config' && ['plugins', 'presets'].includes(String(to.params.section)) && to.params.agentId !== 'dsh') {
@@ -313,6 +340,14 @@ router.beforeEach(async (to, _from, next) => {
   // All other pages require token
   if (!hasApiKey()) {
     next({ name: 'login', query: { redirect: to.fullPath } })
+    return
+  }
+
+  if (to.name === 'studio.start') {
+    const { resolveNavigationStartup } = await import('@/utils/navigation-startup')
+    const target = await resolveNavigationStartup()
+    if (!hasApiKey()) { next({ name: 'login' }); return }
+    next(typeof target === 'string' ? { path: target, replace: true } : { ...target, replace: true })
     return
   }
 

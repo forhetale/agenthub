@@ -12,8 +12,6 @@ import { killOwnedProcessTree } from '../../../infrastructure/process-tree'
 import { transcodeToPcmS16le } from './audio-convert'
 import { SttNoSpeechDetectedError, type SttTranscribeInput, type SttTranscribeResult } from './types'
 
-const DEFAULT_DOWNLOAD_BASE_URL = 'https://download.ekkolearnai.com'
-const DEFAULT_GITHUB_REPO = 'EKKOLearnAI/ekko-studio'
 const MODEL_MANIFEST_FILE = 'model-manifest.json'
 const MODEL_SCHEMA = 1
 const TRANSCRIBE_TIMEOUT_MS = 120_000
@@ -281,12 +279,15 @@ export function localSttModelDirectory(): string {
 }
 
 function downloadBaseUrl(): string {
-  return (process.env.HERMES_WEB_UI_DOWNLOAD_BASE_URL || DEFAULT_DOWNLOAD_BASE_URL).trim().replace(/\/$/, '')
+  const configured = (process.env.HERMES_WEB_UI_DOWNLOAD_BASE_URL || '').trim().replace(/\/$/, '')
+  if (!configured) throw new Error('Local STT download URL is not configured; set HERMES_WEB_UI_DOWNLOAD_BASE_URL')
+  return configured
 }
 
 export function localSttModelAssetUrl(source: LocalSttModelDownloadSource): string {
   if (source === 'github') {
-    const repo = process.env.HERMES_WEB_UI_DOWNLOAD_GITHUB_REPO?.trim() || DEFAULT_GITHUB_REPO
+    const repo = process.env.HERMES_WEB_UI_DOWNLOAD_GITHUB_REPO?.trim()
+    if (!repo) throw new Error('Local STT GitHub repository is not configured; set HERMES_WEB_UI_DOWNLOAD_GITHUB_REPO')
     return `https://github.com/${repo}/releases/download/${encodeURIComponent(LOCAL_STT_MODEL_RELEASE_TAG)}/${encodeURIComponent(LOCAL_STT_MODEL_ASSET_NAME)}`
   }
   return `${downloadBaseUrl()}/${encodeURIComponent(LOCAL_STT_MODEL_RELEASE_TAG)}/${encodeURIComponent(LOCAL_STT_MODEL_ASSET_NAME)}`

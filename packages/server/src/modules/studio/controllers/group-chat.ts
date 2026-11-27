@@ -1,3 +1,5 @@
+import { isPluginAgentId, pluginAgentMode, pluginAgentIsGlobalOnly } from '../services/agents/registry'
+import { isGlobalOnlyCodingAgent } from '../contracts/agents/native-coding-agents'
 import { randomBytes } from 'node:crypto'
 import {
     GROUP_CHAT_MESSAGE_WINDOW,
@@ -105,7 +107,7 @@ function contentPreview(content: unknown): string {
 
 type AgentInput = {
     presetId?: string
-    agent?: 'hermes' | 'ekko' | 'codex' | 'claude' | 'pi' | 'grok' | 'opencode' | 'dsh' | 'cursor' | 'antigravity'
+    agent?: `plugin:${string}/${string}` | 'hermes' | 'hub' | 'codex' | 'claude' | 'pi' | 'grok' | 'opencode' | 'dsh' | 'cursor' | 'antigravity' | 'qwen' | 'kimi' | 'codebuddy' | 'qoder' | 'copilot' | 'zcode'
     agentMode?: 'scoped' | 'global'
     priorAgentMode?: 'scoped' | 'global' | ''
     profile: string
@@ -134,11 +136,21 @@ type RoomSummaryInput = {
     everyTurns?: number
 }
 
-const GROUP_AGENT_REASONING_EFFORTS = new Set(['', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'])
-const GROUP_AGENT_TYPES = new Set(['hermes', 'ekko', 'codex', 'claude', 'pi', 'grok', 'opencode', 'dsh', 'cursor', 'antigravity'])
+const GROUP_AGENT_REASONING_EFFORTS = new Set(['', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra', 'disabled', 'enabled', 'off', 'on'])
+const GROUP_AGENT_TYPES = new Set(['hermes', 'hub', 'codex', 'claude', 'pi', 'grok', 'opencode', 'dsh', 'cursor', 'antigravity', 'qwen', 'kimi', 'codebuddy', 'qoder', 'copilot', 'zcode'])
 const GROUP_AGENT_API_MODES = new Set(['chat_completions', 'codex_responses', 'anthropic_messages'])
-const GLOBAL_MODE_GROUP_AGENTS = new Set(['codex', 'claude', 'pi', 'grok', 'opencode', 'dsh', 'cursor', 'antigravity'])
+const GLOBAL_MODE_GROUP_AGENTS = new Set(['codex', 'claude', 'pi', 'grok', 'opencode', 'dsh', 'cursor', 'antigravity', 'qwen', 'kimi', 'codebuddy', 'qoder', 'copilot', 'zcode'])
 const GROUP_AGENT_AVATAR_MAX_LENGTH = 1_500_000
+
+function normalizeGroupAgentType(agent: unknown): string {
+    const trimmed = typeof agent === 'string' ? agent.trim() : ''
+    return trimmed === 'ekko' ? 'hub' : trimmed
+}
+
+function globalOnlyAgent(agent: unknown) { return isGlobalOnlyCodingAgent(agent) || pluginAgentIsGlobalOnly(agent) }
+
+function knownGroupAgent(agent: string) { return GROUP_AGENT_TYPES.has(agent) || isPluginAgentId(agent) }
+function globalGroupAgent(agent: string) { return GLOBAL_MODE_GROUP_AGENTS.has(agent) || isPluginAgentId(agent) && pluginAgentMode(agent, 'global') }
 
 function normalizeRoomAgentAvatar(value: unknown): string {
     if (value === undefined || value === null || value === '') return ''
@@ -304,22 +316,22 @@ function roomAgentSummaries(storage: ReturnType<GroupChatServer['getStorage']>, 
 }
 
 async function connectAndPersistRoomAgent(server: GroupChatServer, roomId: string, input: AgentInput, agentId = generateId()) {
-    const agent = String(input.agent || 'hermes').trim() as AgentInput['agent']
-    if (!GROUP_AGENT_TYPES.has(agent || '')) {
+    const agent = (normalizeGroupAgentType(input.agent) || 'hermes') as AgentInput['agent']
+    if (!knownGroupAgent(agent || '')) {
         throw new Error('Invalid agent')
     }
     if (input.agentMode !== undefined && input.agentMode !== 'scoped' && input.agentMode !== 'global') {
         throw new Error('Invalid agentMode')
     }
     const profile = input.profile.trim()
-    const agentMode = agent === 'cursor' ? 'global' : input.agentMode === 'global' ? 'global' : 'scoped'
-    if (agentMode === 'global' && !GLOBAL_MODE_GROUP_AGENTS.has(agent || '')) {
+    const agentMode = globalOnlyAgent(agent) ? 'global' : input.agentMode === 'global' ? 'global' : 'scoped'
+    if (agentMode === 'global' && !globalGroupAgent(agent || '')) {
         throw new Error('Global mode is only available for Claude, Codex, Pi, Grok, OpenCode, DSH, and Cursor')
     }
     const provider = agentMode === 'global' ? '' : String(input.provider || '').trim()
-    const model = agentMode === 'global' ? '' : String(input.model || '').trim()
+    const model = globalOnlyAgent(agent) && input.agentMode !== 'global' ? '' : String(input.model || '').trim()
     const apiMode = agent === 'hermes' || agentMode === 'global' ? '' : String(input.apiMode || '').trim()
-    const reasoningEffort = agentMode === 'global' ? '' : String(input.reasoningEffort || '').trim()
+    const reasoningEffort = globalOnlyAgent(agent) && input.agentMode !== 'global' ? '' : String(input.reasoningEffort || '').trim()
     const name = input.name || profile
     const description = input.description || ''
     const avatar = normalizeRoomAgentAvatar(input.avatar)
@@ -372,7 +384,7 @@ export async function createRoom(ctx: any) {
         inviteCode?: string
         agents?: {
             presetId?: string
-            agent?: 'hermes' | 'ekko' | 'codex' | 'claude' | 'pi' | 'grok' | 'opencode' | 'dsh' | 'cursor' | 'antigravity'
+            agent?: `plugin:${string}/${string}` | 'hermes' | 'hub' | 'codex' | 'claude' | 'pi' | 'grok' | 'opencode' | 'dsh' | 'cursor' | 'antigravity' | 'qwen' | 'kimi' | 'codebuddy' | 'qoder' | 'copilot' | 'zcode'
             agentMode?: 'scoped' | 'global'
             profile: string
             provider?: string
@@ -447,7 +459,7 @@ export async function createRoom(ctx: any) {
     }
     const invalidAgentMode = resolvedAgents.find(agent => (
         (agent.agentMode !== undefined && agent.agentMode !== 'scoped' && agent.agentMode !== 'global')
-        || (agent.agentMode === 'global' && !GLOBAL_MODE_GROUP_AGENTS.has(agent.agent || 'hermes'))
+        || (agent.agentMode === 'global' && !globalGroupAgent(agent.agent || 'hermes'))
     ))
     if (invalidAgentMode) {
         ctx.status = 400
@@ -760,16 +772,14 @@ export async function addRoomAgent(ctx: any) {
         invited?: boolean
     }
     const normalizedProfile = typeof profile === 'string' ? profile.trim() : ''
-    const normalizedAgent = typeof agent === 'string' ? agent.trim() : 'hermes'
-    const normalizedAgentMode = normalizedAgent === 'cursor' || agentMode === 'global' ? 'global' : 'scoped'
+    const normalizedAgent = typeof agent === 'string' ? normalizeGroupAgentType(agent) : 'hermes'
+    const normalizedAgentMode = globalOnlyAgent(normalizedAgent) || agentMode === 'global' ? 'global' : 'scoped'
     const normalizedProvider = normalizedAgentMode === 'global' ? '' : typeof provider === 'string' ? provider.trim() : ''
-    const normalizedModel = normalizedAgentMode === 'global' ? '' : typeof model === 'string' ? model.trim() : ''
+    const normalizedModel = globalOnlyAgent(normalizedAgent) && agentMode !== 'global' ? '' : typeof model === 'string' ? model.trim() : ''
     const normalizedApiMode = normalizedAgent === 'hermes' || normalizedAgentMode === 'global'
         ? ''
         : typeof apiMode === 'string' ? apiMode.trim() : ''
-    const normalizedReasoningEffort = normalizedAgentMode === 'global'
-        ? ''
-        : typeof reasoningEffort === 'string' ? reasoningEffort.trim() : ''
+    const normalizedReasoningEffort = globalOnlyAgent(normalizedAgent) && agentMode !== 'global' ? '' : typeof reasoningEffort === 'string' ? reasoningEffort.trim() : ''
     let normalizedAvatar = ''
     try {
         normalizedAvatar = normalizeRoomAgentAvatar(avatar)
@@ -783,7 +793,7 @@ export async function addRoomAgent(ctx: any) {
         ctx.body = { error: 'profile is required' }
         return
     }
-    if (!GROUP_AGENT_TYPES.has(normalizedAgent)) {
+    if (!knownGroupAgent(normalizedAgent)) {
         ctx.status = 400
         ctx.body = { error: 'Invalid agent' }
         return
@@ -793,12 +803,12 @@ export async function addRoomAgent(ctx: any) {
         ctx.body = { error: 'Invalid agentMode' }
         return
     }
-    if (normalizedAgentMode === 'global' && !GLOBAL_MODE_GROUP_AGENTS.has(normalizedAgent)) {
+    if (normalizedAgentMode === 'global' && !globalGroupAgent(normalizedAgent)) {
         ctx.status = 400
         ctx.body = { error: 'Global mode is only available for Claude, Codex, Pi, Grok, OpenCode, DSH, and Cursor' }
         return
     }
-    if (Boolean(normalizedProvider) !== Boolean(normalizedModel)) {
+    if (normalizedAgentMode !== 'global' && Boolean(normalizedProvider) !== Boolean(normalizedModel)) {
         ctx.status = 400
         ctx.body = { error: 'provider and model must be provided together' }
         return
@@ -881,16 +891,14 @@ export async function updateRoomAgent(ctx: any) {
         avatar?: string
     }
     const normalizedProfile = typeof profile === 'string' ? profile.trim() : ''
-    const normalizedAgent = typeof agent === 'string' ? agent.trim() : 'hermes'
-    const normalizedAgentMode = normalizedAgent === 'cursor' || agentMode === 'global' ? 'global' : 'scoped'
+    const normalizedAgent = typeof agent === 'string' ? normalizeGroupAgentType(agent) : 'hermes'
+    const normalizedAgentMode = globalOnlyAgent(normalizedAgent) || agentMode === 'global' ? 'global' : 'scoped'
     const normalizedProvider = normalizedAgentMode === 'global' ? '' : typeof provider === 'string' ? provider.trim() : ''
-    const normalizedModel = normalizedAgentMode === 'global' ? '' : typeof model === 'string' ? model.trim() : ''
+    const normalizedModel = globalOnlyAgent(normalizedAgent) && agentMode !== 'global' ? '' : typeof model === 'string' ? model.trim() : ''
     const normalizedApiMode = normalizedAgent === 'hermes' || normalizedAgentMode === 'global'
         ? ''
         : typeof apiMode === 'string' ? apiMode.trim() : ''
-    const normalizedReasoningEffort = normalizedAgentMode === 'global'
-        ? ''
-        : typeof reasoningEffort === 'string' ? reasoningEffort.trim() : ''
+    const normalizedReasoningEffort = globalOnlyAgent(normalizedAgent) && agentMode !== 'global' ? '' : typeof reasoningEffort === 'string' ? reasoningEffort.trim() : ''
     const normalizedName = typeof name === 'string' ? name.trim() : ''
     const normalizedDescription = typeof description === 'string' ? description.trim() : ''
     let normalizedAvatar = ''
@@ -906,7 +914,7 @@ export async function updateRoomAgent(ctx: any) {
         ctx.body = { error: 'profile is required' }
         return
     }
-    if (!GROUP_AGENT_TYPES.has(normalizedAgent)) {
+    if (!knownGroupAgent(normalizedAgent)) {
         ctx.status = 400
         ctx.body = { error: 'Invalid agent' }
         return
@@ -916,12 +924,12 @@ export async function updateRoomAgent(ctx: any) {
         ctx.body = { error: 'Invalid agentMode' }
         return
     }
-    if (normalizedAgentMode === 'global' && !GLOBAL_MODE_GROUP_AGENTS.has(normalizedAgent)) {
+    if (normalizedAgentMode === 'global' && !globalGroupAgent(normalizedAgent)) {
         ctx.status = 400
         ctx.body = { error: 'Global mode is only available for Claude, Codex, Pi, Grok, OpenCode, DSH, and Cursor' }
         return
     }
-    if (Boolean(normalizedProvider) !== Boolean(normalizedModel)) {
+    if (normalizedAgentMode !== 'global' && Boolean(normalizedProvider) !== Boolean(normalizedModel)) {
         ctx.status = 400
         ctx.body = { error: 'provider and model must be provided together' }
         return
@@ -1607,4 +1615,30 @@ export async function updateRoomSummary(ctx: any) {
     }
     const summary = await chatServer.getRoomSummaryService().updateSummaryText(roomId, text.trim())
     ctx.body = { summary }
+}
+
+
+async function withMessageManagement(ctx: any, remove: boolean) {
+    const server = chatServer
+    if (!server) { ctx.status = 503; ctx.body = { error: 'Group chat not initialized' }; return }
+    const roomId = String(ctx.params.roomId || '')
+    const storage = server.getStorage()
+    if (!storage.getRoom(roomId)) { ctx.status = 404; ctx.body = { error: 'Room not found' }; return }
+    if (!canManageRoom(storage, roomId, ctx.state?.user)) { ctx.status = 403; ctx.body = { error: 'Access denied' }; return }
+    try {
+        ctx.body = remove
+            ? await server.deleteMessages(roomId, ctx.request.body?.messageIds, ctx.request.body?.historyRevision)
+            : server.getMessageSelection(roomId)
+    } catch (error: any) {
+        ctx.status = Number(error?.status || 500)
+        ctx.body = { error: error?.message || 'Message deletion failed' }
+    }
+}
+
+export async function getRoomMessageSelection(ctx: any) {
+    await withMessageManagement(ctx, false)
+}
+
+export async function deleteRoomMessages(ctx: any) {
+    await withMessageManagement(ctx, true)
 }

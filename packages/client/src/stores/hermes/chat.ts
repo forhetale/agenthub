@@ -1,22 +1,31 @@
-import { normalizeRunUsage, type RunUsageSummary } from '@/utils/run-usage'
-import { mergeTaskPlanMessages, type TaskPlanSnapshot } from '@/utils/task-plan'
 import { hasLegacySessionPins, migrateLegacySessionPins } from '@/utils/legacy-session-pins'
 import { getBarkSettings } from '@/api/studio/bark'
-import { startRunViaSocket, resumeSession, registerSessionHandlers, unregisterSessionHandlers, getChatRunSocket, respondToolApproval, onPeerUserMessage, onSessionCommand, onSessionTitleUpdated, onSessionWorkspaceUpdated, onSessionSettingsUpdated, onRunUsageUpdated, respondClarify, type ChatRunTransport, type RunEvent, type ResumeSessionPayload, type StartRunRequest, type ContentBlock as ContentBlockImport } from '@/api/studio/chat'
+import { deploymentUrl } from '@/utils/deployment-url'
+import { chatSessionAgentAvatar, PERSON_AVATAR } from '@/utils/chat-agent-avatar'
+import { deleteSessionMessages, type MessageDeletionResult } from '@/api/studio/sessions'
+import { isNativeCodingAgent } from '@/utils/agent-catalog'
+import { historySessionSource, isBuiltinHubSession } from '@/utils/hermes/session-agent'
+import { isKnownHubAgentSessionCommand } from '@/utils/hermes/bridge-session-commands'
+import { normalizeRunUsage, type RunUsageSummary } from '@/utils/run-usage'
+import { mergeTaskPlanMessages, type TaskPlanSnapshot } from '@/utils/task-plan'
+import { applyPersonTimelinePage, applyPersonFlowUpdate, preservePersonTimelineWindow } from '@/utils/person-timeline'
+import type { PendingInboxEvent } from '@/api/studio/pending-inbox'
+import { startRunViaSocket, onUnobservedRunStarted, resumeSession, registerSessionHandlers, unregisterSessionHandlers, getChatRunSocket, respondToolApproval, onPeerUserMessage, onPersonUpdated, onSessionCommand, onSessionTitleUpdated, onSessionWorkspaceUpdated, onSessionSettingsUpdated, onRunUsageUpdated, respondClarify, type ChatRunTransport, type RunEvent, type ResumeSessionPayload, type StartRunRequest, type ContentBlock as ContentBlockImport } from '@/api/studio/chat'
 import { archiveSession as archiveSessionApi, deleteSession as deleteSessionApi, fetchSessionMessagesPage, fetchSessions, fetchWorkspaceRunChangeFile, setSessionModel, setSessionPushEnabled as persistSessionPushEnabled, setSessionReasoningEffort as persistSessionReasoningEffort, type HermesMessage, type SessionSummary, type WorkspaceRunChangeFileDetail, type WorkspaceRunChangeSummary } from '@/api/studio/sessions'
 import { getActiveProfileName } from '@/api/client'
 import { onAuthInvalidated } from '@/api/auth-invalidation'
 import { inferCodingAgentApiMode, normalizeCodingAgentApiMode, type ChatCodingAgentId } from '@/api/coding-agents'
 import { getDownloadUrl } from '@/api/studio/download'
 import type { ProviderApiMode } from '@/api/studio/provider-api-mode'
-import { defineStore } from 'pinia'
-import { ref, computed, onScopeDispose } from 'vue'
+import { defineStore, getActivePinia } from 'pinia'
+import { ref, computed, onScopeDispose, hasInjectionContext, inject, provide, type InjectionKey } from 'vue'
 import { observeBackgroundStatus } from '@/api/studio/background-status'
 import { useAppStore } from './app'
 import { useProfilesStore } from './profiles'
 import { useSettingsStore } from './settings'
 import { primeCompletionSound, playCompletionSound } from '@/utils/completion-sound'
 import { showCompletionNotification } from '@/utils/completion-notification'
+import { notifyComputerUseStarted } from '@/composables/useComputerUsePermissionPrompt'
 import { detectThinkingBoundary } from '@/utils/thinking-parser'
 import { isKnownBridgeSessionCommand } from '@/utils/hermes/bridge-session-commands'
 import { responseErrorMessage } from '@/utils/http-error'
@@ -33,9 +42,11 @@ export type ContentBlock = ContentBlockImport
 export const LIVE_CHAT_MESSAGE_PAGE_SIZE = 150
 export const LIVE_CHAT_MAX_LOADED_MESSAGES = 300
 const LEGACY_WORKSPACE_RUN_CHANGE_MESSAGE_PREFIX = 'workspace-run-change:'
-type ChatAgentId = 'hermes' | 'claude' | 'codex' | 'pi' | 'grok' | 'opencode' | 'dsh' | 'cursor' | 'antigravity' | 'ekko-agent'
+type ChatAgentId = `plugin:${string}/${string}` | 'hermes' | 'claude' | 'codex' | 'pi' | 'grok' | 'opencode' | 'dsh' | 'cursor' | 'antigravity' | 'qwen' | 'kimi' | 'codebuddy' | 'qoder' | 'copilot' | 'zcode' | 'hub-agent'
 
 function agentToCodingAgentId(agent?: string): ChatCodingAgentId | undefined {
+  if (agent?.startsWith('plugin:')) return agent as `plugin:${string}/${string}`
+  if (isNativeCodingAgent(agent)) return agent
   if (agent === 'codex') return 'codex'
   if (agent === 'pi') return 'pi'
   if (agent === 'grok') return 'grok'
@@ -44,11 +55,13 @@ function agentToCodingAgentId(agent?: string): ChatCodingAgentId | undefined {
   if (agent === 'antigravity') return 'antigravity'
   if (agent === 'cursor') return 'cursor'
   if (agent === 'claude') return 'claude-code'
-  if (agent === 'ekko-agent') return 'ekko-agent'
+  if (['hub', 'hub_agent', 'hub-agent', 'ekko', 'ekko_agent', 'ekko-agent'].includes(agent || '')) return 'hub-agent'
   return undefined
 }
 
 function codingAgentIdToAgent(id?: ChatCodingAgentId): ChatAgentId | undefined {
+  if (id?.startsWith('plugin:')) return id as `plugin:${string}/${string}`
+  if (isNativeCodingAgent(id)) return id
   if (id === 'codex') return 'codex'
   if (id === 'pi') return 'pi'
   if (id === 'grok') return 'grok'
@@ -57,7 +70,7 @@ function codingAgentIdToAgent(id?: ChatCodingAgentId): ChatAgentId | undefined {
   if (id === 'antigravity') return 'antigravity'
   if (id === 'cursor') return 'cursor'
   if (id === 'claude-code') return 'claude'
-  if (id === 'ekko-agent') return 'ekko-agent'
+  if (id === 'hub-agent') return 'hub-agent'
   return undefined
 }
 
@@ -86,6 +99,8 @@ export interface Attachment {
 }
 
 export interface Message {
+  personTaskReturn?: import('@/api/person').PersonTaskReturn
+  storedMessageId?: number
   taskPlan?: TaskPlanSnapshot
   id: string
   role: 'user' | 'assistant' | 'system' | 'tool' | 'command'
@@ -385,24 +400,7 @@ export interface MessageReference {
   senderId?: string
 }
 
-export interface ParsedMessageReference {
-  content: string
-  reply: string
-}
-
-export function parseMessageReference(content: string): ParsedMessageReference | null {
-  if (!content.startsWith('<quoted_message')) return null
-  const openEnd = content.indexOf('>\n')
-  if (openEnd === -1) return null
-  const closeMarker = '\n</quoted_message>'
-  const closeStart = content.indexOf(closeMarker, openEnd + 2)
-  if (closeStart === -1) return null
-
-  return {
-    content: content.slice(openEnd + 2, closeStart).trim(),
-    reply: content.slice(closeStart + closeMarker.length).trim(),
-  }
-}
+export { parseMessageReference } from '@/utils/content-blocks'
 
 export function formatReferencedContentForDisplay(content: string): string {
   return content
@@ -425,6 +423,8 @@ export function formatMessageWithReference(reference: MessageReference, content:
 
 export interface PendingApproval {
   sessionId: string
+  inboxProfile?: string
+  sessionSource?: string
   approvalId: string
   command: string
   description: string
@@ -433,10 +433,14 @@ export interface PendingApproval {
   isMemoryWrite: boolean
   requestedAt: number
   countdownDeadline: number
+  submitting?: boolean
+  submissionFailed?: boolean
 }
 
 export interface PendingClarify {
   sessionId: string
+  inboxProfile?: string
+  sessionSource?: string
   clarifyId: string
   question: string
   choices: string[] | null
@@ -445,19 +449,23 @@ export interface PendingClarify {
   timeoutMs: number
   requestedAt: number
   countdownDeadline: number
+  submitting?: boolean
+  submissionFailed?: boolean
 }
 
 export interface QueueInsertionState {
   generation: string
   runId?: string
   queueId: string
-  runtime: 'hermes' | 'ekko' | 'claude-code' | 'codex' | 'pi' | 'grok' | 'opencode' | 'dsh' | 'cursor' | 'antigravity'
+  runtime: `plugin:${string}/${string}` | 'hermes' | 'hub' | 'claude-code' | 'codex' | 'pi' | 'grok' | 'opencode' | 'dsh' | 'cursor' | 'antigravity' | 'qwen' | 'kimi' | 'codebuddy' | 'qoder' | 'copilot' | 'zcode'
   phase: 'requesting' | 'waiting_for_tool_batch' | 'stopping_current_turn'
   guarantee: 'strict' | 'immediate'
   requestedAt: number
 }
 
 export interface Session {
+  personFlows?: import('@/api/person').PersonFlowSnapshot
+  historyRevision?: number
   id: string
   profile?: string
   title: string
@@ -468,7 +476,9 @@ export interface Session {
   codingAgentId?: ChatCodingAgentId
   codingAgentMode?: 'global' | 'scoped'
   agentPreset?: string
+  botType?: string
   messages: Message[]
+  messagesLoaded?: boolean
   createdAt: number
   updatedAt: number
   model?: string
@@ -603,7 +613,7 @@ function errorMessageText(error: unknown): string {
   }
 }
 
-async function uploadFiles(attachments: Attachment[]): Promise<{ name: string; path: string }[]> {
+export async function uploadFiles(attachments: Attachment[], signal?: AbortSignal): Promise<{ name: string; path: string }[]> {
   if (attachments.length === 0) return []
   const formData = new FormData()
   for (const att of attachments) {
@@ -614,10 +624,11 @@ async function uploadFiles(attachments: Attachment[]): Promise<{ name: string; p
   const headers: Record<string, string> = {}
   if (token) headers.Authorization = `Bearer ${token}`
   if (profileName) headers['X-Hermes-Profile'] = profileName
-  const res = await fetch('/api/studio/uploads', {
+  const res = await fetch(deploymentUrl('/api/studio/uploads'), {
     method: 'POST',
     body: formData,
     headers,
+    signal,
   })
   if (!res.ok) throw new Error(await responseErrorMessage(res, 'Upload failed'))
   const data = await res.json() as { files: { name: string; path: string }[] }
@@ -908,7 +919,7 @@ function mapHermesMessages(msgs: HermesMessage[], taskPlans: unknown[] = [], pre
   // needed to name later tool result rows when resuming persisted history.
   const filteredMsgs = msgs.filter(m => {
     if (m.role === 'assistant') {
-      return (m.tool_calls?.length || 0) > 0 || runtimePayloadText((m as any).content).trim() !== '' || !!m.run_usage
+      return (m.tool_calls?.length || 0) > 0 || runtimePayloadText((m as any).content).trim() !== '' || !!m.run_usage || !!m.person_task_return
     }
     return true
   })
@@ -947,6 +958,7 @@ function mapHermesMessages(msgs: HermesMessage[], taskPlans: unknown[] = [], pre
           toolStatus: 'done',
           finishReason: readFinishReason(msg),
           runMarker: readRunMarker(msg),
+          storedMessageId: Number(msg.id),
         })
       }
       if (!msg.run_usage) continue
@@ -997,7 +1009,7 @@ function mapHermesMessages(msgs: HermesMessage[], taskPlans: unknown[] = [], pre
       if (placeholderIdx !== -1) {
         result.splice(placeholderIdx, 1)
       }
-      if (delegatePayload?.runtime === 'ekko') {
+      if (delegatePayload?.runtime === 'hub' || delegatePayload?.runtime === 'ekko') {
         const subagentId = String(delegatePayload.subagent_id || '').trim()
         if (!subagentId) continue
         const delegateArgs = runtimeObjectPayload(toolArgs)
@@ -1028,6 +1040,7 @@ function mapHermesMessages(msgs: HermesMessage[], taskPlans: unknown[] = [], pre
           toolStatus: status === 'running' ? 'running' : status === 'completed' ? 'done' : 'error',
           finishReason: readFinishReason(msg),
           runMarker: readRunMarker(msg),
+          storedMessageId: Number(msg.id),
         })
         continue
       }
@@ -1059,6 +1072,7 @@ function mapHermesMessages(msgs: HermesMessage[], taskPlans: unknown[] = [], pre
               toolStatus: status === 'running' ? 'running' : status === 'completed' ? 'done' : 'error',
               finishReason: readFinishReason(msg),
               runMarker: readRunMarker(msg),
+              storedMessageId: Number(msg.id),
             })
           }
           continue
@@ -1088,6 +1102,7 @@ function mapHermesMessages(msgs: HermesMessage[], taskPlans: unknown[] = [], pre
             toolStatus: 'done',
             finishReason: readFinishReason(msg),
             runMarker: readRunMarker(msg),
+            storedMessageId: Number(msg.id),
           })
         }
         continue
@@ -1106,6 +1121,7 @@ function mapHermesMessages(msgs: HermesMessage[], taskPlans: unknown[] = [], pre
         toolStatus: readFinishReason(msg) === 'error' ? 'error' : 'done',
         finishReason: readFinishReason(msg),
         runMarker: readRunMarker(msg),
+        storedMessageId: Number(msg.id),
       })
       continue
     }
@@ -1118,11 +1134,13 @@ function mapHermesMessages(msgs: HermesMessage[], taskPlans: unknown[] = [], pre
       role: displayRole === 'moa' ? 'system' : displayRole,
       content: displayContent || '',
       runUsage: normalizeRunUsage(msg.run_usage),
+      personTaskReturn: msg.person_task_return,
       timestamp: Math.round(msg.timestamp * 1000),
       reasoning: msg.reasoning ? msg.reasoning : undefined,
       systemType: displayRole === 'command' ? 'command' : undefined,
       finishReason: readFinishReason(msg),
       runMarker: readRunMarker(msg),
+      storedMessageId: Number(msg.id),
     })
   }
   const restored = mergeTaskPlanMessages(result, taskPlans)
@@ -1170,10 +1188,10 @@ function applySessionTokenUsage(session: Session, usage: {
   }
 }
 
-function mapHermesSession(s: SessionSummary): Session {
+export function mapHermesSession(s: SessionSummary): Session {
   const codingAgentId = agentToCodingAgentId(s.agent)
   const isCodingAgentSession = s.source === 'coding_agent' || Boolean(codingAgentId)
-  const codingAgentMode = isCodingAgentSession
+  const codingAgentMode = isBuiltinHubSession(s) ? 'scoped' : isCodingAgentSession
     ? (s.agent_mode === 'global' || s.agent_mode === 'scoped'
         ? s.agent_mode
         : s.provider === 'global' ? 'global' : 'scoped')
@@ -1183,7 +1201,7 @@ function mapHermesSession(s: SessionSummary): Session {
     id: s.id,
     profile: s.profile || 'default',
     title: s.title || '',
-    source: s.source || undefined,
+    source: historySessionSource(s) || undefined,
     agent: s.agent || undefined,
     agentSessionId: s.agent_session_id || undefined,
     agentNativeSessionId: s.agent_native_session_id || undefined,
@@ -1196,6 +1214,7 @@ function mapHermesSession(s: SessionSummary): Session {
     provider: s.provider || (s as any).billing_provider || '',
     apiMode: s.api_mode,
     agentPreset: s.agent_preset || undefined,
+    botType: s.bot_type || undefined,
     reasoningEffort: s.reasoning_effort || undefined,
     messageCount: s.message_count,
     messageTotal: s.message_count,
@@ -1244,20 +1263,20 @@ function runtimeStoragePrefix(): string {
 function storageKey(): string { return runtimeStoragePrefix() + getProfileName() }
 function legacyStorageKey(): string | null { return activeRuntimeMode === 'default' && getProfileName() === 'default' ? LEGACY_STORAGE_KEY : null }
 
-function isCodingAgentLikeSession(session?: Pick<Session, 'source' | 'agent' | 'codingAgentId'> | null): boolean {
-  return session?.source === 'coding_agent' ||
+function isProviderAgentSession(session?: Pick<Session, 'source' | 'agent' | 'codingAgentId'> | null): boolean {
+  return session?.source === 'builtin_agent' || session?.source === 'coding_agent' ||
     Boolean(session?.codingAgentId) ||
     Boolean(agentToCodingAgentId(session?.agent))
 }
 
 function clearCodingAgentRuntimeCredentials(session?: Session | null) {
-  if (!session || !isCodingAgentLikeSession(session)) return
+  if (!session || !isProviderAgentSession(session)) return
   session.baseUrl = undefined
   session.apiKey = undefined
 }
 
 function shouldPreserveRuntimeApiMode(session?: Session | null): boolean {
-  return isCodingAgentLikeSession(session) && session?.codingAgentMode !== 'global'
+  return isProviderAgentSession(session) && session?.codingAgentMode !== 'global'
 }
 
 function isQuotaExceededError(error: unknown): boolean {
@@ -1329,13 +1348,17 @@ function removeItem(key: string) {
 // Strip the circular `file: File` reference from attachments before caching —
 // File objects don't serialize and we only need name/type/size/url for display.
 
-export const useChatStore = defineStore('chat', () => {
-  const runtimeMode = ref<ChatRuntimeMode>(activeRuntimeMode)
+function createChatState(scopedSessionId?: string) {
+  const messageHistoryRevisions = new Map<string, number>()
+  const runtimeMode = ref<ChatRuntimeMode>(scopedSessionId ? 'default' : activeRuntimeMode)
   const seenSessionCommandEvents = new WeakSet<RunEvent>()
+  const announcedPersonRuns = new Set<string>()
   const sessions = ref<Session[]>([])
   const activeSessionId = ref<string | null>(null)
   const focusMessageId = ref<string | null>(null)
   const streamStates = ref<Map<string, { abort: () => void }>>(new Map())
+  const pendingAttachmentSends = new Map<string, { controller: AbortController; messageId: string; content: string; attachments: Attachment[] }>()
+  const cancelledAttachmentDrafts = ref(new Map<string, { content: string; attachments: Attachment[] }>())
   /** sessionId → server-reported isWorking status */
   const serverWorking = ref<Set<string>>(new Set())
   /** Authoritative live delegation counts, never inferred from transcript history. */
@@ -1349,18 +1372,34 @@ export const useChatStore = defineStore('chat', () => {
     backgroundPendingBySession.value.clear()
   }
 
+  function clearPendingAttachmentSends() {
+    for (const pending of pendingAttachmentSends.values()) pending.controller.abort()
+    pendingAttachmentSends.clear()
+    cancelledAttachmentDrafts.value.clear()
+  }
+
   const unsubscribeAuthInvalidation = onAuthInvalidated(() => {
     runtimeGeneration += 1
+    clearPendingAttachmentSends()
     clearBackgroundObservers()
     streamStates.value.clear()
     serverWorking.value.clear()
+    announcedPersonRuns.clear()
+    pendingApprovals.value = new Map([...pendingApprovals.value].filter(([id]) => !id.startsWith('person-main-')))
+    pendingClarifies.value = new Map([...pendingClarifies.value].filter(([id]) => !id.startsWith('person-main-')))
   })
 
   onScopeDispose(() => {
     unsubscribeAuthInvalidation()
     runtimeGeneration += 1
+    clearPendingAttachmentSends()
     clearBackgroundObservers()
+    if (scopedSessionId) unregisterSessionHandlers(scopedSessionId)
   })
+
+  function disposeSubscription(stop: (() => void) | undefined) {
+    if (typeof stop === 'function') onScopeDispose(stop)
+  }
 
   function setBackgroundPending(sessionId: string, pending: unknown) {
     const count = Number(pending)
@@ -1436,6 +1475,8 @@ export const useChatStore = defineStore('chat', () => {
   const queueLengths = ref<Map<string, number>>(new Map())
   /** sessionId → queued user messages not yet visible in the transcript */
   const queuedUserMessages = ref<Map<string, Message[]>>(new Map())
+  /** Inputs submitted locally that have not yet been acknowledged by the server. */
+  const pendingUserMessageIds = new Map<string, Set<string>>()
   /** sessionId → server-owned safe-boundary insertion state */
   const queueInsertionStates = ref<Map<string, QueueInsertionState>>(new Map())
   /** sessionId → queue ids that server reported as dequeued before the peer message arrived */
@@ -1504,8 +1545,8 @@ export const useChatStore = defineStore('chat', () => {
   const olderMessageLoads = new WeakMap<Session, object>()
   let activeSelectionSequence = 0
   const reasoningEffortWriteChains = new Map<string, Promise<boolean>>()
-  const reasoningEffortWriteTargets = new Map<string, string | undefined>()
-  const reasoningEffortConfirmedValues = new Map<string, string | undefined>()
+  const reasoningEffortWriteTargets = new Map<string, { effort: string | undefined; model?: string }>()
+  const reasoningEffortConfirmedValues = new Map<string, { effort: string | undefined; model?: string }>()
   // Chats without a saved push choice follow the user's Bark default (on unless turned off).
   const defaultSessionPush = ref(true)
   let defaultSessionPushLoad: Promise<void> | null = null
@@ -1548,6 +1589,8 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function beginMessageLoad(sessionId: string, requestSequence: number) {
+    const session = sessions.value.find(session => session.id === sessionId)
+    if (session) session.messagesLoaded = false
     const next = new Map(messageLoadRequests.value)
     next.set(sessionId, requestSequence)
     messageLoadRequests.value = next
@@ -1584,15 +1627,17 @@ export const useChatStore = defineStore('chat', () => {
     activeRuntimeMode = mode
     runtimeMode.value = mode
     runtimeGeneration += 1
+    clearPendingAttachmentSends()
     clearBackgroundObservers()
     sessions.value = []
     pendingRunUsage.clear()
     completedUnreadSessions.value = new Set()
     queueLengths.value = new Map()
     queuedUserMessages.value = new Map()
+    pendingUserMessageIds.clear()
     queueInsertionStates.value = new Map()
-    pendingApprovals.value = new Map()
-    pendingClarifies.value = new Map()
+    pendingApprovals.value = new Map([...pendingApprovals.value].filter(([id, request]) => request.inboxProfile || id.startsWith('person-main-')))
+    pendingClarifies.value = new Map([...pendingClarifies.value].filter(([id, request]) => request.inboxProfile || id.startsWith('person-main-')))
     pendingApprovalResponseIds.clear()
     pendingClarifyResponseIds.clear()
     streamStates.value = new Map()
@@ -1704,7 +1749,7 @@ export const useChatStore = defineStore('chat', () => {
     focusMessageId.value = null
     setAbortState(sid, null)
     setCompressionState(sid, null)
-    removeItem(storageKey())
+    if (!scopedSessionId) removeItem(storageKey())
   }
 
   function attachWorkspaceChangesToMessages(sessionId: string) {
@@ -1785,16 +1830,19 @@ export const useChatStore = defineStore('chat', () => {
       pendingRunUsage.get(sessionId)?.delete(summary.runId)
       if (!pendingRunUsage.get(sessionId)?.size) pendingRunUsage.delete(sessionId)
     }
-    if (target && summary) {
-      let message = target.messages.find(m => m.role === 'assistant' && m.id === summary.assistantMessageId)
+    const taskReturn = evt?.person_task_return as import('@/api/person').PersonTaskReturn | undefined
+    const persistedId = taskReturn?.assistantMessageId || summary?.assistantMessageId
+    if (target && (summary || taskReturn)) {
+      let message = target.messages.find(m => m.role === 'assistant' && m.id === persistedId)
         || target.messages.find(m => m.role === 'assistant' && m.id === assistantMessageId)
-      if (!message && summary.assistantMessageId) {
-        message = { id: summary.assistantMessageId, role: 'assistant', content: '', timestamp: Date.now() }
+      if (!message && persistedId) {
+        message = { id: persistedId, role: 'assistant', content: '', timestamp: Date.now() }
         target.messages.push(message)
       }
       if (message) {
-        if (summary.assistantMessageId && !target.messages.some(m => m !== message && m.id === summary.assistantMessageId)) message.id = summary.assistantMessageId
-        message.runUsage = summary
+        if (persistedId && !target.messages.some(m => m !== message && m.id === persistedId)) message.id = persistedId
+        if (summary) message.runUsage = summary
+        if (taskReturn) message.personTaskReturn = taskReturn
       }
     }
   }
@@ -1821,8 +1869,14 @@ export const useChatStore = defineStore('chat', () => {
     return mapped
   }
 
-  async function loadSessions(profile?: string | null, preferredSessionId?: string | null) {
+  async function loadSessions(profile?: string | null, preferredSessionId?: string | null, preferredFocusId?: string | null) {
     const requestSequence = ++loadSessionsRequestSequence
+    // Returning from Person must detach its private conversation even when
+    // the ordinary chat list is slow or unavailable.
+    if (/^person-(main|task)-/.test(activeSessionId.value || '')) {
+      clearActiveSession()
+      sessions.value = sessions.value.filter(session => !/^person-(main|task)-/.test(session.id))
+    }
     const selectionSequence = activeSelectionSequence
     isLoadingSessions.value = true
     try {
@@ -1897,7 +1951,8 @@ export const useChatStore = defineStore('chat', () => {
             ? storedId
             : sessions.value[0]?.id
       if (targetId) {
-        await switchSession(targetId, targetId === currentId ? focusMessageId.value : null)
+        await switchSession(targetId, targetId === preferredSessionId && preferredFocusId
+          ? preferredFocusId : targetId === currentId ? focusMessageId.value : null)
       } else {
         clearActiveSession()
       }
@@ -1945,6 +2000,7 @@ export const useChatStore = defineStore('chat', () => {
           // (messages, loadedMessageCount, hasMoreBefore, contextTokens).
           existing.title = fresh.title
           existing.source = fresh.source
+          existing.botType = fresh.botType
           existing.updatedAt = fresh.updatedAt
           existing.lastActiveAt = fresh.lastActiveAt
           existing.endedAt = fresh.endedAt
@@ -1992,31 +2048,77 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
+  function applyMessageDeletion(sessionId: string, result: MessageDeletionResult) {
+    if ((messageHistoryRevisions.get(sessionId) ?? -1) >= result.historyRevision) return
+    messageHistoryRevisions.set(sessionId, result.historyRevision)
+    const target = sessions.value.find(session => session.id === sessionId)
+    if (!target) return
+    target.historyRevision = result.historyRevision
+    const ids = new Set(result.messageIds)
+    const runs = new Set(target.messages.filter(message => ids.has(message.storedMessageId ?? Number(message.id)))
+      .map(message => message.runMarker).filter(Boolean))
+    target.messages = target.messages.filter(message => !ids.has(message.storedMessageId ?? Number(message.id))
+      && !(message.taskPlan && runs.has(message.runMarker)))
+    target.messageTotal = Math.max(0, (target.messageTotal ?? target.messageCount ?? 0) - result.deleted)
+    target.messageCount = target.messageTotal
+    target.contextTokens = typeof result.contextTokens === 'number' && Number.isFinite(result.contextTokens) && result.contextTokens >= 0
+      ? result.contextTokens : undefined
+    target.loadedMessageCount = 0
+    clearMessageReference(sessionId)
+    pendingRunUsage.delete(sessionId)
+    if (activeSessionId.value === sessionId) {
+      focusMessageId.value = null
+      const messagesAtDeletion = target.messages
+      const countAtDeletion = messagesAtDeletion.length
+      // A subsequent run/resume owns the newer transcript, even if it finishes
+      // before this refresh returns.
+      void refreshActiveSession({ canApply: () => !isSessionWorking(sessionId)
+        && target.messages === messagesAtDeletion && target.messages.length === countAtDeletion })
+    }
+  }
+
+  async function deleteMessages(sessionId: string, messageIds: number[], historyRevision: number) {
+    const session = sessions.value.find(item => item.id === sessionId)
+    const result = await deleteSessionMessages(sessionId, messageIds, historyRevision, session?.profile)
+    applyMessageDeletion(sessionId, result)
+    return result
+  }
+
   // Re-pull active session from server. Used on tab-visible events.
-  async function refreshActiveSession(): Promise<boolean> {
+  async function refreshActiveSession(options: { canApply?: () => boolean; latest?: boolean } = {}): Promise<boolean> {
     const sid = activeSessionId.value
     if (!sid) return false
     try {
       const target = sessions.value.find(s => s.id === sid)
       if (!target) return false
-      const limit = focusMessageId.value
+      if (target.personFlows?.timeline?.has_newer && !options.latest && !options.canApply) return true
+      const revision = messageHistoryRevisions.get(sid)
+      const previousPersonFlows = target.personFlows
+      const limit = target.personFlows?.timeline ? LIVE_CHAT_MESSAGE_PAGE_SIZE : focusMessageId.value
         ? Math.max(target.loadedMessageCount || LIVE_CHAT_MESSAGE_PAGE_SIZE, LIVE_CHAT_MESSAGE_PAGE_SIZE)
         : Math.min(
           Math.max(target.loadedMessageCount || LIVE_CHAT_MESSAGE_PAGE_SIZE, LIVE_CHAT_MESSAGE_PAGE_SIZE),
           LIVE_CHAT_MAX_LOADED_MESSAGES,
         )
-      const detail = await fetchSessionMessagesPage(sid, 0, limit, activeSession.value?.profile)
+      const detail = await fetchSessionMessagesPage(sid, 0, limit, activeSession.value?.profile, sid.startsWith('person-main-') ? {} : undefined)
+      if (revision !== messageHistoryRevisions.get(sid) || options.canApply?.() === false) return false
       if (!detail) return false
+      if ((target.personFlows?.timeline?.history_revision ?? -1) > (detail.personFlows?.timeline?.history_revision ?? Infinity)) return false
+      const pushedFlows = target.personFlows !== previousPersonFlows ? target.personFlows : undefined
       const mapped = mapHermesMessages(detail.messages || [], detail.taskPlans, target.messages)
       target.messages = mapped
+      target.messagesLoaded = true
       restorePersistedSubagentStreams(sid)
       setWorkspaceRunChanges(sid, detail.workspaceRunChanges || [])
       target.loadedMessageCount = detail.messages.length
       target.messageTotal = detail.total
       target.messageCount = detail.total
       target.hasMoreBefore = detail.hasMore
+      if (!applyPersonTimelinePage(target,detail.personFlows,mapped) && target.personFlows === previousPersonFlows && detail.personFlows) target.personFlows=detail.personFlows
+      if (pushedFlows && detail.personFlows?.timeline) applyPersonFlowUpdate(target,pushedFlows)
       if (detail.session.title) target.title = detail.session.title
       target.workspace = detail.session.workspace || target.workspace || null
+      target.botType = detail.session.bot_type || target.botType
       target.isPinned = Boolean(detail.session.is_pinned)
       target.categoryId = detail.session.category_id ?? null
       applyServerPushEnabled(target, Boolean(detail.session.push_enabled))
@@ -2038,7 +2140,7 @@ export const useChatStore = defineStore('chat', () => {
     profile?: string
     model?: string
     provider?: string
-    source?: 'api_server' | 'cli' | 'coding_agent' | 'global_agent' | 'workflow' | 'group_chat'
+    source?: 'api_server' | 'cli' | 'coding_agent' | 'builtin_agent' | 'global_agent' | 'workflow' | 'group_chat'
     agent?: ChatAgentId
     codingAgentId?: ChatCodingAgentId
     codingAgentMode?: 'global' | 'scoped'
@@ -2048,10 +2150,11 @@ export const useChatStore = defineStore('chat', () => {
     baseUrl?: string
     apiKey?: string
     apiMode?: ProviderApiMode
+    reasoningEffort?: string
   } = {}): Session {
-    const source = runtimeMode.value === 'global_agent' ? 'global_agent' : options.source || 'cli'
     const codingAgentId = options.codingAgentId || agentToCodingAgentId(options.agent)
-    const codingAgentMode = codingAgentId ? (options.codingAgentMode || 'scoped') : undefined
+    const source = historySessionSource({ ...options, codingAgentId, source: runtimeMode.value === 'global_agent' ? 'global_agent' : options.source || 'cli' })
+    const codingAgentMode = codingAgentId ? (codingAgentId === 'hub-agent' ? 'scoped' : options.codingAgentMode || 'scoped') : undefined
     const session: Session = {
       id: uid(),
       profile: options.profile || useProfilesStore().activeProfileName || 'default',
@@ -2072,6 +2175,7 @@ export const useChatStore = defineStore('chat', () => {
       baseUrl: options.baseUrl,
       apiKey: options.apiKey,
       apiMode: options.apiMode,
+      reasoningEffort: options.reasoningEffort || undefined,
     }
     sessions.value.unshift(session)
     return session
@@ -2112,9 +2216,11 @@ export const useChatStore = defineStore('chat', () => {
     clearThinkingObservationFor(sessionId)
     activeSessionId.value = sessionId
     focusMessageId.value = focusId ?? null
-    setItemBestEffort(storageKey(), sessionId)
-    const legacyActiveKey = legacyStorageKey()
-    if (legacyActiveKey) removeItem(legacyActiveKey)
+    if (!scopedSessionId) {
+      setItemBestEffort(storageKey(), sessionId)
+      const legacyActiveKey = legacyStorageKey()
+      if (legacyActiveKey) removeItem(legacyActiveKey)
+    }
     activeSession.value = sessions.value.find(s => s.id === sessionId) || null
     clearSessionCompletedUnread(sessionId)
 
@@ -2183,14 +2289,16 @@ export const useChatStore = defineStore('chat', () => {
           target.parentTitle = (data as any).parentTitle || target.parentTitle || null
           target.parentLastMessage = (data as any).parentLastMessage || target.parentLastMessage || null
           target.parentLastMessageRole = (data as any).parentLastMessageRole || target.parentLastMessageRole || null
-          if (Array.isArray(data.messages)) {
+          if (Array.isArray(data.messages) && !preservePersonTimelineWindow(target,data.personFlows)) {
             target.messages = mapHermesMessages(data.messages as any[], data.taskPlans, target.messages)
+            target.messagesLoaded = true
             restorePersistedSubagentStreams(sessionId)
             setWorkspaceRunChanges(sessionId, data.workspaceRunChanges || [])
             target.loadedMessageCount = data.messageLoadedCount ?? data.messages.length
             target.messageTotal = data.messageTotal ?? target.messageCount ?? target.loadedMessageCount
             target.messageCount = target.messageTotal
             target.hasMoreBefore = data.hasMoreBefore ?? target.loadedMessageCount < target.messageTotal
+            if (!applyPersonTimelinePage(target,data.personFlows,target.messages) && data.personFlows) target.personFlows=data.personFlows
           }
           if (!target.title) {
             const firstUser = target.messages.find(m => m.role === 'user')
@@ -2286,9 +2394,9 @@ export const useChatStore = defineStore('chat', () => {
       while (focusId && isCurrentSelection()) {
         const target = activeSession.value
         if (!target || target.messages.some(message => message.id === focusId)) break
-        const offset = target.loadedMessageCount || 0
+        const offset = target.personFlows?.timeline?.before ?? target.loadedMessageCount ?? 0
         if (!await loadOlderMessages(sessionId, isCurrentSelection)) break
-        if ((target.loadedMessageCount || 0) <= offset) break
+        if (target.personFlows?.timeline ? target.personFlows.timeline.before === offset : (target.loadedMessageCount || 0) <= Number(offset)) break
       }
       loaded = isCurrentSelection() && (!focusId || !!activeSession.value?.messages.some(message => message.id === focusId))
       if (isCurrentSelection() && !loaded) focusMessageId.value = null
@@ -2311,19 +2419,33 @@ export const useChatStore = defineStore('chat', () => {
     const target = sessions.value.find(s => s.id === sessionId)
     if (!target || (!searchSelection && target.isLoadingOlderMessages) || !target.hasMoreBefore) return false
     const offset = target.loadedMessageCount || 0
-    if (!searchSelection && offset >= LIVE_CHAT_MAX_LOADED_MESSAGES) return false
-    const limit = searchSelection
+    const personMain = sessionId.startsWith('person-main-')
+    const timeline = target.personFlows?.timeline
+    const budgetCount = personMain ? target.messages.length : offset
+    if (!timeline && !searchSelection && budgetCount >= LIVE_CHAT_MAX_LOADED_MESSAGES) return false
+    const limit = timeline || searchSelection
       ? LIVE_CHAT_MESSAGE_PAGE_SIZE
-      : Math.min(LIVE_CHAT_MESSAGE_PAGE_SIZE, LIVE_CHAT_MAX_LOADED_MESSAGES - offset)
+      : Math.min(LIVE_CHAT_MESSAGE_PAGE_SIZE, LIVE_CHAT_MAX_LOADED_MESSAGES - budgetCount)
     const loadToken = {}
     const previousMessages = target.messages
+    const previousPersonFlows = target.personFlows
     olderMessageLoads.set(target, loadToken)
     target.isLoadingOlderMessages = true
     try {
-      const page = await fetchSessionMessagesPage(sessionId, offset, limit, target.profile)
+      const page = await fetchSessionMessagesPage(sessionId, offset, limit, target.profile, timeline ? { before:timeline.before } : undefined)
       if (olderMessageLoads.get(target) !== loadToken || target.messages !== previousMessages
         || (searchSelection && !searchSelection())) return false
       if (!page) return false
+      if ((target.personFlows?.timeline?.history_revision ?? -1) > (page.personFlows?.timeline?.history_revision ?? Infinity)) return false
+      if (page.personFlows?.timeline) {
+        const incoming = mapHermesMessages(page.messages,page.taskPlans)
+        applyPersonTimelinePage(target,page.personFlows,incoming,true)
+        restorePersistedSubagentStreams(sessionId)
+        mergeWorkspaceRunChanges(sessionId,page.workspaceRunChanges || [])
+        target.messageTotal=page.total;target.messageCount=page.total
+        return page.personFlows.timeline.items.length > 0
+      }
+      if (target.personFlows === previousPersonFlows && page.personFlows) target.personFlows = page.personFlows
       if (page.messages.length === 0) {
         target.hasMoreBefore = false
         return false
@@ -2338,7 +2460,7 @@ export const useChatStore = defineStore('chat', () => {
       target.messageTotal = page.total
       target.messageCount = page.total
       target.hasMoreBefore = page.hasMore
-      return olderMessages.length > 0
+      return olderMessages.length > 0 || personMain
     } catch (err) {
       console.error('Failed to load older session messages:', err)
       return false
@@ -2354,7 +2476,7 @@ export const useChatStore = defineStore('chat', () => {
     profile?: string
     model?: string
     provider?: string
-    source?: 'api_server' | 'cli' | 'coding_agent' | 'global_agent' | 'workflow' | 'group_chat'
+    source?: 'api_server' | 'cli' | 'coding_agent' | 'builtin_agent' | 'global_agent' | 'workflow' | 'group_chat'
     agent?: ChatAgentId
     codingAgentId?: ChatCodingAgentId
     codingAgentMode?: 'global' | 'scoped'
@@ -2364,14 +2486,15 @@ export const useChatStore = defineStore('chat', () => {
     baseUrl?: string
     apiKey?: string
     apiMode?: ProviderApiMode
+    reasoningEffort?: string
   } = {}): Session {
     const appStore = useAppStore()
     const storageSource = runtimeMode.value === 'global_agent' ? 'global_agent' : options.source || 'cli'
     const codingAgentId = options.codingAgentId || agentToCodingAgentId(options.agent)
-    const isGlobalCodingAgent = Boolean(codingAgentId) && options.codingAgentMode === 'global'
+    const isGlobalCodingAgent = Boolean(codingAgentId) && codingAgentId !== 'hub-agent' && options.codingAgentMode === 'global'
     const session = createSession({
       profile: options.profile,
-      model: isGlobalCodingAgent ? undefined : options.model || appStore.selectedModel || undefined,
+      model: isGlobalCodingAgent ? options.model || undefined : options.model || appStore.selectedModel || undefined,
       provider: isGlobalCodingAgent ? '' : options.provider || appStore.selectedProvider || '',
       source: storageSource,
       agent: options.agent,
@@ -2383,6 +2506,7 @@ export const useChatStore = defineStore('chat', () => {
       baseUrl: options.baseUrl,
       apiKey: options.apiKey,
       apiMode: options.apiMode,
+      reasoningEffort: !isGlobalCodingAgent && options.provider === 'moa' ? undefined : options.reasoningEffort,
     })
     void switchSession(session.id)
     return session
@@ -2394,11 +2518,11 @@ export const useChatStore = defineStore('chat', () => {
     const target = sessions.value.find(s => s.id === targetId)
     const activeTarget = activeSession.value?.id === targetId ? activeSession.value : null
     const session = target || activeTarget
-    if (session?.codingAgentMode === 'global' && isCodingAgentLikeSession(session)) return false
+    if (session?.codingAgentMode === 'global' && isProviderAgentSession(session)) return false
     const previousProvider = String(target?.provider ?? activeTarget?.provider ?? '')
     const nextProvider = provider || ''
     const shouldClearRuntimeCredentials = previousProvider !== nextProvider && (
-      isCodingAgentLikeSession(target) || isCodingAgentLikeSession(activeTarget)
+      isProviderAgentSession(target) || isProviderAgentSession(activeTarget)
     )
     const preservedApiMode = apiMode || (previousProvider === nextProvider
       ? (shouldPreserveRuntimeApiMode(target) ? target?.apiMode : undefined) ||
@@ -2427,22 +2551,23 @@ export const useChatStore = defineStore('chat', () => {
     return true
   }
 
+  function forgetSession(sessionId: string) {
+    setBackgroundPending(sessionId, 0)
+    clearMessageReference(sessionId)
+    clearSessionCompletedUnread(sessionId)
+    setAbortState(sessionId, null)
+    setCompressionState(sessionId, null)
+    sessions.value = sessions.value.filter(session => session.id !== sessionId)
+    if (activeSessionId.value === sessionId) clearActiveSession()
+  }
+
   async function deleteSession(sessionId: string): Promise<boolean> {
     const target = sessions.value.find(s => s.id === sessionId)
     const ok = await deleteSessionApi(sessionId, target?.profile)
     if (!ok) return false
-    setBackgroundPending(sessionId, 0)
-    sessions.value = sessions.value.filter(s => s.id !== sessionId)
-    clearMessageReference(sessionId)
-    setAbortState(sessionId, null)
-    if (activeSessionId.value === sessionId) {
-      if (sessions.value.length > 0) {
-        await switchSession(sessions.value[0].id)
-      } else {
-        const session = createSession()
-        switchSession(session.id)
-      }
-    }
+    const wasActive = activeSessionId.value === sessionId
+    forgetSession(sessionId)
+    if (wasActive && sessions.value.length > 0) await switchSession(sessions.value[0].id)
     return true
   }
 
@@ -2476,9 +2601,9 @@ export const useChatStore = defineStore('chat', () => {
     return s?.messages || []
   }
 
-  function isEkkoAgentSession(sessionId: string): boolean {
+  function isHubAgentSession(sessionId: string): boolean {
     const session = sessions.value.find(item => item.id === sessionId)
-    return session?.codingAgentId === 'ekko-agent' || session?.agent === 'ekko-agent'
+    return session?.codingAgentId === 'hub-agent' || session?.agent === 'hub-agent' || session?.agent === 'ekko-agent'
   }
 
   function addMessage(sessionId: string, msg: Message) {
@@ -2505,7 +2630,7 @@ export const useChatStore = defineStore('chat', () => {
     runMarker?: string | null,
   ) {
     const payload = runtimeObjectPayload(output)
-    if (!payload || payload.mode !== 'background' || payload.runtime === 'ekko') return
+    if (!payload || payload.mode !== 'background' || payload.runtime === 'hub' || payload.runtime === 'ekko') return
     const baseId = toolCallId || String(payload.delegation_id || uid())
     const messages = getSessionMsgs(sessionId)
     for (const task of backgroundDelegateTaskDescriptors(payload, toolArgs)) {
@@ -2568,7 +2693,8 @@ export const useChatStore = defineStore('chat', () => {
     if (!s) return
     const idx = s.messages.findIndex(m => m.id === id)
     if (idx !== -1) {
-      s.messages[idx] = { ...s.messages[idx], ...update }
+      // Realtime speech tracks the live object across status updates and ID alignment.
+      Object.assign(s.messages[idx]!, update)
     }
   }
 
@@ -2609,11 +2735,14 @@ export const useChatStore = defineStore('chat', () => {
     )
   }
 
-  function handleToolStartedEvent(sessionId: string, evt: RunEvent, reasoning?: string) {
+  function handleToolStartedEvent(sessionId: string, evt: RunEvent, reasoning?: string, live = false) {
     const toolName = evt.tool || evt.name
+    if (live && activeSessionId.value === sessionId && isHubAgentSession(sessionId)) {
+      void notifyComputerUseStarted(toolName, runtimeObjectPayload(evt.arguments))
+    }
     if (
       isBackgroundDelegateToolPayload(toolName, evt.arguments)
-      || (isEkkoAgentSession(sessionId) && toolName === 'delegate_task')
+      || (isHubAgentSession(sessionId) && toolName === 'delegate_task')
     ) return
 
     const toolCallId = typeof (evt as any).tool_call_id === 'string'
@@ -2675,9 +2804,9 @@ export const useChatStore = defineStore('chat', () => {
       return
     }
     if (
-      isEkkoAgentSession(sessionId)
+      isHubAgentSession(sessionId)
       && toolName === 'delegate_task'
-      && runtimeObjectPayload(output)?.runtime === 'ekko'
+      && (runtimeObjectPayload(output)?.runtime === 'hub' || runtimeObjectPayload(output)?.runtime === 'ekko')
     ) {
       const session = sessions.value.find(item => item.id === sessionId)
       if (session && existing) session.messages = session.messages.filter(message => message !== existing)
@@ -2991,6 +3120,10 @@ export const useChatStore = defineStore('chat', () => {
 
     const sid = evt.session_id
     if (!sid) return
+    if ((evt as any).action === 'messages_deleted') {
+      applyMessageDeletion(sid, evt as unknown as MessageDeletionResult)
+      return
+    }
     const target = sessions.value.find(s => s.id === sid)
     const action = (evt as any).action as string | undefined
     const command = String((evt as any).command || '').toLowerCase()
@@ -3013,8 +3146,12 @@ export const useChatStore = defineStore('chat', () => {
     }
 
     if (action === 'clear' && command === 'clear') {
-      if (target) target.messages = []
+      if (target) {
+        target.messages = []
+        if (target.personFlows) target.personFlows = { ...target.personFlows, history_cleared_at: Date.now() }
+      }
       queuedUserMessages.value.delete(sid)
+      pendingUserMessageIds.delete(sid)
       queueLengths.value.delete(sid)
       queueInsertionStates.value.delete(sid)
       clearMessageReference(sid)
@@ -3050,6 +3187,7 @@ export const useChatStore = defineStore('chat', () => {
       clearRunStartedAt(sid)
       queueLengths.value.delete(sid)
       queuedUserMessages.value.delete(sid)
+      pendingUserMessageIds.delete(sid)
       queueInsertionStates.value.delete(sid)
       clearMessageReference(sid)
       setAbortState(sid, null)
@@ -3163,6 +3301,7 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function dropQueuedUserMessage(sessionId: string, messageId: string): boolean {
+    acknowledgeUserMessage(sessionId, messageId)
     const queue = queuedUserMessages.value.get(sessionId)
     if (!queue?.length) return false
     const next = queue.filter(message => message.id !== messageId)
@@ -3206,19 +3345,20 @@ export const useChatStore = defineStore('chat', () => {
       return
     }
     if (phase !== 'requesting' && phase !== 'waiting_for_tool_batch' && phase !== 'stopping_current_turn') return
+    const normalizedQueueRuntime = (raw.runtime as string | undefined) === 'ekko' ? 'hub' : raw.runtime
     nextMap.set(sessionId, {
       generation,
       runId: typeof raw.run_id === 'string' ? raw.run_id : undefined,
       queueId,
-      runtime: raw.runtime === 'ekko'
-        || raw.runtime === 'claude-code'
-        || raw.runtime === 'codex'
-        || raw.runtime === 'pi'
-        || raw.runtime === 'grok'
-        || raw.runtime === 'opencode'
-        || raw.runtime === 'dsh'
-        || (raw.runtime === 'cursor' || raw.runtime === 'antigravity')
-        ? raw.runtime
+      runtime: typeof normalizedQueueRuntime === 'string' && normalizedQueueRuntime.startsWith('plugin:') ? normalizedQueueRuntime as `plugin:${string}/${string}` : normalizedQueueRuntime === 'hub'
+        || normalizedQueueRuntime === 'claude-code'
+        || normalizedQueueRuntime === 'codex'
+        || normalizedQueueRuntime === 'pi'
+        || normalizedQueueRuntime === 'grok'
+        || normalizedQueueRuntime === 'opencode'
+        || normalizedQueueRuntime === 'dsh'
+        || (isNativeCodingAgent(normalizedQueueRuntime) || normalizedQueueRuntime === 'cursor' || normalizedQueueRuntime === 'antigravity')
+        ? normalizedQueueRuntime
         : 'hermes',
       phase,
       guarantee: raw.guarantee === 'immediate' ? 'immediate' : 'strict',
@@ -3256,20 +3396,56 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function replaceQueuedUserMessages(sessionId: string, messages: Message[]) {
-    const existingById = new Map((queuedUserMessages.value.get(sessionId) || []).map(message => [message.id, message]))
-    const merged = messages.map(message => ({
+    const existingQueue = queuedUserMessages.value.get(sessionId) || []
+    const transcript = getSessionMsgs(sessionId)
+    const transcriptIds = new Set(transcript.map(message => message.id))
+    const pendingIds = pendingUserMessageIds.get(sessionId)
+    const existingById = new Map([...transcript, ...existingQueue].map(message => [message.id, message]))
+    // An old snapshot cannot put an already-started input back in the queue.
+    const queued = messages.filter(message => !transcriptIds.has(message.id) || pendingIds?.has(message.id))
+    const confirmedIds = new Set(queued.map(message => message.id))
+    const merged: Message[] = queued.map(message => ({
       ...(existingById.get(message.id) || {}),
       ...message,
+      timestamp: existingById.get(message.id)?.timestamp ?? message.timestamp,
       attachments: existingById.get(message.id)?.attachments || message.attachments,
       queued: true,
     }))
+    for (const id of confirmedIds) acknowledgeUserMessage(sessionId, id)
+    // A snapshot may predate later sends (including attachment uploads).
+    merged.push(...existingQueue.filter(message => !confirmedIds.has(message.id) && pendingIds?.has(message.id)))
+    const queuedIds = new Set(merged.map(message => message.id))
+    const target = sessions.value.find(session => session.id === sessionId)
+    if (target && transcript.some(message => queuedIds.has(message.id))) {
+      target.messages = transcript.filter(message => !queuedIds.has(message.id))
+    }
     const nextMap = new Map(queuedUserMessages.value)
     if (merged.length > 0) {
       nextMap.set(sessionId, merged)
+      queueLengths.value.set(sessionId, Math.max(queueLengths.value.get(sessionId) || 0, merged.length))
     } else {
       nextMap.delete(sessionId)
     }
     queuedUserMessages.value = nextMap
+  }
+
+  function promoteStartedQueuedMessage(sessionId: string, queueId: string | undefined) {
+    if (!queueId) return
+    acknowledgeUserMessage(sessionId, queueId)
+    const queue = queuedUserMessages.value.get(sessionId) || []
+    const message = queue.find(item => item.id === queueId)
+    if (!message) return
+    dropQueuedUserMessage(sessionId, queueId)
+    if (!getSessionMsgs(sessionId).some(item => item.id === queueId)) {
+      addMessage(sessionId, { ...message, queued: false })
+      updateSessionTitle(sessionId)
+    }
+  }
+
+  function acknowledgeUserMessage(sessionId: string, messageId: string) {
+    const ids = pendingUserMessageIds.get(sessionId)
+    ids?.delete(messageId)
+    if (!ids?.size) pendingUserMessageIds.delete(sessionId)
   }
 
   function markDequeuedQueueId(sessionId: string, messageId: string) {
@@ -3304,6 +3480,7 @@ export const useChatStore = defineStore('chat', () => {
       ? String((evt as any).dequeued_queue_id)
       : ''
     if (dequeuedId) {
+      acknowledgeUserMessage(sessionId, dequeuedId)
       const existingQueue = queuedUserMessages.value.get(sessionId) || []
       const dequeued = existingQueue.find(message => message.id === dequeuedId)
       if (Array.isArray((evt as any).queued_messages)) {
@@ -3333,6 +3510,8 @@ export const useChatStore = defineStore('chat', () => {
     const messageId = peer?.id != null ? String(peer.id) : ''
     if (!messageId || !content.trim()) return
 
+    acknowledgeUserMessage(sessionId, messageId)
+
     if ((queuedUserMessages.value.get(sessionId) || []).some(msg => msg.id === messageId)) return
 
     const timestamp = typeof peer?.timestamp === 'number' && Number.isFinite(peer.timestamp)
@@ -3357,10 +3536,12 @@ export const useChatStore = defineStore('chat', () => {
     })
   }
 
-  function setPendingApproval(evt: RunEvent) {
+  function setPendingApproval(evt: RunEvent, inboxProfile?: string) {
     const sid = evt.session_id
     const approvalId = (evt as any).approval_id as string | undefined
     if (!sid || !approvalId) return
+    const previous = pendingApprovals.value.get(sid)
+    const sameRequest = previous?.approvalId === approvalId ? previous : undefined
     if (pendingApprovalResponseIds.get(sid) !== approvalId) pendingApprovalResponseIds.delete(sid)
     const description = String((evt as any).description || '')
     const normalizedDescription = description.trim().toLowerCase().replace(/\s+/g, ' ')
@@ -3376,13 +3557,17 @@ export const useChatStore = defineStore('chat', () => {
     pendingApprovals.value.set(sid, {
       sessionId: sid,
       approvalId,
+      inboxProfile: inboxProfile ?? sameRequest?.inboxProfile,
+      sessionSource: evt.session_source ?? sameRequest?.sessionSource,
+      submitting: sameRequest?.submitting,
+      submissionFailed: sameRequest?.submissionFailed,
       command: String((evt as any).command || ''),
       description,
       choices: isMemoryWrite ? ['once', 'deny'] : choices.length ? choices : ['once', 'session', 'deny'],
       allowPermanent: Boolean((evt as any).allow_permanent),
       isMemoryWrite,
       requestedAt: Date.now(),
-      countdownDeadline: pendingInteractionDeadline(
+      countdownDeadline: (evt as any).durable === true ? Infinity : pendingInteractionDeadline(
         (evt as any).remaining_timeout_ms,
         (evt as any).timeout_ms,
       ),
@@ -3415,21 +3600,27 @@ export const useChatStore = defineStore('chat', () => {
     pendingApprovals.value = new Map(pendingApprovals.value)
   }
 
-  function setPendingClarify(evt: RunEvent) {
+  function setPendingClarify(evt: RunEvent, inboxProfile?: string) {
     const sid = evt.session_id
     const clarifyId = (evt as any).clarify_id as string | undefined
     if (!sid || !clarifyId) return
+    const previous = pendingClarifies.value.get(sid)
+    const sameQuestion = previous?.clarifyId === clarifyId ? previous : undefined
     if (pendingClarifyResponseIds.get(sid) !== clarifyId) pendingClarifyResponseIds.delete(sid)
     pendingClarifies.value.set(sid, {
       sessionId: sid,
       clarifyId,
+      inboxProfile: inboxProfile ?? sameQuestion?.inboxProfile,
+      sessionSource: evt.session_source ?? sameQuestion?.sessionSource,
       question: String((evt as any).question || ''),
       choices: Array.isArray((evt as any).choices) ? (evt as any).choices : null,
-      initialResponse: String((evt as any).initial_response || ''),
+      initialResponse: sameQuestion?.initialResponse ?? String((evt as any).initial_response || ''),
+      submitting: sameQuestion?.submitting,
+      submissionFailed: sameQuestion?.submissionFailed,
       responseMode: String((evt as any).response_mode || ''),
       timeoutMs: Number((evt as any).timeout_ms) || 300000,
       requestedAt: Date.now(),
-      countdownDeadline: pendingInteractionDeadline(
+      countdownDeadline: (evt as any).durable === true ? Infinity : pendingInteractionDeadline(
         (evt as any).remaining_timeout_ms,
         (evt as any).timeout_ms,
       ),
@@ -3451,7 +3642,12 @@ export const useChatStore = defineStore('chat', () => {
       return
     }
     if (clarifyId && current.clarifyId !== clarifyId) return
-    if ((evt as any).resolved === false) {
+    const expired = ['timeout', 'timed_out', 'cancelled', 'aborted'].includes(evt.reason || '')
+    if ((evt as any).resolved === false || expired) {
+      if (expired) {
+        dismissPendingClarifyFor(sid, current.clarifyId)
+        return
+      }
       if ((evt as any).stale === true || isPendingInteractionExpiredError((evt as any).error || (evt as any).reason)) {
         dismissPendingClarifyFor(sid, current.clarifyId)
         if (attempted) notifyPendingInteractionExpired()
@@ -3460,6 +3656,25 @@ export const useChatStore = defineStore('chat', () => {
     }
     pendingClarifies.value.delete(sid)
     pendingClarifies.value = new Map(pendingClarifies.value)
+  }
+
+  function applyPendingInboxEvent(event: PendingInboxEvent) {
+    if (event.event === 'approval.requested') setPendingApproval(event, event.profile)
+    if (event.event === 'clarify.requested') setPendingClarify(event, event.profile)
+    if (event.event === 'approval.resolved') clearPendingApproval(event)
+    if (event.event === 'clarify.resolved') clearPendingClarify(event)
+  }
+
+  function restorePendingInbox(events: PendingInboxEvent[]) {
+    const approvals = new Map(events.filter(e => e.approval_id).map(e => [e.session_id, e.approval_id]))
+    const clarifications = new Map(events.filter(e => e.clarify_id).map(e => [e.session_id, e.clarify_id]))
+    for (const [sid, pending] of pendingApprovals.value) {
+      if (pending.inboxProfile && approvals.get(sid) !== pending.approvalId) dismissPendingApprovalFor(sid, pending.approvalId)
+    }
+    for (const [sid, pending] of pendingClarifies.value) {
+      if (pending.inboxProfile && clarifications.get(sid) !== pending.clarifyId) dismissPendingClarifyFor(sid, pending.clarifyId)
+    }
+    for (const event of events) applyPendingInboxEvent(event)
   }
 
   function clearPendingInteractions(sessionId: string) {
@@ -3494,37 +3709,84 @@ export const useChatStore = defineStore('chat', () => {
     pendingClarifies.value = new Map(pendingClarifies.value)
   }
 
-  function respondToClarifyFor(sessionId: string, clarifyId: string, response: string): PendingInteractionSubmitResult {
-    const pending = pendingClarifies.value.get(sessionId)
-    if (!pending || pending.clarifyId !== clarifyId) return 'missing'
-    respondClarify(sessionId, clarifyId, response, runtimeTransport())
-    pendingClarifyResponseIds.set(sessionId, clarifyId)
-    return 'submitted'
+  function pendingResponseRoute(pending: PendingApproval | PendingClarify) {
+    const session = sessions.value.find(item => item.id === pending.sessionId)
+    const person = pending.sessionId.startsWith('person-main-')
+    const local = !!pending.inboxProfile || person
+    const profile = person && pending.inboxProfile ? getProfileName() : pending.inboxProfile || session?.profile
+    return { transport: local ? 'chat-run' as const : runtimeTransport(), profile }
   }
 
-  function respondToClarify(response: string): PendingInteractionSubmitResult {
+  async function respondToClarifyFor(sessionId: string, clarifyId: string, response: string): Promise<PendingInteractionSubmitResult> {
+    const pending = pendingClarifies.value.get(sessionId)
+    if (!pending || pending.clarifyId !== clarifyId || pending.submitting) return 'missing'
+    pending.submitting = true
+    pending.submissionFailed = false
+    pending.initialResponse = response
+    pendingClarifyResponseIds.set(sessionId, clarifyId)
+    try {
+      const { transport, profile } = pendingResponseRoute(pending)
+      await respondClarify(sessionId, clarifyId, response, transport, profile)
+      dismissPendingClarifyFor(sessionId, clarifyId)
+      return 'submitted'
+    } catch (error) {
+      if (isPendingInteractionExpiredError(error)) {
+        if (pendingClarifies.value.get(sessionId)?.clarifyId === clarifyId) {
+          dismissPendingClarifyFor(sessionId, clarifyId)
+          notifyPendingInteractionExpired()
+        }
+        return 'expired'
+      }
+      const current = pendingClarifies.value.get(sessionId)
+      if (current?.clarifyId === clarifyId) current.submissionFailed = true
+      throw error
+    } finally {
+      const current = pendingClarifies.value.get(sessionId)
+      if (current?.clarifyId === clarifyId) current.submitting = false
+      if (pendingClarifyResponseIds.get(sessionId) === clarifyId) pendingClarifyResponseIds.delete(sessionId)
+    }
+  }
+
+  async function respondToClarify(response: string): Promise<PendingInteractionSubmitResult> {
     const pending = activePendingClarify.value
     if (!pending) return 'missing'
-    const result = respondToClarifyFor(pending.sessionId, pending.clarifyId, response)
-    if (result === 'submitted') dismissPendingClarifyFor(pending.sessionId, pending.clarifyId)
-    return result
+    return respondToClarifyFor(pending.sessionId, pending.clarifyId, response)
   }
 
 
-  function respondApprovalFor(sessionId: string, approvalId: string, choice: PendingApproval['choices'][number]): PendingInteractionSubmitResult {
+  async function respondApprovalFor(sessionId: string, approvalId: string, choice: PendingApproval['choices'][number]): Promise<PendingInteractionSubmitResult> {
     const pending = pendingApprovals.value.get(sessionId)
-    if (!pending || pending.approvalId !== approvalId) return 'missing'
-    respondToolApproval(sessionId, approvalId, choice, runtimeTransport())
+    if (!pending || pending.approvalId !== approvalId || pending.submitting) return 'missing'
+    pending.submitting = true
+    pending.submissionFailed = false
     pendingApprovalResponseIds.set(sessionId, approvalId)
-    return 'submitted'
+    try {
+      const { transport, profile } = pendingResponseRoute(pending)
+      await respondToolApproval(sessionId, approvalId, choice, transport, profile)
+      dismissPendingApprovalFor(sessionId, approvalId)
+      return 'submitted'
+    } catch (error) {
+      if (isPendingInteractionExpiredError(error)) {
+        if (pendingApprovals.value.get(sessionId)?.approvalId === approvalId) {
+          dismissPendingApprovalFor(sessionId, approvalId)
+          notifyPendingInteractionExpired()
+        }
+        return 'expired'
+      }
+      const current = pendingApprovals.value.get(sessionId)
+      if (current?.approvalId === approvalId) current.submissionFailed = true
+      throw error
+    } finally {
+      const current = pendingApprovals.value.get(sessionId)
+      if (current?.approvalId === approvalId) current.submitting = false
+      if (pendingApprovalResponseIds.get(sessionId) === approvalId) pendingApprovalResponseIds.delete(sessionId)
+    }
   }
 
-  function respondApproval(choice: PendingApproval['choices'][number]): PendingInteractionSubmitResult {
+  async function respondApproval(choice: PendingApproval['choices'][number]): Promise<PendingInteractionSubmitResult> {
     const pending = activePendingApproval.value
     if (!pending) return 'missing'
-    const result = respondApprovalFor(pending.sessionId, pending.approvalId, choice)
-    if (result === 'submitted') dismissPendingApprovalFor(pending.sessionId, pending.approvalId)
-    return result
+    return respondApprovalFor(pending.sessionId, pending.approvalId, choice)
   }
 
   function updateSessionTitle(sessionId: string) {
@@ -3577,12 +3839,14 @@ export const useChatStore = defineStore('chat', () => {
     const targets = [sessions.value.find(s => s.id === sid), activeSession.value?.id === sid ? activeSession.value : null]
       .filter((session): session is Session => Boolean(session))
     for (const target of new Set(targets)) {
-      if (typeof evt.model === 'string') target.model = evt.model
+      const pendingReasoning = reasoningEffortWriteTargets.get(sid)
+      const matchesReasoningWrite = !pendingReasoning || pendingReasoning.effort === (evt.reasoning_effort || undefined)
+      if (typeof evt.model === 'string' && (!pendingReasoning?.model || matchesReasoningWrite)) target.model = evt.model
       if (typeof evt.provider === 'string') target.provider = evt.provider
       if (typeof evt.api_mode === 'string') target.apiMode = evt.api_mode as ProviderApiMode || undefined
       if (typeof evt.reasoning_effort === 'string') {
         const incomingEffort = evt.reasoning_effort || undefined
-        const pendingEffort = reasoningEffortWriteTargets.get(sid)
+        const pendingEffort = reasoningEffortWriteTargets.get(sid)?.effort
         if (!reasoningEffortWriteTargets.has(sid) || pendingEffort === incomingEffort) {
           target.reasoningEffort = incomingEffort
         }
@@ -3623,31 +3887,7 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function completionNotificationAgent(session: Session): { icon: string } {
-    const codingAgentId = session.codingAgentId || agentToCodingAgentId(session.agent)
-    if (codingAgentId === 'codex') {
-      return { icon: '/coding-agents/codex-openai.png' }
-    }
-    if (codingAgentId === 'claude-code') {
-      return { icon: '/coding-agents/claude-code.svg' }
-    }
-    if (codingAgentId === 'pi') {
-      return { icon: '/coding-agents/pi.svg' }
-    }
-    if (codingAgentId === 'grok') {
-      return { icon: '/coding-agents/grok.svg' }
-    }
-    if (codingAgentId === 'dsh') return { icon: '/coding-agents/deepseek.svg' }
-    if (codingAgentId === 'opencode') {
-      return { icon: '/coding-agents/opencode.png' }
-    }
-    if (codingAgentId === 'antigravity') return { icon: '/coding-agents/antigravity.png' }
-    if (codingAgentId === 'cursor') {
-      return { icon: '/coding-agents/cursor-logo.png' }
-    }
-    if (codingAgentId === 'ekko-agent') {
-      return { icon: '/coding-agents/ekko-agent.png' }
-    }
-    return { icon: '/coding-agents/hermes.png' }
+    return { icon: chatSessionAgentAvatar(session).src }
   }
 
   function completionNotificationBody(session: Session, message?: Message): string {
@@ -3656,6 +3896,7 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function showCompletionNotificationIfEnabled(sessionId: string, messageId?: string | null) {
+    if (sessionId.startsWith('person-main-')) return // The global Person terminal event owns this notification.
     const settingsStore = useSettingsStore()
     if (!settingsStore.display.notify_on_complete) return
 
@@ -3689,11 +3930,17 @@ export const useChatStore = defineStore('chat', () => {
 
     // Capture session ID at send time — all callbacks use this, not activeSessionId
     const sid = activeSessionId.value!
+    if (activeSession.value?.personFlows?.timeline?.has_newer) {
+      await refreshActiveSession({latest:true})
+      if (generation !== runtimeGeneration || activeSessionId.value !== sid) return
+    }
     const shouldSendInitialSessionConfig = activeSession.value
       ? activeSession.value.messageCount == null || activeSession.value.messageCount === 0
       : false
-    const isCodingAgentSession = isCodingAgentLikeSession(activeSession.value)
-    const isBridgeSlashCommand = !isCodingAgentSession && isKnownBridgeSessionCommand(trimmedContent)
+    const isProviderAgent = isProviderAgentSession(activeSession.value)
+    const isBuiltinSlashCommand = !attachments?.length && isBuiltinHubSession(activeSession.value) && isKnownHubAgentSessionCommand(trimmedContent)
+    const isBridgeSlashCommand = !isProviderAgent && isKnownBridgeSessionCommand(trimmedContent)
+    const isSessionSlashCommand = isBridgeSlashCommand || isBuiltinSlashCommand
     const isBridgeCompressCommand = isBridgeSlashCommand && /^\/compress(?:\s|$)/i.test(trimmedContent)
     const isBridgePlanCommand = isBridgeSlashCommand && /^\/plan(?:\s|$)/i.test(trimmedContent)
     const isBridgeSkillCommand = isBridgeSlashCommand && /^\/skill(?:\s|$)/i.test(trimmedContent)
@@ -3701,37 +3948,41 @@ export const useChatStore = defineStore('chat', () => {
     const isBridgeMoaCommand = isBridgeSlashCommand && /^\/moa(?:\s|$)/i.test(trimmedContent)
     const isBridgeGoalCommand = isBridgeSlashCommand && /^\/goal(?:\s|$)/i.test(trimmedContent)
     const isBridgeForkCommand = isBridgeSlashCommand && /^\/fork(?:\s|$)/i.test(trimmedContent)
-    const messageReference = isBridgeSlashCommand ? null : messageReferences.value.get(sid) || null
+    const messageReference = isSessionSlashCommand ? null : messageReferences.value.get(sid) || null
     const submittedContent = messageReference
       ? formatMessageWithReference(messageReference, trimmedContent)
       : trimmedContent
-    const shouldOptimisticallyShowRunStatus = !isCodingAgentSession && !isBridgeForkCommand
+    const shouldOptimisticallyShowRunStatus = !isProviderAgent && !isBridgeForkCommand
     const wasLiveBeforeSend = isSessionLive(sid)
     if (isBridgeForkCommand) {
       if (pendingForkCommands.value.has(sid)) return
       pendingForkCommands.value = new Set(pendingForkCommands.value).add(sid)
     }
     const shouldQueue = wasLiveBeforeSend && (
-      !isBridgeSlashCommand ||
+      (!isBridgeSlashCommand && !isBuiltinSlashCommand) ||
       isBridgePlanCommand ||
       isBridgeSkillCommand ||
       isBridgeBundleCommand ||
       isBridgeMoaCommand
     )
-    if (isBridgeSlashCommand && !shouldQueue && !wasLiveBeforeSend) {
+    if (isSessionSlashCommand && !shouldQueue && !wasLiveBeforeSend) {
       settleRuntimeDisplayForCommand(sid)
     }
 
     const visibleAttachments = attachments?.filter(attachment => !attachment.videoFrameFor)
     const userMsg: Message = {
       id: uid(),
-      role: isBridgeSlashCommand ? 'command' : 'user',
+      role: isSessionSlashCommand ? 'command' : 'user',
       content: submittedContent,
       timestamp: Date.now(),
       attachments: visibleAttachments && visibleAttachments.length > 0 ? visibleAttachments : undefined,
       queued: shouldQueue,
-      systemType: isBridgeSlashCommand ? 'command' : undefined,
+      systemType: isSessionSlashCommand ? 'command' : undefined,
     }
+
+    const pendingIds = pendingUserMessageIds.get(sid) || new Set<string>()
+    pendingIds.add(userMsg.id)
+    pendingUserMessageIds.set(sid, pendingIds)
 
     if (shouldQueue) {
       enqueueUserMessage(sid, userMsg)
@@ -3745,6 +3996,12 @@ export const useChatStore = defineStore('chat', () => {
     }
     clearMessageReference(sid)
 
+    // Hermes already shows Stop while an idle chat's attachments are preparing.
+    // Own that local send until dispatch, rather than aborting a nonexistent server run.
+    const pendingAttachmentSend = !shouldQueue && shouldOptimisticallyShowRunStatus && attachments?.length
+      ? { controller: new AbortController(), messageId: userMsg.id, content: submittedContent, attachments: [...attachments] }
+      : undefined
+    if (pendingAttachmentSend) pendingAttachmentSends.set(sid, pendingAttachmentSend)
     let runSubmitted = false
     try {
 
@@ -3753,8 +4010,8 @@ export const useChatStore = defineStore('chat', () => {
       let displayInput: string | ContentBlock[] | undefined
       if (attachments && attachments.length > 0) {
         // Has attachments: upload first, then build content blocks
-        const uploaded = await uploadFiles(attachments)
-        if (generation !== runtimeGeneration) return
+        const uploaded = await uploadFiles(attachments, pendingAttachmentSend?.controller.signal)
+        if (generation !== runtimeGeneration || pendingAttachmentSend?.controller.signal.aborted) return
 
         // Update attachment URLs on the user message for display
         const urlMap = new Map(uploaded.map(f => {
@@ -3779,10 +4036,10 @@ export const useChatStore = defineStore('chat', () => {
 
         // Build content blocks with uploaded file paths
         input = await buildContentBlocks(submittedContent, attachments, uploaded)
-        if (generation !== runtimeGeneration) return
+        if (generation !== runtimeGeneration || pendingAttachmentSend?.controller.signal.aborted) return
         if (attachments.some(attachment => attachment.context?.trim())) {
           displayInput = await buildContentBlocks(submittedContent, attachments, uploaded, false)
-          if (generation !== runtimeGeneration) return
+          if (generation !== runtimeGeneration || pendingAttachmentSend?.controller.signal.aborted) return
         }
       } else {
         // No attachments: use plain text format
@@ -3791,7 +4048,7 @@ export const useChatStore = defineStore('chat', () => {
 
       const appStore = useAppStore()
       await appStore.waitForModelsForRun()
-      if (generation !== runtimeGeneration) return
+      if (generation !== runtimeGeneration || pendingAttachmentSend?.controller.signal.aborted) return
       const sessionModel = activeSession.value?.model || appStore.selectedModel
       const sessionProvider = activeSession.value?.provider || appStore.selectedProvider
       const sessionProfile = activeSession.value?.profile || useProfilesStore().activeProfileName || undefined
@@ -3805,17 +4062,22 @@ export const useChatStore = defineStore('chat', () => {
         ? 'global_agent'
         : storedSource === 'workflow'
           ? 'workflow'
-        : isCodingAgentSession
+        : storedSource === 'group_chat'
+          ? 'group_chat'
+        : isBuiltinHubSession(activeSession.value)
+          ? 'builtin_agent'
+        : isProviderAgent
           ? 'coding_agent'
           : storedSource === 'api_server'
             ? 'api_server'
             : 'cli'
-      const isCodingAgentExecution = sessionSource === 'coding_agent' || (sessionSource === 'workflow' && isCodingAgentSession)
+      const isCodingAgentExecution = sessionSource === 'builtin_agent' || sessionSource === 'coding_agent'
+        || ((sessionSource === 'workflow' || sessionSource === 'group_chat' || sessionSource === 'global_agent') && isProviderAgent)
       const codingAgentId: ChatCodingAgentId =
-        activeSession.value?.codingAgentId ||
+        (isBuiltinHubSession(activeSession.value) ? 'hub-agent' : activeSession.value?.codingAgentId) ||
         agentToCodingAgentId(activeSession.value?.agent) ||
         'claude-code'
-      const codingAgentMode = activeSession.value?.codingAgentMode || 'scoped'
+      const codingAgentMode = codingAgentId === 'hub-agent' ? 'scoped' : activeSession.value?.codingAgentMode || 'scoped'
       const codingAgentApiMode = isCodingAgentExecution && codingAgentMode !== 'global'
         ? normalizeCodingAgentApiMode(
             activeSession.value?.apiMode || providerGroup?.api_mode,
@@ -3831,7 +4093,7 @@ export const useChatStore = defineStore('chat', () => {
         session_id: sid,
         profile: sessionProfile,
         model: isCodingAgentExecution
-          ? (codingAgentMode === 'global' ? undefined : sessionModel || undefined)
+          ? (codingAgentMode === 'global' ? activeSession.value?.model || undefined : sessionModel || undefined)
           : shouldSendInitialSessionConfig ? sessionModel || undefined : undefined,
         provider: isCodingAgentExecution
           ? (codingAgentMode === 'global' ? undefined : sessionProvider || undefined)
@@ -3848,7 +4110,7 @@ export const useChatStore = defineStore('chat', () => {
         ...(sessionSource === 'workflow' ? { session_source: 'workflow' as const } : {}),
         ...(isCodingAgentExecution
           ? {
-              coding_agent_id: codingAgentId,
+              ...(codingAgentId === 'hub-agent' ? { agent_id: 'hub-agent' as const } : { coding_agent_id: codingAgentId }),
               agent_preset: activeSession.value?.agentPreset,
               mode: codingAgentMode,
               baseUrl: codingAgentMode === 'global' ? undefined : activeSession.value?.baseUrl || providerGroup?.base_url || undefined,
@@ -3856,13 +4118,8 @@ export const useChatStore = defineStore('chat', () => {
               apiMode: codingAgentApiMode,
             }
           : {}),
-        // Per-session reasoning effort override. Hermes bridge and scoped coding
-        // agents both consume this when the selected provider/API supports it.
-        // Global coding-agent mode uses the user's native CLI config, so avoid
-        // injecting a per-session override there.
-        reasoning_effort: isCodingAgentExecution && codingAgentMode === 'global'
-          ? undefined
-          : activeSession.value?.reasoningEffort || undefined,
+        // An absent override preserves the agent's native reasoning setting.
+        reasoning_effort: activeSession.value?.reasoningEffort || undefined,
         // Omitted until the user picks a value, so the server applies their default to new chats.
         push_enabled: activeSession.value?.pushEnabled,
       }
@@ -3937,17 +4194,19 @@ export const useChatStore = defineStore('chat', () => {
         applySessionTokenUsage(target, data)
         applyResumedSessionSettings(data)
 
-        if (Array.isArray(data.messages)) {
+        if (Array.isArray(data.messages) && !preservePersonTimelineWindow(target,data.personFlows)) {
           const previousActiveAssistantMessageId = activeAssistantMessageId
           const previousReasoningAssistantMessageId = reasoningAssistantMessageId
           const replayRunMarker = getReplayRunMarker(data.events) ?? activeRunMarker
           target.messages = mapHermesMessages(data.messages as any[], data.taskPlans, target.messages)
+          target.messagesLoaded = true
           restorePersistedSubagentStreams(sid)
           setWorkspaceRunChanges(sid, data.workspaceRunChanges || [])
           target.loadedMessageCount = data.messageLoadedCount ?? data.messages.length
           target.messageTotal = data.messageTotal ?? target.messageCount ?? target.loadedMessageCount
           target.messageCount = target.messageTotal
           target.hasMoreBefore = data.hasMoreBefore ?? target.loadedMessageCount < target.messageTotal
+          if (!applyPersonTimelinePage(target,data.personFlows,target.messages) && data.personFlows) target.personFlows=data.personFlows
           const resumedAssistantState = data.isWorking
             ? resolveResumedAssistantState(target.messages, {
                 previousActiveAssistantMessageId,
@@ -4061,6 +4320,9 @@ export const useChatStore = defineStore('chat', () => {
           if (eventRunMarker) activeRunMarker = eventRunMarker
           switch (evt.event) {
             case 'run.started':
+              // Optimistic queueing can race with the previous run finishing.
+              // A direct start then has no matching server dequeue event.
+              promoteStartedQueuedMessage(sid, evt.queue_id)
               clearSessionCompletedUnread(sid)
               serverWorking.value.add(sid)
               setRunStartedAt(sid, Date.now())
@@ -4320,7 +4582,7 @@ export const useChatStore = defineStore('chat', () => {
               const startedToolName = evt.tool || evt.name
               if (
                 isBackgroundDelegateToolPayload(startedToolName, evt.arguments)
-                || (isEkkoAgentSession(sid) && startedToolName === 'delegate_task')
+                || (isHubAgentSession(sid) && startedToolName === 'delegate_task')
               ) break
               const msgs = getSessionMsgs(sid)
               const last = activeAssistantMessageId
@@ -4335,7 +4597,7 @@ export const useChatStore = defineStore('chat', () => {
               }
               activeAssistantMessageId = null
               reasoningAssistantMessageId = null
-              handleToolStartedEvent(sid, evt, toolReasoning)
+              handleToolStartedEvent(sid, evt, toolReasoning, true)
 
               break
             }
@@ -4492,11 +4754,13 @@ export const useChatStore = defineStore('chat', () => {
               // signal but not required, since some providers/local models
               // legitimately omit usage.
               const queueInsertionInterruption = isQueueInsertionInterruption(evt)
+              const waitingForTasks = evt.stop_reason === 'waiting_for_tasks'
               const swallowedError =
                 !runProducedAssistantText &&
                 !runHadToolActivity &&
                 finalOutputTrimmed === '' &&
-                !queueInsertionInterruption
+                !queueInsertionInterruption &&
+                !waitingForTasks
               if (swallowedError) {
                 addMessage(sid, {
                   id: uid(),
@@ -4504,7 +4768,7 @@ export const useChatStore = defineStore('chat', () => {
                   content: 'Error: Agent returned no output. The model call may have failed (e.g. invalid API key, model not supported by provider, or context exceeded). Check the hermes-agent logs for details.',
                   timestamp: Date.now(),
                 })
-              } else {
+              } else if (!waitingForTasks) {
                 playCompletionBellIfEnabled()
                 showCompletionNotificationIfEnabled(sid, completedAssistantMessageId)
               }
@@ -4542,6 +4806,7 @@ export const useChatStore = defineStore('chat', () => {
             }
 
             case 'run.failed': {
+              if (evt.queue_id) acknowledgeUserMessage(sid, evt.queue_id)
               clearRunStartedAt(sid)
               clearPendingInteractions(sid)
               const failedMessages = getSessionMsgs(sid)
@@ -4617,14 +4882,15 @@ export const useChatStore = defineStore('chat', () => {
       )
       runSubmitted = true
 
-      if (isCodingAgentSession) {
+      if (isProviderAgent && !isBuiltinSlashCommand) {
         serverWorking.value.add(sid)
         streamStates.value.set(sid, ctrl)
-      } else if (!isBridgeSlashCommand || isBridgeCompressCommand || isBridgePlanCommand || isBridgeGoalCommand) {
+      } else if (!isSessionSlashCommand || isBridgeCompressCommand || isBridgePlanCommand || isBridgeGoalCommand) {
         streamStates.value.set(sid, ctrl)
       }
     } catch (err: any) {
-      if (generation !== runtimeGeneration) return
+      if (generation !== runtimeGeneration || pendingAttachmentSend?.controller.signal.aborted) return
+      acknowledgeUserMessage(sid, userMsg.id)
       if (isBridgeForkCommand) {
         const nextPendingForkCommands = new Set(pendingForkCommands.value)
         nextPendingForkCommands.delete(sid)
@@ -4642,6 +4908,8 @@ export const useChatStore = defineStore('chat', () => {
         content: `Error: ${err.message}`,
         timestamp: Date.now(),
       })
+    } finally {
+      if (pendingAttachmentSends.get(sid) === pendingAttachmentSend) pendingAttachmentSends.delete(sid)
     }
   }
 
@@ -4766,6 +5034,7 @@ export const useChatStore = defineStore('chat', () => {
         }
 
         case 'run.started':
+          promoteStartedQueuedMessage(sid, evt.queue_id)
           clearSessionCompletedUnread(sid)
           serverWorking.value.add(sid)
           setRunStartedAt(sid, Date.now())
@@ -4981,7 +5250,7 @@ export const useChatStore = defineStore('chat', () => {
           const startedToolName = evt.tool || evt.name
           if (
             isBackgroundDelegateToolPayload(startedToolName, evt.arguments)
-            || (isEkkoAgentSession(sid) && startedToolName === 'delegate_task')
+            || (isHubAgentSession(sid) && startedToolName === 'delegate_task')
           ) break
           const msgs = getSessionMsgs(sid)
           const last = activeAssistantMessageId
@@ -4996,7 +5265,7 @@ export const useChatStore = defineStore('chat', () => {
           }
           activeAssistantMessageId = null
           reasoningAssistantMessageId = null
-          handleToolStartedEvent(sid, evt, toolReasoning)
+          handleToolStartedEvent(sid, evt, toolReasoning, true)
 
           break
         }
@@ -5144,10 +5413,12 @@ export const useChatStore = defineStore('chat', () => {
             }
           }
           const queueInsertionInterruption = isQueueInsertionInterruption(evt)
+          const waitingForTasks = evt.stop_reason === 'waiting_for_tasks'
           const swallowedError = !runProducedAssistantText
             && !runHadToolActivity
             && finalOutputTrimmed === ''
             && !queueInsertionInterruption
+            && !waitingForTasks
           if (swallowedError) {
             addMessage(sid, {
               id: uid(),
@@ -5155,7 +5426,7 @@ export const useChatStore = defineStore('chat', () => {
               content: 'Error: Agent returned no output. The model call may have failed (e.g. invalid API key, model not supported by provider, or context exceeded). Check the hermes-agent logs for details.',
               timestamp: Date.now(),
             })
-          } else {
+          } else if (!waitingForTasks) {
             playCompletionBellIfEnabled()
             showCompletionNotificationIfEnabled(sid, completedAssistantMessageId)
           }
@@ -5293,6 +5564,17 @@ export const useChatStore = defineStore('chat', () => {
 
   function handlePeerUserMessage(evt: RunEvent) {
     const sid = evt.session_id
+    if (scopedSessionId ? sid !== scopedSessionId : sid?.startsWith('person-task-')) return
+    if (evt.event === 'person.run.completed' || evt.event === 'person.run.failed') {
+      if (scopedSessionId || !sid?.startsWith('person-main-') || !evt.notification_id || announcedPersonRuns.has(evt.notification_id)) return
+      announcedPersonRuns.add(evt.notification_id)
+      if (announcedPersonRuns.size > 1000) announcedPersonRuns.delete(announcedPersonRuns.values().next().value!)
+      if (useSettingsStore().display.notify_on_complete) void showCompletionNotification({
+        title: PERSON_AVATAR.label, body: truncateNotificationText(evt.output || '', 140),
+        icon: chatSessionAgentAvatar({ id: sid }).src, tag: `hermes-person-${evt.notification_id}`, clickUrl: `/person?session=${encodeURIComponent(sid)}`,
+      })
+      return
+    }
     if (evt.event === 'approval.requested') return setPendingApproval(evt)
     if (evt.event === 'approval.resolved') return clearPendingApproval(evt)
     if (evt.event === 'clarify.requested') return setPendingClarify(evt)
@@ -5305,6 +5587,7 @@ export const useChatStore = defineStore('chat', () => {
 
     const messageId = peer?.id != null ? String(peer.id) : ''
     const isPeerCommand = peer?.role === 'command'
+    if (messageId && peer?.queued === false) promoteStartedQueuedMessage(sid, messageId)
     const msgs = getSessionMsgs(sid)
     if (messageId && msgs.some(msg => msg.id === messageId)) {
       serverWorking.value.add(sid)
@@ -5349,10 +5632,21 @@ export const useChatStore = defineStore('chat', () => {
     resumeServerWorkingRun(sid, true)
   }
 
-  onPeerUserMessage(handlePeerUserMessage)
+  disposeSubscription(onPeerUserMessage(handlePeerUserMessage))
+  const stopUnobservedRuns = onUnobservedRunStarted(evt => {
+    const sid = evt.session_id
+    if (!sid || sid !== activeSessionId.value || !activeSession.value) return
+    // Reattach before dispatching run.started so an autonomous callback can stream immediately.
+    resumeServerWorkingRun(sid, true, true)
+  })
+  onScopeDispose(stopUnobservedRuns)
 
   function handleGlobalSessionCommand(evt: RunEvent) {
     const sid = evt.session_id
+    if (sid && (evt as any).action === 'messages_deleted') {
+      handleSessionCommandEvent(evt)
+      return
+    }
     if (!sid || activeSessionId.value !== sid || !activeSession.value) return
     const shouldAttachToStartedRun = (evt as any).started === true && (evt as any).terminal === false
     handleSessionCommandEvent(evt)
@@ -5362,12 +5656,17 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
-  onSessionCommand(handleGlobalSessionCommand)
+  disposeSubscription(onSessionCommand(handleGlobalSessionCommand))
+  disposeSubscription(onPersonUpdated(event => {
+    if (!event.session_id || !event.personFlows) return
+    const target = sessions.value.find(session => session.id === event.session_id)
+    if (target && applyPersonFlowUpdate(target,event.personFlows) && activeSessionId.value === target.id) void refreshActiveSession()
+  }))
 
-  onSessionTitleUpdated(applyGeneratedSessionTitle)
-  onSessionWorkspaceUpdated(applySessionWorkspaceUpdate)
-  onSessionSettingsUpdated(applySessionSettingsUpdate)
-  onRunUsageUpdated(evt => {
+  disposeSubscription(onSessionTitleUpdated(applyGeneratedSessionTitle))
+  disposeSubscription(onSessionWorkspaceUpdated(applySessionWorkspaceUpdate))
+  disposeSubscription(onSessionSettingsUpdated(applySessionSettingsUpdate))
+  disposeSubscription(onRunUsageUpdated(evt => {
     const sid = evt.session_id
     const summary = normalizeRunUsage((evt as any).run_usage)
     const session = sessions.value.find(item => item.id === sid)
@@ -5384,13 +5683,32 @@ export const useChatStore = defineStore('chat', () => {
       updates.set(summary.runId, summary)
       pendingRunUsage.set(sid, updates)
     }
-  })
+  }))
 
   function stopStreaming() {
     const sid = activeSessionId.value
     if (!sid) return
     if (isAborting.value) return
     clearPendingInteractions(sid)
+    const pendingAttachmentSend = pendingAttachmentSends.get(sid)
+    if (pendingAttachmentSend) {
+      pendingAttachmentSend.controller.abort()
+      pendingAttachmentSends.delete(sid)
+      acknowledgeUserMessage(sid, pendingAttachmentSend.messageId)
+      const msgs = getSessionMsgs(sid)
+      const index = msgs.findIndex(message => message.id === pendingAttachmentSend.messageId)
+      if (index !== -1) msgs.splice(index, 1)
+      cancelledAttachmentDrafts.value.set(sid, {
+        content: pendingAttachmentSend.content,
+        attachments: pendingAttachmentSend.attachments,
+      })
+      // A peer may have started a real run while this upload was pending.
+      if (!streamStates.value.has(sid)) {
+        serverWorking.value.delete(sid)
+        clearRunStartedAt(sid)
+        return
+      }
+    }
     const ctrl = streamStates.value.get(sid)
     if (ctrl) {
       setAbortState(sid, { aborting: true, synced: null })
@@ -5415,8 +5733,8 @@ export const useChatStore = defineStore('chat', () => {
 
   // Tab visibility: re-sync when returning to foreground
   if (typeof document !== 'undefined') {
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible' && !isStreaming.value) {
+    const onVisibilityChange = () => {
+      if (!scopedSessionId && document.visibilityState === 'visible' && !isStreaming.value) {
         // Live-sync the session list so sessions created elsewhere (CLI,
         // Telegram, another device) appear without a manual reload.
         void refreshSessionListOnly()
@@ -5442,24 +5760,28 @@ export const useChatStore = defineStore('chat', () => {
             if (!data.isWorking) setCompressionState(sid, null)
             applyResumedSessionSettings(data)
             if (activeSession.value) applySessionTokenUsage(activeSession.value, data)
-            if (Array.isArray(data.messages) && activeSession.value) {
+            if (Array.isArray(data.messages) && activeSession.value && !preservePersonTimelineWindow(activeSession.value,data.personFlows)) {
               if (typeof data.workspace === 'string') {
                 activeSession.value.workspace = data.workspace.trim() || null
                 activeSession.value.isLocalOnly = false
               }
               activeSession.value.messages = mapHermesMessages(data.messages as any[], data.taskPlans, activeSession.value.messages)
+              activeSession.value.messagesLoaded = true
               restorePersistedSubagentStreams(sid)
               setWorkspaceRunChanges(sid, data.workspaceRunChanges || [])
               activeSession.value.loadedMessageCount = data.messageLoadedCount ?? data.messages.length
               activeSession.value.messageTotal = data.messageTotal ?? activeSession.value.messageCount ?? activeSession.value.loadedMessageCount
               activeSession.value.messageCount = activeSession.value.messageTotal
               activeSession.value.hasMoreBefore = data.hasMoreBefore ?? activeSession.value.loadedMessageCount < activeSession.value.messageTotal
+              if (!applyPersonTimelinePage(activeSession.value,data.personFlows,activeSession.value.messages) && data.personFlows) activeSession.value.personFlows=data.personFlows
             }
             resumeServerWorkingRun(sid, (data.backgroundPending || 0) > 0, !data.isWorking)
           }, activeSession.value?.profile, runtimeTransport())
         }
       }
-    })
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    onScopeDispose(() => document.removeEventListener('visibilitychange', onVisibilityChange))
   }
 
   // Mild background polling for live session-list sync (covers sessions created
@@ -5467,12 +5789,13 @@ export const useChatStore = defineStore('chat', () => {
   // runs when the tab is visible and not streaming, so it's cheap and never
   // disrupts an active run. visibilitychange (above) handles the wake-from-hidden
   // case; this covers the "left it open and watching" case.
-  if (typeof window !== 'undefined') {
-    window.setInterval(() => {
+  if (!scopedSessionId && typeof window !== 'undefined') {
+    const refreshTimer = window.setInterval(() => {
       if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return
       if (isStreaming.value) return
       void refreshSessionListOnly()
     }, 12_000)
+    onScopeDispose(() => window.clearInterval(refreshTimer))
   }
 
   // Transient observation of <think> boundaries during active streaming.
@@ -5526,32 +5849,41 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
-  async function setSessionReasoningEffort(sessionId: string, effort: string): Promise<boolean> {
+  async function setSessionReasoningEffort(sessionId: string, effort: string, nativeModel?: string): Promise<boolean> {
     const target = sessions.value.find(s => s.id === sessionId)
     const activeTarget = activeSession.value?.id === sessionId ? activeSession.value : null
     const session = target || activeTarget
     if (!session) return false
 
     const nextEffort = effort || undefined
-    const previousEffort = session.reasoningEffort
+    const previous = { effort: session.reasoningEffort, model: session.model }
+    const next = { effort: nextEffort, model: nativeModel ?? session.model }
+    const writeTarget = { effort: nextEffort, model: nativeModel }
     if (target) target.reasoningEffort = nextEffort
     if (activeTarget) activeTarget.reasoningEffort = nextEffort
+    if (nativeModel !== undefined) {
+      if (target) target.model = nativeModel
+      if (activeTarget) activeTarget.model = nativeModel
+    }
     if (session.isLocalOnly) return true
 
     if (!reasoningEffortWriteChains.has(sessionId)) {
-      reasoningEffortConfirmedValues.set(sessionId, previousEffort)
+      reasoningEffortConfirmedValues.set(sessionId, previous)
     }
-    reasoningEffortWriteTargets.set(sessionId, nextEffort)
+    reasoningEffortWriteTargets.set(sessionId, writeTarget)
     const previousWrite = reasoningEffortWriteChains.get(sessionId) || Promise.resolve(true)
     const write: Promise<boolean> = previousWrite
       .catch(() => false)
-      .then(() => persistSessionReasoningEffort(sessionId, effort))
+      .then(() => nativeModel === undefined ? persistSessionReasoningEffort(sessionId, effort) : persistSessionReasoningEffort(sessionId, effort, nativeModel))
       .then((ok) => {
-        if (ok) reasoningEffortConfirmedValues.set(sessionId, nextEffort)
-        if (!ok && reasoningEffortWriteTargets.get(sessionId) === nextEffort) {
-          const confirmedEffort = reasoningEffortConfirmedValues.get(sessionId)
-          if (target) target.reasoningEffort = confirmedEffort
-          if (activeTarget) activeTarget.reasoningEffort = confirmedEffort
+        if (ok) reasoningEffortConfirmedValues.set(sessionId, next)
+        if (!ok && reasoningEffortWriteTargets.get(sessionId) === writeTarget) {
+          const confirmed = reasoningEffortConfirmedValues.get(sessionId) || previous
+          for (const session of new Set([target, activeTarget])) {
+            if (!session) continue
+            session.reasoningEffort = confirmed.effort
+            if (nativeModel !== undefined) session.model = confirmed.model
+          }
         }
         return ok
       })
@@ -5656,9 +5988,12 @@ export const useChatStore = defineStore('chat', () => {
     isAborting,
     queueLengths,
     queuedUserMessages,
+    cancelledAttachmentDrafts,
     queueInsertionStates,
     activeMessageReference,
     pendingApprovals,
+    applyPendingInboxEvent,
+    restorePendingInbox,
     activePendingApproval,
     pendingClarifies,
     activePendingClarify,
@@ -5676,6 +6011,8 @@ export const useChatStore = defineStore('chat', () => {
     newCliSession,
     switchSession,
     ensureSessionLoaded,
+    forgetSession,
+    clearActiveSession,
     loadOlderMessages,
     switchSessionModel,
     addOrUpdateSession,
@@ -5691,6 +6028,7 @@ export const useChatStore = defineStore('chat', () => {
     loadSessions,
     refreshSessionListOnly,
     refreshActiveSession,
+    deleteMessages,
     getThinkingObservation,
     noteThinkingDelta,
     noteReasoningStart,
@@ -5706,4 +6044,30 @@ export const useChatStore = defineStore('chat', () => {
     setDefaultSessionPush,
     setRuntimeMode,
   }
-})
+}
+
+function defineChatStore(id: string, scopedSessionId?: string) {
+  return defineStore(id, () => createChatState(scopedSessionId))
+}
+const useDefaultChatStore = defineChatStore('chat')
+type ChatStore = ReturnType<typeof useDefaultChatStore>
+const chatStoreContext: InjectionKey<ChatStore> = Symbol('chat-store-context')
+
+/** Shared chat components resolve their nearest conversation surface. */
+export const useChatStore = Object.assign((...args: Parameters<typeof useDefaultChatStore>): ChatStore => {
+  const scoped = hasInjectionContext() ? inject(chatStoreContext, null) : null
+  return scoped || useDefaultChatStore(...args)
+}, { $id: useDefaultChatStore.$id })
+
+/** A task drawer owns its selection and subscriptions without changing the main chat. */
+export function provideScopedChatStore(sessionId: string): ChatStore {
+  const pinia = getActivePinia()
+  if (!pinia) throw new Error('Chat store requires Pinia')
+  const store = defineChatStore(`chat:${sessionId}`, sessionId)(pinia)
+  provide(chatStoreContext, store)
+  onScopeDispose(() => {
+    store.$dispose()
+    delete pinia.state.value[store.$id]
+  })
+  return store
+}

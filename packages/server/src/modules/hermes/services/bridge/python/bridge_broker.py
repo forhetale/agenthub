@@ -7,6 +7,7 @@ import socket
 import sys
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -175,19 +176,29 @@ class BridgeBroker:
                 key = self._normalize_worker_key(profile, req.get("worker_key") if "worker_key" in req else None)
             worker = self._workers.get(key or profile)
 
+        not_loaded = {"ok": True, "session_id": session_id, "exists": False, "running": False, "loaded": False}
         if worker is None or not getattr(worker, "running", False):
-            return {"ok": True, "session_id": session_id, "exists": False, "running": False, "loaded": False}
+            return dict(not_loaded)
 
         forwarded = dict(req)
         forwarded["action"] = "status"
         forwarded["profile"] = profile
         forwarded.pop("worker_key", None)
         try:
-            resp = worker.request(forwarded, self._worker_request_timeout(req))
+            resp = worker.request(forwarded, self._worker_request_timeout(req), start_if_needed=False)
+            if resp.get("skipped"):
+                return dict(not_loaded)
             if resp.get("exists") is not False:
                 self._record_response_routes(profile, key or profile, resp)
             resp.setdefault("loaded", True)
             return resp
+        except (FileNotFoundError, ConnectionRefusedError):
+            # The socket vanished or nothing listens on it: the worker exited after the running check.
+            return dict(not_loaded)
+        except OSError as e:
+            # Resets, permission errors, timeouts etc. do not prove the worker or run stopped.
+            # Report the error so callers can stay conservative instead of assuming idle.
+            return {"ok": False, "error": f"worker status unavailable: {e}"}
         except RuntimeError as e:
             return {"ok": False, "error": str(e)}
 
@@ -313,7 +324,7 @@ class BridgeBroker:
             )
             return self._forward(profile, req, worker_key)
 
-        if action in {"interrupt", "request_boundary_interrupt", "steer", "command", "switch_session_model", "goal_evaluate", "goal_pause", "status", "get_history", "get_session_title", "destroy"}:
+        if action in {"interrupt", "request_boundary_interrupt", "cancel_boundary_interrupt", "steer", "command", "switch_session_model", "goal_evaluate", "goal_pause", "status", "get_history", "get_session_title", "destroy"}:
             session_id = str(req.get("session_id") or "")
             profile, worker_key = self._route_for_session(session_id, req.get("profile"), req.get("worker_key") if "worker_key" in req else None)
             resp = self._forward(profile, req, worker_key)
@@ -446,6 +457,21 @@ class BridgeBroker:
             self.stop()
             return {"status": "shutting_down"}
 
+        if action == "mcp_plugins_changed":
+            with self._lock:
+                workers = [(key, worker) for key, worker in self._workers.items() if worker.running]
+            def notify(entry):
+                key, worker = entry
+                try:
+                    result = worker.request(req, start_if_needed=False)
+                    return {"worker_key": key, "profile": worker.profile, **result}
+                except Exception as exc:
+                    return {"worker_key": key, "profile": worker.profile, "ok": False, "error": str(exc)}
+            with ThreadPoolExecutor(max_workers=min(8, len(workers)) or 1) as executor:
+                results = list(executor.map(notify, workers))
+            failed = [item for item in results if not item.get("ok")]
+            return {"ok": not failed, "workers": results, **({"error": "; ".join(item.get("error", "Worker notification failed") for item in failed)} if failed else {})}
+
         # ───── MCP Management ─────
         if action.startswith("mcp_"):
             profile = self._normalize_profile(req.get("profile"))
@@ -489,13 +515,32 @@ class BridgeBroker:
             return
         self._last_gc = now
         with self._lock:
+            busy = set(self._running_run_worker_key.values())
             idle = [
                 key for key, worker in self._workers.items()
                 if worker.running and now - worker.last_used_at > self.IDLE_TIMEOUT_SECONDS
+                and key not in busy and not getattr(worker, "active_requests", 0)
             ]
         for key in idle:
+            worker = self._workers.get(key)
+            if worker is None:
+                continue
+            try:
+                # A parent turn may have ended while a terminal background
+                # process is still running. Probe before retiring its worker.
+                worker.request({"action": "list"}, timeout=2)
+            except Exception:
+                # Failure to establish idleness is not permission to stop work.
+                continue
             with self._lock:
-                worker = self._workers.pop(key, None)
+                worker = self._workers.get(key)
+                if (
+                    worker is None or now - worker.last_used_at <= self.IDLE_TIMEOUT_SECONDS
+                    or key in self._running_run_worker_key.values()
+                    or getattr(worker, "active_requests", 0)
+                ):
+                    continue
+                self._workers.pop(key, None)
             if worker:
                 worker.stop()
 

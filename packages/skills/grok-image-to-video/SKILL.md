@@ -2,7 +2,7 @@
 name: grok-image-to-video
 description: "Animate a local image into a short mp4 video through Hermes Web UI using xAI Grok Imagine."
 version: 1.0.0
-author: Ekko
+author: AgentHub
 license: MIT
 platforms: [linux, macos, windows]
 metadata:

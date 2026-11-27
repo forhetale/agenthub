@@ -1,4 +1,6 @@
 import type { Context } from 'koa'
+import { mkdir, writeFile } from 'fs/promises'
+import { join } from 'path'
 import {
   assertActiveSttProvider,
   assertStoredSttProvider,
@@ -68,12 +70,6 @@ function requestedProfile(ctx: Context): string {
 function requestedVoiceProxyProfile(ctx: Context): string | null {
   const profile = String(ctx.params?.profile || '').trim()
   return profile && listProfileNames().includes(profile) ? profile : null
-}
-
-function bearerToken(ctx: Context): string {
-  const header = ctx.get?.('authorization') || ''
-  const match = header.match(/^Bearer\s+(.+)$/i)
-  return match?.[1]?.trim() || ''
 }
 
 function localRuntimeSetting(): { settings: SttStoredSettings; secrets: SttStoredSecrets } {
@@ -307,6 +303,22 @@ export async function profileStatus(ctx: Context) {
   ctx.body = resolveSttProfileStatus(requestedProfile(ctx))
 }
 
+export async function missingProfileAudio(ctx: Context) {
+  const userId = authUserId(ctx)
+  if (!userId) return
+
+  const status = resolveSttProfileStatus(requestedProfile(ctx))
+  if (status.configured) {
+    ctx.status = 204
+    return
+  }
+
+  ctx.status = 404
+  ctx.set('X-Hermes-STT-Configured', 'false')
+  ctx.set('X-Hermes-STT-Reason', status.reason || 'stt_not_configured')
+  ctx.body = { error: 'Active STT provider is not configured', reason: status.reason || 'stt_not_configured' }
+}
+
 export async function saveSettings(ctx: Context) {
   const userId = authUserId(ctx)
   if (!userId) return
@@ -329,7 +341,7 @@ export async function saveSettings(ctx: Context) {
       ? saveActiveSttProvider(profile, storedProvider)
       : saveActiveSttProvider(profile, assertActiveSttProvider(String(body.activeProvider)))
 
-    await syncVoiceConfigToHermesProfile(profile)
+    await syncVoiceConfigToHermesProfile(profile, 'stt', { selectProvider: true })
     ctx.body = { setting, activeProvider }
   } catch (error) {
     if (handleSettingsError(ctx, error)) return
@@ -371,7 +383,9 @@ export async function deleteSecret(ctx: Context) {
     const profile = requestedProfile(ctx)
     const storedProvider = assertStoredSttProvider(provider)
     const setting = clearStoredSttSecret(profile, storedProvider, secretName)
-    await syncVoiceConfigToHermesProfile(profile)
+    if (getActiveSttProvider(profile) === storedProvider) {
+      await syncVoiceConfigToHermesProfile(profile, 'stt')
+    }
     ctx.body = { success: true, setting }
   } catch (error) {
     if (handleSettingsError(ctx, error)) return
@@ -393,7 +407,9 @@ export async function deleteProvider(ctx: Context) {
     const activeProvider = currentActiveProvider === storedProvider
       ? saveActiveSttProvider(profile, 'browser')
       : currentActiveProvider
-    await syncVoiceConfigToHermesProfile(profile)
+    if (currentActiveProvider === storedProvider) {
+      await syncVoiceConfigToHermesProfile(profile, 'stt')
+    }
     ctx.body = { success: true, deleted, activeProvider }
   } catch (error) {
     if (handleSettingsError(ctx, error)) return
@@ -423,7 +439,7 @@ export async function saveActiveProvider(ctx: Context) {
       })
     }
     const activeProvider = saveActiveSttProvider(profile, requestedProvider)
-    await syncVoiceConfigToHermesProfile(profile)
+    await syncVoiceConfigToHermesProfile(profile, 'stt', { selectProvider: true })
     ctx.body = { activeProvider }
   } catch (error) {
     if (handleSettingsError(ctx, error)) return
@@ -704,6 +720,6 @@ export async function transcribeVoiceProxy(ctx: Context) {
       return
     }
     ctx.status = 502
-    ctx.body = { error: error instanceof Error ? error.message : 'Ekko Studio transcription failed' }
+    ctx.body = { error: error instanceof Error ? error.message : 'AgentHub transcription failed' }
   }
 }

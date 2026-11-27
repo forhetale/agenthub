@@ -8,11 +8,19 @@ import { isolatedCodingAgentChildEnv } from './runtime/child-env'
 import { assertDshMcpProbeIsLiteral, readDshMcpServers, updateDshMcpServer } from './dsh/config'
 
 const STUDIO_MANAGED_NAMES = new Set([
+  'agenthub-api',
+  'agenthub-plugins',
+  'agenthub-browser',
+  'agenthub-use',
+  'agenthub-interaction',
   'hermes-studio-api',
   'hermes-studio-browser',
+  'hermes-studio-devices',
   'hermes-studio-use',
   'ekko-studio-api',
+  'ekko-studio-plugins',
   'ekko-studio-browser',
+  'ekko-studio-devices',
   'ekko-studio-use',
   'ekko-studio-plan',
   'ekko-studio-interaction',
@@ -236,7 +244,7 @@ export async function isolateUnhealthyRuntimeMcpServers(
   configPath: string,
   options: { probe?: typeof probeCodingAgentMcpConfig } = {},
 ): Promise<string[]> {
-  if (!['claude-code', 'codex', 'pi', 'grok', 'opencode', 'dsh', 'cursor', 'antigravity'].includes(agentId)) return []
+  if (!['claude-code', 'codex', 'pi', 'grok', 'opencode', 'dsh', 'cursor', 'antigravity', 'qwen', 'kimi', 'codebuddy', 'qoder', 'copilot', 'zcode'].includes(agentId)) return []
   let content: string
   try {
     content = await readFile(configPath, 'utf-8')

@@ -3,10 +3,20 @@
 This document is the architecture contract for `packages/server/src`. It
 separates Studio-owned capabilities from the agent families while
 preserving request/response semantics and persisted data. Studio-owned HTTP
-operations use `/api/studio/*`; Hermes-owned operations use `/api/hermes/*`.
-Old server source trees are not retained. The only old Studio URL aliases are
-the centralized compatibility mappings for already-released App versions in
-`modules/studio/middleware/legacy-app-api.ts`.
+operations use `/api/studio/*`; Hermes-owned operations use `/api/hermes/*`;
+Hub Agent-owned operations use `/api/hub-agent/*`.
+Old server source trees are not retained. Coding Agent proxy URLs are handled by
+`modules/studio/middleware/model-gateway.ts`;
+they do not have separate route or controller modules.
+
+The model gateway uses one composition root, `bootstrap/model-gateway-adapter.ts`.
+It injects the Coding module's public protocol adapter and the provider runtime
+resolver/authorization into Studio ports. Protocol dispatch and target lifetime
+live in `coding-agents/services/model-gateway.ts`; account credential restoration
+and outbound request policy live in `studio/services/providers`; persisted target
+records live in `studio/repositories/model-target-store.ts`. Public files expose
+these boundaries rather than implementing disk storage or bootstrap behavior.
+HTTP plugin hooks wrap the common inbound middleware once, outside these modules.
 
 All server TypeScript source lives under `modules/` or `bootstrap/`, except the
 package entrypoint `index.ts`. The boundary harness rejects any source file that
@@ -18,14 +28,17 @@ Do not use one `source` or `agent` field for all of these concepts:
 
 | Concept | Allowed values | Meaning |
 | --- | --- | --- |
-| `AgentFamily` | `hermes`, `ekko`, `coding` | Product/domain owner of an agent implementation. |
-| `AgentRuntime` | `hermes`, `ekko`, `claude-code`, `codex`, `pi`, `grok`, `opencode`, `dsh`, `cursor` | Concrete runtime selected for a run. |
+| `AgentFamily` | `hermes`, `hub-agent`, `coding` | Product/domain owner of an agent implementation. |
+| `AgentRuntime` | `hermes`, `hub-agent`, `claude-code`, `codex`, `pi`, `grok`, `opencode`, `dsh`, `cursor`, `antigravity`, `qwen`, `kimi`, `codebuddy`, `qoder`, `copilot`, `zcode` | Concrete runtime selected for a run. |
 | `RunSurface` | `chat`, `workflow`, `group-chat`, `global-agent`, `api` | Studio surface that initiated a run. |
 | `RunMode` | `scoped`, `global` | Whether the run is workspace/profile scoped or global. |
 
-Hermes and Ekko are both a family and a runtime. Claude Code, Codex, Pi, Grok,
-OpenCode, DSH, and Cursor are seven runtimes in the Coding family. Persist and
+Hermes and Hub Agent are both a family and a runtime. Claude Code, Codex, Pi, Grok,
+OpenCode, DSH, Cursor, Antigravity, Qwen Code, Kimi Code, CodeBuddy, Qoder,
+GitHub Copilot, and ZCode are fourteen runtimes in the Coding family. Persist and
 transport these concepts separately whenever a schema is introduced or revised.
+The six native CLI adapters and App catalog publication are described in
+[`native-coding-agents.md`](../native-coding-agents.md).
 
 ## Target Directory
 
@@ -77,7 +90,6 @@ packages/server/src/
       middleware/
         auth.ts
         errors.ts
-        legacy-app-api.ts          # temporary released-client URL mapping only
         request-context.ts
       http/
         body.ts
@@ -129,8 +141,6 @@ packages/server/src/
         connections/
         credentials/
         files/
-          app-image-preview.ts
-          app-upload.ts
           file-provider.ts
           path.ts
           file-policy.ts
@@ -147,7 +157,7 @@ packages/server/src/
         update/
           studio-updater.ts        # upgrades hermes-web-ui
           studio-restarter.ts
-          version-preview-manager.ts
+          update-runtime.ts
         workflow/
         group-chat/
         global-agent/
@@ -240,7 +250,7 @@ packages/server/src/
         terminal.ts
         kanban-events.ts
 
-    ekko/                          # Ekko Agent-owned API and behavior
+    hub-agent/                     # Hub Agent-owned API and behavior
       index.ts
       public/
         runner.ts
@@ -270,12 +280,13 @@ packages/server/src/
       sockets/
         chat.ts
 
-    coding-agents/                 # Claude Code, Codex, Pi, Grok, OpenCode, DSH, and Cursor family
+    coding-agents/                 # Coding-family CLI runtimes
       index.ts
       public/
         runner.ts
       contracts/
       protocol/                    # shared only inside the Coding family
+        acp/                       # reusable ACP session and event transport
         events.ts
         messages.ts
         sse.ts
@@ -283,18 +294,14 @@ packages/server/src/
       routes/
         agents.ts
         runs.ts
-        claude-code-proxy.ts
-        codex-proxy.ts
       controllers/
         agents.ts
         runs.ts
-        claude-code-proxy.ts
-        codex-proxy.ts
       services/
         registry/
         credentials/
         sessions/
-        run-manager/
+        runtime/                   # shared process lifecycle and usage
         claude-code/
         codex/
         pi/
@@ -302,6 +309,13 @@ packages/server/src/
         opencode/
         dsh/
         cursor/
+        antigravity/
+        qwen/
+        kimi/
+        codebuddy/
+        qoder/
+        copilot/
+        zcode/
       sockets/
         runs.ts
 ```
@@ -311,12 +325,25 @@ that another allowed layer can import. Concrete agent `public/runner.ts` files
 are consumed by `bootstrap/modules.ts`, which injects them into Studio's agent
 registry. Studio orchestration never imports a concrete agent module.
 
+Inside the Coding family, each runtime owns a `services/<runtime>/` directory.
+Its `definition.ts` declares CLI metadata, capabilities and editable config
+files. Agent-specific configuration, installation discovery and event parsing
+belong beside that definition. `services/registry/` composes the definitions
+and protocol adapters; `services/runtime/` manages shared process lifecycle and
+usage. Reusable ACP sessions and updates live in `protocol/acp/`. There is no
+`services/native/` catch-all for multiple agent implementations.
+
+The existing `services/index.ts` remains the public preparation and management
+entrypoint. Agent implementations receive shared platform helpers rather than
+importing that entrypoint or the registry. Moving source ownership must preserve
+CLI arguments, environment precedence and persisted configuration paths.
+
 ## Ownership Decisions
 
 | Capability | Owner | Reason |
 | --- | --- | --- |
 | Studio update and Version Preview | Studio | Upgrades/restarts `hermes-web-ui`, not Hermes Agent. |
-| Auth, users, devices, files, app connections, relay, social messages | Studio | Product/platform capabilities shared across agents. |
+| Auth, users, files, notifications | Studio | Product/platform capabilities shared across agents. |
 | Single Chat (Chat Run), Workflow, Group Chat, Global Agent | Studio | Cross-agent run and orchestration surfaces; dispatch through agent contracts. |
 | Pets/Petdex and aggregate logs | Studio | Stored or presented as Studio product state. |
 | Common config, credentials, provider contracts, voice, run/session/usage helpers | Studio | Shared capabilities exposed through `studio/public` or `studio/contracts`. |
@@ -328,7 +355,7 @@ registry. Studio orchestration never imports a concrete agent module.
 | Weixin channel configuration | Hermes | Mutates Hermes profile environment and restarts the Hermes gateway. |
 | Hermes Agent history adapters | Hermes | Read `~/.hermes/.../state.db`; they are separate from Studio repositories. |
 | Hermes runtime download/activation/version | Hermes | Manages the Hermes runtime; split it from Studio Web UI updating. |
-| Ekko runtime, provider handling, tools, memory, approvals, clarification, MCP | Ekko | Concrete Ekko Agent behavior. |
+| Hub Agent runtime, provider handling, tools, memory, approvals, clarification, MCP | Hub Agent | Concrete Hub Agent behavior. |
 | Claude Code, Codex, Pi, Grok, OpenCode, DSH, Cursor, and their shared protocol | Coding Agents | Shared by runtimes in one family, not by all Studio agents. |
 
 If a feature can dispatch multiple agents, that alone does not make its data
@@ -341,12 +368,12 @@ still exposed through a Hermes adapter, but Studio owns the chat-run lifecycle.
 
 An arrow means the row may import the column.
 
-| From / To | Studio | Hermes | Ekko | Coding Agents |
+| From / To | Studio | Hermes | Hub Agent | Coding Agents |
 | --- | ---: | ---: | ---: | ---: |
 | `bootstrap` | yes | yes | yes | yes |
 | Studio | yes | no | no | no |
 | Hermes | contracts/public | yes | no | no |
-| Ekko | contracts/public | no | yes | no |
+| Hub Agent | contracts/public | no | yes | no |
 | Coding Agents | contracts/public | no | no | yes |
 
 Additional layer rules:
@@ -375,8 +402,8 @@ Preserve behavior while moving ownership:
 4. Move a complete vertical feature slice: route, controller, service,
    repository/adapter, socket, Client API, and focused tests.
 5. Do not add compatibility re-exports or legacy source trees. Old HTTP aliases
-   are allowed only in `modules/studio/middleware/legacy-app-api.ts` for released
-   App versions; current clients must migrate to canonical URLs in the same change.
+   for deprecated surfaces must not be reintroduced; current clients must use
+   canonical URLs in the same change.
 
 ## Mechanical Harness
 
@@ -398,6 +425,12 @@ The unified harness invokes `scripts/server-module-boundaries.mjs`, which enforc
 - no file, download, preview, or App upload implementation under Hermes;
   these capabilities are mechanically reserved for Studio.
 - legacy Studio URLs are declared only in the centralized App compatibility middleware.
+
+The harness also invokes `scripts/coding-agent-module-harness.mjs`. It requires
+an owned definition for every Coding runtime, rejects the old native source
+directory, prevents concrete agents from importing the shared registry, and
+keeps the extracted agent implementations and ACP transport in their owner
+directories.
 
 Resolve cross-module behavior through Studio contracts/public APIs and inject
 concrete runtime adapters from `bootstrap`.

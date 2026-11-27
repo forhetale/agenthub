@@ -87,11 +87,25 @@ export function normalizeBridgeSessionCommandName(name: string): BridgeSessionCo
 export function readBridgeSessionCommandName(input: string): BridgeSessionCommandName | null {
   const trimmed = input.trim()
   if (!trimmed.startsWith('/')) return null
-  const match = trimmed.match(/^\/([a-zA-Z][\w-]*)(?:\s|$)/)
+  // Keep the boundary contract aligned with the server parser: explicit
+  // whitespace/punctuation, adjacent CJK letters, or the end of the command.
+  const match = trimmed.match(/^\/([a-zA-Z][\w-]*)(?=\s|[:：、,，]|[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]|$)/u)
   if (!match) return null
   return normalizeBridgeSessionCommandName(match[1])
 }
 
 export function isKnownBridgeSessionCommand(input: string): boolean {
   return readBridgeSessionCommandName(input) !== null
+}
+
+export const HUB_AGENT_SESSION_COMMAND_DEFINITIONS: BridgeSessionCommandDefinition[] = [
+  { key: 'hub-agent:context', name: 'context', args: '', descriptionKey: 'chat.slashCommands.context' },
+  { key: 'hub-agent:compact', name: 'compact', args: '', descriptionKey: 'chat.slashCommands.compress' },
+  { key: 'hub-agent:usage', name: 'usage', args: '', descriptionKey: 'chat.slashCommands.usage' },
+  { key: 'hub-agent:status', name: 'status', args: '', descriptionKey: 'chat.slashCommands.status' },
+]
+
+export function isKnownHubAgentSessionCommand(input: string): boolean {
+  const name = readBridgeSessionCommandName(input)
+  return name === 'compress' || HUB_AGENT_SESSION_COMMAND_DEFINITIONS.some(command => command.name === name)
 }

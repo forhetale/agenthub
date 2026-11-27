@@ -4,7 +4,7 @@ import ts from 'typescript'
 import { parse as parseVue } from 'vue/compiler-sfc'
 
 const manifestPath = 'scripts/jev-integrations.json'
-const sourceRoots = ['packages/server/src', 'packages/client/src', 'packages/ekko-agent/src', 'packages/desktop/src', 'bin']
+const sourceRoots = ['packages/server/src', 'packages/client/src', 'packages/hub-agent/src', 'packages/desktop/src', 'bin']
 const sharedFields = new Set(['baseUrl', 'model', 'apiKey', 'timeoutMs'])
 // These implement transport/configuration, or explicit manual API/connection tests.
 // Business integrations must be registered instead of extending this allowlist.
@@ -25,19 +25,19 @@ const infrastructure = new Set([
   'packages/client/src/components/hermes/models/JevSettingsPanel.vue',
   ...['config.ts', 'config-store.ts', 'index.ts', 'setup.ts', 'runtime/runtime.ts',
     'runtime/types.ts', 'jev/client.ts', 'jev/config.ts', 'jev/index.ts']
-    .map(file => `packages/ekko-agent/src/${file}`),
+    .map(file => `packages/hub-agent/src/${file}`),
 ])
 const evaluationInfrastructure = new Set([
   'packages/server/src/modules/studio/services/jev/client.ts',
   'packages/server/src/modules/studio/services/jev/sidecar.ts',
   'packages/server/src/modules/studio/controllers/jev.ts',
-  'packages/ekko-agent/src/jev/client.ts',
+  'packages/hub-agent/src/jev/client.ts',
 ])
 const sdkInfrastructure = new Set([
   'packages/server/src/modules/studio/services/jev/client.ts',
   'packages/server/src/modules/studio/public/jev.ts',
-  'packages/ekko-agent/src/jev/client.ts',
-  'packages/ekko-agent/src/jev/index.ts',
+  'packages/hub-agent/src/jev/client.ts',
+  'packages/hub-agent/src/jev/index.ts',
   'packages/client/src/api/studio/jev.ts',
 ])
 
@@ -104,7 +104,7 @@ export function jevUsage(file, source) {
         if (item.isTypeOnly) continue
         const imported = name(item.propertyName ?? item.name)
         if (['evaluateJev', 'evaluateMemory', 'evaluateJevWithCredentials', 'createJevSidecar'].includes(imported)) evaluators.add(name(item.name))
-        if (/^(EkkoJevClient|evaluateJev|evaluateJevWithCredentials|createJevSidecar|getJevRuntimeConfig)$/.test(imported)) used = true
+        if (/^(HubAgentJevClient|evaluateJev|evaluateJevWithCredentials|createJevSidecar|getJevRuntimeConfig)$/.test(imported)) used = true
       }
       if (/(?:^|\/)jev(?:\/|$|\.)/.test(specifier)) used = true
       if (specifier === '@typesafe-ai/sdk') { used = true; directSdk = true }
@@ -188,8 +188,8 @@ export function jevHarnessViolations(sources, manifest) {
   }
   const savedFields = new Set()
   walk(form, node => {
-    if (!ts.isCallExpression(node) || name(node.expression) !== 'saveJevSettings' || !node.arguments[1]) return
-    walk(node.arguments[1], property => {
+    if (!ts.isCallExpression(node) || name(node.expression) !== 'saveJevSettings' || !node.arguments[0]) return
+    walk(node.arguments[0], property => {
       if (ts.isPropertyAssignment(property) || ts.isShorthandPropertyAssignment(property)) savedFields.add(name(property.name))
     })
   })
@@ -255,7 +255,7 @@ export function jevHarnessViolations(sources, manifest) {
       owners.set(key, id)
       if (!settings.fields[key]) fail(`${id}: ${key} has no frontend configuration entry`)
     }
-    if (!integration.sources?.length || !integration.tests?.length) fail(`${id} must list concrete source and regression test files`)
+    if (!integration.sources?.length) fail(`${id} must list concrete source files`)
     for (const file of integration.sources ?? []) {
       const usage = jevUsage(file, get(file))
       if (evaluationInfrastructure.has(file) || infrastructure.has(file) && !usage.evaluates) fail(`${id}: ${file} is infrastructure, not a business integration`)

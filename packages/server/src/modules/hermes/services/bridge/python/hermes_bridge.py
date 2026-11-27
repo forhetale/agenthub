@@ -39,7 +39,6 @@ _FACADE_SEND_BRIDGE_REQUEST = None
 
 _RUNTIME_PATCH_NAMES = (
     "_agent_root",
-    "_apply_openrouter_attribution_override",
     "_apply_profile_dotenv",
     "_apply_profile_env",
     "_base_hermes_home",
@@ -84,6 +83,7 @@ _POOL_PATCH_NAMES = (
     "_install_execute_code_approval_memory_patch",
     "_jsonable",
     "_load_cfg",
+    "_load_disabled_toolsets",
     "_load_enabled_toolsets",
     "_load_reasoning_config",
     "_load_service_tier",
@@ -215,6 +215,7 @@ class AgentPool(_pool.AgentPool):
         model: str | None = None,
         provider: str | None = None,
         background_delegation_enabled: bool | None = None,
+        gateway_runtime: dict[str, Any] | None = None,
     ) -> AgentSession:
         _sync_pool_patches()
         return super().get_or_create(
@@ -223,6 +224,7 @@ class AgentPool(_pool.AgentPool):
             model,
             provider,
             background_delegation_enabled,
+            gateway_runtime=gateway_runtime,
         )
 
     def start_chat(self, *args: Any, **kwargs: Any) -> RunRecord:
@@ -241,9 +243,9 @@ class WorkerProcess(_transport.WorkerProcess):
         _sync_transport_patches()
         super().start()
 
-    def request(self, req: dict[str, Any], timeout: float | None = None) -> dict[str, Any]:
+    def request(self, req: dict[str, Any], timeout: float | None = None, *, start_if_needed: bool = True) -> dict[str, Any]:
         _sync_transport_patches()
-        return super().request(req, timeout)
+        return super().request(req, timeout, start_if_needed=start_if_needed)
 
 
 class BridgeBroker(_broker.BridgeBroker):
@@ -265,7 +267,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--endpoint", default=os.environ.get("HERMES_AGENT_BRIDGE_ENDPOINT", DEFAULT_ENDPOINT))
     parser.add_argument("--agent-root", default=os.environ.get("HERMES_AGENT_ROOT", DEFAULT_AGENT_ROOT))
     parser.add_argument("--hermes-home", default=os.environ.get("HERMES_HOME", DEFAULT_HERMES_HOME))
-    parser.add_argument("--worker-profile", default=os.environ.get("HERMES_AGENT_BRIDGE_WORKER_PROFILE"))
+    parser.add_argument("--worker-profile", default=None)
     args = parser.parse_args(argv)
 
     _set_path_env(args.agent_root, args.hermes_home)
@@ -277,6 +279,8 @@ def main(argv: list[str] | None = None) -> int:
         _log_worker_startup_context(str(args.worker_profile or "default"))
         BridgeServer(args.endpoint).serve_forever()
     else:
+        os.environ.pop("HERMES_AGENT_BRIDGE_WORKER_PROFILE", None)
+        os.environ.pop("HERMES_AGENT_BRIDGE_BROKER_PID", None)
         BridgeBroker(args.endpoint, args.agent_root, args.hermes_home).serve_forever()
     return 0
 

@@ -1,3 +1,6 @@
+import { logicalHermesMetadata } from '../../../studio/public/model-routing'
+import { hermesGatewaySelection } from '../../../studio/public/provider-projection'
+import { studioModelReasoningEffort } from '../../../studio/public/model-reasoning-effort'
 import { setTimeout as delay } from 'timers/promises'
 import { createConnection, type Socket } from 'net'
 import { tmpdir } from 'os'
@@ -258,13 +261,18 @@ export class AgentBridgeError extends Error {
 }
 
 export class AgentBridgeClient {
-  readonly endpoint: string
+  private readonly configuredEndpoint?: string
+  get endpoint(): string {
+    return this.configuredEndpoint || process.env.HERMES_AGENT_BRIDGE_ENDPOINT || DEFAULT_AGENT_BRIDGE_ENDPOINT
+  }
   readonly timeoutMs: number
   readonly connectRetryMs: number
   private lock: Promise<unknown> = Promise.resolve()
 
   constructor(options: AgentBridgeOptions = {}) {
-    this.endpoint = options.endpoint || process.env.HERMES_AGENT_BRIDGE_ENDPOINT || DEFAULT_AGENT_BRIDGE_ENDPOINT
+    // Desktop creates chat clients before the manager selects its broker.
+    // Explicit endpoints stay pinned; default clients follow that selection.
+    this.configuredEndpoint = options.endpoint
     this.timeoutMs = options.timeoutMs ?? envPositiveInt('HERMES_AGENT_BRIDGE_TIMEOUT_MS') ?? DEFAULT_AGENT_BRIDGE_TIMEOUT_MS
     this.connectRetryMs = options.connectRetryMs ?? envPositiveInt('HERMES_AGENT_BRIDGE_CONNECT_RETRY_MS') ?? 5000
   }
@@ -349,6 +357,14 @@ export class AgentBridgeClient {
       }
       const onConnect = () => {
         cleanup()
+        // A response can settle before the TCP stream closes. Keep ownership of
+        // errors across the request handoff and end(), including a late peer RST.
+        const onConnectedError = (err: Error) => {
+          bridgeLogger.warn({ err, endpoint }, '[agent-bridge-client] connected socket error')
+          socket.destroy()
+        }
+        socket.on('error', onConnectedError)
+        socket.once('close', () => socket.off('error', onConnectedError))
         resolveConnect(socket)
       }
       const onError = (err: Error) => {
@@ -439,6 +455,10 @@ export class AgentBridgeClient {
       const timeoutMs = options.timeoutMs || this.timeoutMs
       const startedAt = Date.now()
       const action = String(payload.action || '')
+      if (['chat', 'context_estimate', 'switch_session_model'].includes(action) && payload.model && payload.provider) {
+        const sessionId = typeof payload.session_id === 'string' ? payload.session_id.trim() : undefined
+        payload = { ...payload, ...await hermesGatewaySelection(String(payload.profile || 'default'), String(payload.provider), String(payload.model), sessionId) }
+      }
       const shouldLogRequest = action !== 'get_output' && action !== 'background_poll'
       const runtimeContext = shouldLogRequest ? this.runtimeContext(payload) : undefined
       if (shouldLogRequest) {
@@ -471,7 +491,7 @@ export class AgentBridgeClient {
             response: this.summarizeResponse(response as Record<string, unknown>),
           }, '[agent-bridge-client] response')
         }
-        return response as T
+        return logicalHermesMetadata(response, String(payload.profile || 'default')) as T
       } catch (err: any) {
         if (!(err instanceof AgentBridgeError) && action !== 'background_poll') {
           bridgeLogger.error({
@@ -498,7 +518,7 @@ export class AgentBridgeClient {
     return this.request({ action: 'ping' })
   }
 
-  chat(
+  async chat(
     sessionId: string,
     message: AgentBridgeMessage,
     conversationHistory?: unknown[],
@@ -506,6 +526,7 @@ export class AgentBridgeClient {
     profile?: string,
     options: AgentBridgeChatOptions = {},
   ): Promise<AgentBridgeChatStarted> {
+    const reasoningEffort = studioModelReasoningEffort({ ...options, reasoningEffort: options.reasoning_effort })
     return this.request<AgentBridgeChatStarted>({
       action: 'chat',
       session_id: sessionId,
@@ -524,12 +545,11 @@ export class AgentBridgeClient {
       ...(options.background_delegation_enabled !== undefined
         ? { background_delegation_enabled: options.background_delegation_enabled }
         : {}),
-      // Local patch (reasoning-effort): per-session reasoning effort override.
-      ...(options.reasoning_effort ? { reasoning_effort: options.reasoning_effort } : {}),
+      ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
     })
   }
 
-  contextEstimate(
+  async contextEstimate(
     sessionId: string,
     messages: unknown[],
     instructions?: string,
@@ -616,13 +636,15 @@ export class AgentBridgeClient {
 
   async *streamOutput(
     runId: string,
-    options: AgentBridgeRequestOptions & { intervalMs?: number } = {},
+    options: AgentBridgeRequestOptions & { intervalMs?: number; shouldContinue?: () => boolean } = {},
   ): AsyncGenerator<AgentBridgeOutput> {
     const intervalMs = options.intervalMs || 100
     let cursor = 0
     let eventCursor = 0
     for (;;) {
+      if (options.shouldContinue && !options.shouldContinue()) return
       const chunk = await this.getOutput(runId, cursor, eventCursor, options)
+      if (options.shouldContinue && !options.shouldContinue()) return
       cursor = chunk.cursor
       eventCursor = chunk.event_cursor
       if (chunk.delta || chunk.done || (chunk.events && chunk.events.length > 0)) yield chunk
@@ -669,6 +691,15 @@ export class AgentBridgeClient {
       action: 'request_boundary_interrupt',
       session_id: sessionId,
       ...(expectedRunId ? { expected_run_id: expectedRunId } : {}),
+      ...(profile ? { profile } : {}),
+    })
+  }
+
+  cancelBoundaryInterrupt(sessionId: string, expectedRunId: string, profile?: string): Promise<AgentBridgeResponse> {
+    return this.request({
+      action: 'cancel_boundary_interrupt',
+      session_id: sessionId,
+      expected_run_id: expectedRunId,
       ...(profile ? { profile } : {}),
     })
   }
@@ -800,6 +831,10 @@ export class AgentBridgeClient {
   }
 
   // ───── MCP Management ─────
+
+  mcpPluginsChanged(servers: string[], removed: string[]): Promise<AgentBridgeResponse> {
+    return this.request({ action: 'mcp_plugins_changed', servers, removed }, { serialize: true, timeoutMs: 180_000 })
+  }
 
   mcpList(profile?: string): Promise<McpActionResponse> {
     return this.request({ action: 'mcp_list', ...(profile ? { profile } : {}) })

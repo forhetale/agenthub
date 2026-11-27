@@ -1,4 +1,14 @@
-export type AgentStatusId = 'hermes' | 'ekko-agent' | 'claude-code' | 'codex' | 'pi' | 'grok' | 'opencode' | 'dsh' | 'cursor' | 'antigravity'
+export type AgentStatusId = 'hermes' | 'hub-agent' | 'claude-code' | 'codex' | 'pi' | 'grok' | 'opencode' | 'dsh' | 'cursor' | 'antigravity' | 'qwen' | 'kimi' | 'codebuddy' | 'qoder' | 'copilot' | 'zcode'
+
+/** Normalize current and legacy built-in status IDs ('ekko-agent' -> 'hub-agent'). */
+export function normalizeAgentStatusId(value: unknown): AgentStatusId | undefined {
+  if (typeof value !== 'string') return undefined
+  const normalized = value.trim().toLowerCase()
+  if (normalized === 'ekko' || normalized === 'ekko-agent' || normalized === 'ekko_agent' || normalized === 'hub' || normalized === 'hub_agent') {
+    return 'hub-agent'
+  }
+  return AGENT_ORDER.includes(normalized as AgentStatusId) ? (normalized as AgentStatusId) : undefined
+}
 
 export type AgentStatusSource =
   | 'managed-runtime'
@@ -24,6 +34,7 @@ export interface AgentStatusRecord {
   source: AgentStatusSource
   path: string
   error: string
+  compatibility?: { pinnedVersion: string; previousVersion: string; adapterRevision: number; verifiedVersion: string }
   installations: AgentInstallationStatus[]
   updatedAt: string
 }
@@ -35,6 +46,7 @@ export interface AgentStatusSnapshot {
 }
 
 export interface AgentAvailabilityRecord {
+  available: boolean
   id: AgentStatusId
   installed: boolean
   source: AgentStatusSource
@@ -46,9 +58,15 @@ export interface AgentAvailabilitySnapshot {
   agents: AgentAvailabilityRecord[]
 }
 
-const AGENT_ORDER: AgentStatusId[] = ['hermes', 'ekko-agent', 'claude-code', 'codex', 'pi', 'grok', 'opencode', 'dsh', 'cursor', 'antigravity']
+const AGENT_ORDER: AgentStatusId[] = ['hermes', 'hub-agent', 'claude-code', 'codex', 'pi', 'grok', 'opencode', 'dsh', 'cursor', 'antigravity', 'qwen', 'kimi', 'codebuddy', 'qoder', 'copilot', 'zcode']
 
 const DEFAULTS: Record<AgentStatusId, Omit<AgentStatusRecord, 'updatedAt'>> = {
+  qwen: { id: 'qwen', name: 'Qwen Code', provider: 'Alibaba', kind: 'coding-agent', installed: false, version: '', source: 'not-installed', path: '', error: '', installations: [] },
+  kimi: { id: 'kimi', name: 'Kimi Code', provider: 'Moonshot AI', kind: 'coding-agent', installed: false, version: '', source: 'not-installed', path: '', error: '', installations: [] },
+  codebuddy: { id: 'codebuddy', name: 'CodeBuddy', provider: 'Tencent', kind: 'coding-agent', installed: false, version: '', source: 'not-installed', path: '', error: '', installations: [] },
+  qoder: { id: 'qoder', name: 'Qoder', provider: 'Qoder', kind: 'coding-agent', installed: false, version: '', source: 'not-installed', path: '', error: '', installations: [] },
+  copilot: { id: 'copilot', name: 'GitHub Copilot', provider: 'GitHub', kind: 'coding-agent', installed: false, version: '', source: 'not-installed', path: '', error: '', installations: [] },
+  zcode: { id: 'zcode', name: 'ZCode', provider: 'Z.ai', kind: 'coding-agent', installed: false, version: '', source: 'not-installed', path: '', error: '', installations: [] },
   hermes: {
     id: 'hermes',
     name: 'Hermes',
@@ -61,10 +79,10 @@ const DEFAULTS: Record<AgentStatusId, Omit<AgentStatusRecord, 'updatedAt'>> = {
     error: '',
     installations: [],
   },
-  'ekko-agent': {
-    id: 'ekko-agent',
-    name: 'Ekko',
-    provider: 'Ekko Studio',
+  'hub-agent': {
+    id: 'hub-agent',
+    name: 'Hub Agent',
+    provider: 'AgentHub',
     kind: 'built-in',
     installed: true,
     version: '',
@@ -174,6 +192,7 @@ for (const id of AGENT_ORDER) {
 function cloneRecord(record: AgentStatusRecord): AgentStatusRecord {
   return {
     ...record,
+    ...(record.compatibility ? { compatibility: { ...record.compatibility } } : {}),
     installations: record.installations.map(item => ({ ...item })),
   }
 }
@@ -226,6 +245,7 @@ export function getAgentAvailabilitySnapshot(): AgentAvailabilitySnapshot {
       return {
         id,
         installed: record.installed,
+        available: isAgentAvailable(id),
         source: record.source,
       }
     }),

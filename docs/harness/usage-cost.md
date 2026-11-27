@@ -5,6 +5,17 @@
 stay NULL, including pre-migration rows. Explicit provider USD zero is known
 free usage; zero from an unpriced native CLI catalog is not proof of free usage.
 
+`origin` partitions the ledger into `internal` (the migration/default for existing
+session, workflow and Coding Agent records) and `external` (every request through
+the [Model API](../model-api.md)). Stats default to internal. External queries must
+never import native Hermes history or session cost fallbacks. A Studio call to
+its own Model API may appear once in each category; do not combine these views
+into a deduplicated upstream bill. External rows use the authenticated `account_id`,
+an empty `session_id`, a unique response `run_id`, and `source=agent=model_api`.
+They count API requests rather than synthetic sessions. If an upstream stream
+fails or is cancelled, retain measured usage; absent token measurements must not
+produce a zero-price estimate, even when manual model prices exist.
+
 Studio keeps `total_cost` and daily `cost` numeric for older clients. New
 `cost_coverage` counts reported, estimated and unknown records. Clients show
 "Not recorded" for wholly unknown usage and label partial totals. Empty days
@@ -42,7 +53,7 @@ prices are reference estimates, not a relay invoice, subscription charge or
 account-specific discount; configure custom rates when appropriate. Missing
 rates for used token categories leave cost unknown. Context tiers include cache
 tokens; a run aggregate above a tier threshold stays unknown unless it represents
-a single API call. Ekko subtask totals use run scope; an explicit call count takes
+a single API call. Hub Agent subtask totals use run scope; an explicit call count takes
 precedence over scope when determining whether tier pricing is safe. Explicit
 tiers take precedence over legacy `context_over_200k`.
 Separate reasoning rates replace the reasoning portion of the output charge.
@@ -60,13 +71,8 @@ not make the model available on the endpoint or supply metered API prices.
 Estimated records retain nullable `cost_pricing` JSON with the rate source,
 effective USD-per-million rates, catalog SHA-256 version, download time and
 selected context threshold. `cost_source` remains `estimated`, so existing
-Studio coverage and total-cost displays work without a new API contract.
+Studio/App coverage and total-cost displays work without a new API contract.
 Catalog refreshes never reprice previously stored records.
-
-AgentHub: set `HERMES_WEB_UI_DISABLE_MODEL_CATALOG_DOWNLOAD=1` to keep Studio from
-downloading `https://models.dev/api.json` (offline or private installs). Without a
-Studio catalog copy, context limits fall back to Hermes Agent's own
-`models_dev_cache.json`; cost estimates then stay unavailable until a catalog exists.
 
 ## Coding Agent accounting boundaries
 
@@ -112,7 +118,7 @@ assistant message, including reasoning-only and empty replies, so resume keeps
 the same card. Codex queue insertion waits for the bounded native accounting
 read after process close. Late request usage and price fills publish
 `run.usage.updated` with the exact run/message IDs; the client updates that card
-independently of the active turn. Hermes and Ekko cancellation use the same
+independently of the active turn. Hermes and Hub Agent cancellation use the same
 persisted summary contract. Missing native measurements remain unknown.
 Late Coding Agent updates also carry current ledger totals for the session and
 refresh cached resume counters, without changing the active run or its context.
@@ -158,7 +164,6 @@ whole session falls inside the period. It cannot be added to a partly priced
 session. Native aggregate costs retain Hermes's session-start date; for sessions
 spanning days, daily coverage stays unknown where charges cannot be attributed.
 
-Validation: `model-catalog.test.ts`, `model-context.test.ts`, `usage-cost.test.ts`,
-`usage-store.test.ts`, `usage-analytics-db.test.ts`, native usage/model adapter
-tests and `tests/e2e/usage-cost.spec.ts` cover refresh/offline behavior, shared
-context limits, persistence, precedence, deduplication and UI.
+The legacy usage tests have been removed. For new usage features, add focused
+coverage for the relevant refresh/offline behavior, context limits, persistence,
+precedence, deduplication or UI interaction.

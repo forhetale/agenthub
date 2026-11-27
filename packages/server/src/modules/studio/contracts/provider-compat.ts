@@ -20,11 +20,14 @@ const KNOWN_KEYS = new Set([
   'api_key', 'key_env', 'api_key_env',
   'api_mode', 'transport',
   'model', 'default_model',
-  'models',
+  'models', 'models_discovered',
   'context_length', 'rate_limit_delay',
   'request_timeout_seconds', 'stale_timeout_seconds',
-  'discover_models', 'extra_body',
+  'discover_models', 'extra_body', 'extra_headers', 'catalog_provider', 'runtime_provider', 'auth_provider', 'auth_scope',
 ])
+
+// Config is parsed repeatedly by model, provider, and context lookups.
+const warnedUnknownKeys = new Set<string>()
 
 const CAMEL_ALIASES: Record<string, string> = {
   apiKey: 'api_key',
@@ -49,10 +52,32 @@ export interface NormalizedCustomProvider {
   api_mode?: ProviderApiMode
   model?: string
   models?: Record<string, any>
+  models_discovered?: boolean
   context_length?: number
   rate_limit_delay?: number
   discover_models?: boolean
+  catalog_provider?: string
+  runtime_provider?: string
+  auth_provider?: string
+  auth_scope?: string
+  extra_headers?: Record<string, string>
   extra_body?: Record<string, any>
+}
+
+/** Keep catalog readiness and runtime credential resolution on the same profile-local rules. */
+export function resolveCustomProviderApiKey(provider: NormalizedCustomProvider, envContent: string): string {
+  if (provider.api_key?.trim()) return provider.api_key.trim()
+  if (!provider.key_env) return ''
+  for (const line of envContent.split(/\r?\n/)) {
+    const trimmed = line.trim()
+    if (!trimmed || trimmed.startsWith('#')) continue
+    const separator = trimmed.indexOf('=')
+    if (separator < 0 || trimmed.slice(0, separator).trim() !== provider.key_env) continue
+    const raw = trimmed.slice(separator + 1).trim()
+    const quoted = (raw.startsWith('"') && raw.endsWith('"')) || (raw.startsWith("'") && raw.endsWith("'"))
+    return (quoted ? raw.slice(1, -1) : raw).trim()
+  }
+  return ''
 }
 
 function looksLikeUrl(value: string): boolean {
@@ -126,6 +151,8 @@ export function normalizeCustomProviderEntry(
   if (!name) return null
 
   const normalized: NormalizedCustomProvider = { name, base_url: baseUrl, source }
+  for (const key of ['catalog_provider', 'runtime_provider', 'auth_provider', 'auth_scope'] as const) if (typeof e[key] === 'string' && e[key]) normalized[key] = e[key]
+  if (e.extra_headers && typeof e.extra_headers === 'object' && !Array.isArray(e.extra_headers)) normalized.extra_headers = { ...e.extra_headers }
 
   if (providerKey && providerKey.trim()) {
     normalized.provider_key = providerKey.trim()
@@ -165,6 +192,10 @@ export function normalizeCustomProviderEntry(
     }
   }
 
+  if (typeof e.models_discovered === 'boolean') {
+    normalized.models_discovered = e.models_discovered
+  }
+
   if (typeof e.context_length === 'number' && Number.isInteger(e.context_length) && e.context_length > 0) {
     normalized.context_length = e.context_length
   }
@@ -180,14 +211,18 @@ export function normalizeCustomProviderEntry(
 
   // Surface unknown keys in the logs — same intent as Agent's warning, kept
   // soft so unfamiliar fields don't break callers.
-  const unknown = Object.keys(e).filter(k => !KNOWN_KEYS.has(k) && !(k in CAMEL_ALIASES))
+  const unknown = Object.keys(e).filter(k => !KNOWN_KEYS.has(k) && !(k in CAMEL_ALIASES)).sort()
   if (unknown.length > 0) {
-    // Use console here to avoid the logger import cycle; this branch is rare
-    // and only fires for hand-edited configs.
-    // eslint-disable-next-line no-console
-    console.warn(
-      `[config-helpers] providers.${providerKey || '?'}: unknown config keys ignored: ${unknown.join(', ')}`,
-    )
+    const providerIdentity = normalized.provider_key || name
+    const warningKey = JSON.stringify([source, providerIdentity, baseUrl.replace(/\/+$/, ''), unknown])
+    if (!warnedUnknownKeys.has(warningKey)) {
+      warnedUnknownKeys.add(warningKey)
+      // Use console here to avoid the logger import cycle.
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[config-helpers] ${source}.${providerIdentity}: unknown config keys ignored: ${unknown.join(', ')}`,
+      )
+    }
   }
 
   return normalized
@@ -257,8 +292,8 @@ export function isScopedCodingAgentAuthProvider(provider: unknown): boolean {
   return SCOPED_CODING_AGENT_AUTH_PROVIDERS.has(String(provider || '').trim().toLowerCase())
 }
 
-export function assertScopedCodingAgentProviderAllowed(mode: 'scoped' | 'global', provider: unknown): void {
-  if (mode === 'global' || !isScopedCodingAgentAuthProvider(provider)) return
+export function assertScopedCodingAgentProviderAllowed(mode: 'scoped' | 'global', provider: unknown, gateway = false): void {
+  if (gateway || mode === 'global' || !isScopedCodingAgentAuthProvider(provider)) return
   const error = new Error('Coding agent scoped mode does not support OAuth/subscription providers. Use global mode or select an API-key provider.')
   ;(error as any).status = 400
   throw error

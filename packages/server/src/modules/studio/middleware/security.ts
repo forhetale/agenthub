@@ -48,13 +48,9 @@ function isSameHostOrigin(origin: string, host: string): boolean {
   }
 }
 
-function isLocalAppDevelopmentOrigin(origin: string | undefined | null): boolean {
+function isLocalDevServerOrigin(origin: string | undefined | null): boolean {
   const normalized = normalizeOrigin(origin)
   if (!normalized) return false
-  // App-Plus' native uni.connectSocket client sends this fixed Origin for
-  // LAN WebSocket upgrades. Keep it scoped to Socket.IO/upgrade checks; the
-  // regular HTTP CORS resolver intentionally does not call this helper.
-  if (normalized === 'http://localhost') return true
   try {
     const url = new URL(normalized)
     const hostname = url.hostname.toLowerCase()
@@ -97,7 +93,7 @@ export function createSocketIoCorsOrigin(corsOrigins = '') {
       callback(null, true)
       return
     }
-    callback(null, isOriginAllowed(origin, '', corsOrigins) || isLocalAppDevelopmentOrigin(origin))
+    callback(null, isOriginAllowed(origin, '', corsOrigins) || isLocalDevServerOrigin(origin))
   }
 }
 
@@ -106,7 +102,7 @@ export function shouldRejectUpgradeOrigin(req: IncomingMessage, corsOrigins = ''
   if (!origin) return false
   const selectedOrigin = Array.isArray(origin) ? origin[0] : origin
   return !isOriginAllowed(selectedOrigin, req.headers.host, corsOrigins)
-    && !isLocalAppDevelopmentOrigin(selectedOrigin)
+    && !isLocalDevServerOrigin(selectedOrigin)
 }
 
 export function parseUpgradeRequestUrl(req: IncomingMessage): URL | null {
@@ -149,19 +145,22 @@ function isGroupChatAgentLinkDocument(ctx: Context): boolean {
 
 export function securityHeaders(): Middleware {
   return async (ctx, next) => {
+    const pluginDocument = (ctx.method === 'GET' || ctx.method === 'HEAD') && ctx.path === '/plugin-frame.html'
     ctx.set('X-Content-Type-Options', 'nosniff')
-    ctx.set('X-Frame-Options', 'DENY')
+    ctx.set('X-Frame-Options', pluginDocument ? 'SAMEORIGIN' : 'DENY')
     ctx.set('Referrer-Policy', 'no-referrer')
     ctx.set(
       'Cross-Origin-Opener-Policy',
       isGroupChatAgentLinkDocument(ctx) ? 'unsafe-none' : 'same-origin-allow-popups',
     )
-    ctx.set('Content-Security-Policy', [
+    // A real document avoids inheriting the Studio page's CSP through srcdoc.
+    // Trusted plugins may load arbitrary resources; only embedding is restricted.
+    ctx.set('Content-Security-Policy', pluginDocument ? "frame-ancestors 'self'" : [
       "default-src 'self'",
       "base-uri 'self'",
       "object-src 'none'",
       "frame-ancestors 'none'",
-      "script-src 'self' 'unsafe-inline'",
+      "script-src 'self' 'unsafe-inline' blob:",
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob: https:",
       "font-src 'self' data:",

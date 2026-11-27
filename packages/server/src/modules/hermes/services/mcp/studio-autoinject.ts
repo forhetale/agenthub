@@ -6,26 +6,31 @@ import { logger } from '../../../studio/public/logging'
 import { updateConfigYamlForProfile } from '../../../studio/public/profile-config'
 import { isPathWithin } from '../runtime/path'
 import { listProfileNamesFromDisk } from '../profiles/profile'
+import { pluginMcpServers } from '../../../studio/public/plugin-mcp'
 
 const LEGACY_SERVER_NAME = 'hermes-studio'
 const MANAGED_SERVERS: ReadonlyArray<{ name: string; toolset: string }> = [
-  { name: 'ekko-studio-api', toolset: 'api' },
-  { name: 'ekko-studio-browser', toolset: 'browser' },
-  { name: 'ekko-studio-use', toolset: 'use' },
-  { name: 'ekko-studio-interaction', toolset: 'plan' },
+  { name: 'agenthub-api', toolset: 'api' },
+  { name: 'agenthub-plugins', toolset: 'plugins' },
+  { name: 'agenthub-browser', toolset: 'browser' },
+  { name: 'agenthub-use', toolset: 'use' },
+  { name: 'agenthub-interaction', toolset: 'plan' },
 ]
-// Retired entries such as `ekko-studio-devices` carry MANAGED_ENV_KEY, so the
-// managed-entry sweep in injectIntoProfile removes them from existing profiles.
-const MANAGED_SERVER_NAMES: Set<string> = new Set(MANAGED_SERVERS.map(server => server.name))
 // Hermes Agent applies this per managed MCP server. Keep the long-running
 // `use` toolset above Studio's 30-minute chat-run cap with bounded delivery
 // headroom; unrelated API/browser calls retain the client default.
 const MANAGED_USE_MCP_TIMEOUT_SECONDS = 30 * 60 + 60
 const LEGACY_SERVER_NAMES = new Set([
+  'ekko-studio-api',
+  'ekko-studio-plugins',
+  'ekko-studio-browser',
+  'ekko-studio-use',
+  'ekko-studio-interaction',
   'ekko-studio-plan',
   'hermes-studio-api',
   'hermes-studio-browser',
   'hermes-studio-devices',
+  'ekko-studio-devices',
   'hermes-studio-use',
   'hermes-studio-mcp',
   LEGACY_SERVER_NAME,
@@ -39,6 +44,7 @@ const LEGACY_COMMANDS = new Set([
   'hermes-web-ui-mcp',
   'ekko-studio-mcp',
   'hermes-studio-mcp',
+  'agenthub-mcp',
 ])
 
 export type BundledMcpInjectionStatus = 'injected' | 'updated' | 'unchanged' | 'skipped'
@@ -133,9 +139,9 @@ function isDesktopRuntime(): boolean {
 function candidateBundledMcpScripts(): string[] {
   return [
     process.env.HERMES_WEB_UI_MCP_BIN,
-    join(process.cwd(), 'bin/ekko-studio-mcp.mjs'),
-    join(__dirname, '../../bin/ekko-studio-mcp.mjs'),
-    join(__dirname, '../../../../../../bin/ekko-studio-mcp.mjs'),
+    join(process.cwd(), 'bin/agenthub-mcp.mjs'),
+    join(__dirname, '../../bin/agenthub-mcp.mjs'),
+    join(__dirname, '../../../../../../bin/agenthub-mcp.mjs'),
     join(process.cwd(), 'bin/hermes-web-ui-mcp.mjs'),
     join(__dirname, '../../bin/hermes-web-ui-mcp.mjs'),
     join(__dirname, '../../../../../../bin/hermes-web-ui-mcp.mjs'),
@@ -156,7 +162,7 @@ function managedCommandConfig(
   bundledScript: string | null,
 ): Record<string, unknown> {
   // Prefer the bundled script with an absolute path over a bare command name.
-  // On Windows (especially desktop builds), `ekko-studio-mcp` may not be in
+  // On Windows (especially desktop builds), `agenthub-mcp` may not be in
   // PATH even though the bundled .mjs script exists on disk.  Desktop provides
   // HERMES_AGENT_NODE for the packaged runtime node; fall back to process.execPath.
   if (bundledScript) {
@@ -164,11 +170,11 @@ function managedCommandConfig(
   }
 
   if (isDesktopRuntime()) {
-    return { command: 'ekko-studio-mcp', args: [toolset] }
+    return { command: 'agenthub-mcp', args: [toolset] }
   }
 
   logger.warn({ candidates: candidateBundledMcpScripts() }, '[mcp-autoinject] bundled MCP script not found; falling back to PATH command')
-  return { command: 'ekko-studio-mcp', args: [toolset] }
+  return { command: 'agenthub-mcp', args: [toolset] }
 }
 
 function managedConfig(
@@ -206,7 +212,10 @@ function isRecord(value: unknown): value is Record<string, any> {
 function isManagedServer(server: unknown): boolean {
   if (!isRecord(server)) return false
   if (isRecord(server.env) && server.env[MANAGED_ENV_KEY] === '1') return true
-  return typeof server.command === 'string' && LEGACY_COMMANDS.has(server.command)
+  if (typeof server.command === 'string' && LEGACY_COMMANDS.has(server.command)) return true
+  return Array.isArray(server.args)
+    && typeof server.args[0] === 'string'
+    && /(?:^|[/\\])(?:ekko-studio|hermes-studio|hermes-web-ui|agenthub)-mcp\.mjs$/.test(server.args[0])
 }
 
 function sameArgs(existing: Record<string, any>, desired: Record<string, unknown>): boolean {
@@ -222,7 +231,7 @@ function sameConfig(existing: Record<string, any>, desired: Record<string, unkno
   return existing.command === desired.command &&
     sameArgs(existing, desired) &&
     (desired.timeout === undefined || existing.timeout === desired.timeout) &&
-    existing.enabled !== false &&
+    existing.enabled === desired.enabled &&
     isRecord(existing.env) &&
     existing.env.ELECTRON_RUN_AS_NODE === desiredEnv.ELECTRON_RUN_AS_NODE &&
     existing.env.HERMES_WEB_UI_URL === desiredEnv.HERMES_WEB_UI_URL &&
@@ -239,7 +248,9 @@ function sameConfig(existing: Record<string, any>, desired: Record<string, unkno
 async function injectIntoProfile(
   profile: string,
   bundledScript: string | null,
+  managedServers: ReadonlyArray<{ name: string; toolset: string }>,
 ): Promise<BundledMcpInjectionTargetResult> {
+  const managedNames = new Set(managedServers.map(server => server.name))
   return await updateConfigYamlForProfile(profile, current => {
     const cfg = isRecord(current) ? current : {}
     if (!isRecord(cfg.mcp_servers)) cfg.mcp_servers = {}
@@ -249,17 +260,23 @@ async function injectIntoProfile(
     let hadManagedExisting = false
 
     for (const { name } of MANAGED_SERVERS) {
-      const legacyName = name === 'ekko-studio-interaction' ? 'ekko-studio-plan' : name.replace(/^ekko-/, 'hermes-')
-      const legacy = cfg.mcp_servers[legacyName]
-      if (!cfg.mcp_servers[name] && isManagedServer(legacy)) {
-        cfg.mcp_servers[name] = legacy
-        delete cfg.mcp_servers[legacyName]
-        changed = true
+      const legacyNames = [
+        name.replace(/^agenthub-/, 'ekko-studio-'),
+        ...(name === 'agenthub-interaction' ? ['ekko-studio-plan'] : []),
+        name.replace(/^agenthub-/, 'hermes-studio-'),
+      ]
+      for (const legacyName of legacyNames) {
+        const legacy = cfg.mcp_servers[legacyName]
+        if (!cfg.mcp_servers[name] && isManagedServer(legacy)) {
+          cfg.mcp_servers[name] = legacy
+          delete cfg.mcp_servers[legacyName]
+          changed = true
+        }
       }
     }
 
     for (const [name, server] of Object.entries(cfg.mcp_servers)) {
-      if (MANAGED_SERVER_NAMES.has(name)) continue
+      if (managedNames.has(name)) continue
       if (LEGACY_SERVER_NAMES.has(name) && !isManagedServer(server)) {
         return {
           data: cfg,
@@ -278,7 +295,7 @@ async function injectIntoProfile(
       }
     }
 
-    for (const server of MANAGED_SERVERS) {
+    for (const server of managedServers) {
       const desired = managedConfig(profile, server.name, server.toolset, bundledScript)
       const existing = cfg.mcp_servers[server.name]
       if (!existing) {
@@ -301,17 +318,7 @@ async function injectIntoProfile(
         }
       }
 
-      if (isRecord(existing) && existing.enabled === false) {
-        return {
-          data: cfg,
-          write: changed,
-          result: {
-            profile,
-            status: 'skipped',
-            reason: `existing ${server.name} MCP server is disabled by user`,
-          } satisfies BundledMcpInjectionTargetResult,
-        }
-      }
+      if (existing.enabled === false) desired.enabled = false
 
       if (!sameConfig(existing, desired)) {
         cfg.mcp_servers[server.name] = desired.timeout === undefined && Object.hasOwn(existing, 'timeout')
@@ -334,6 +341,7 @@ async function injectIntoProfile(
 }
 
 export async function injectBundledMcpServer(): Promise<BundledMcpInjectionResult> {
+  const managedServers = [...MANAGED_SERVERS, ...pluginMcpServers()]
   const bundledScript = bundledMcpScriptPath()
   const commandInfo = managedConfig(
     'default',
@@ -342,7 +350,7 @@ export async function injectBundledMcpServer(): Promise<BundledMcpInjectionResul
     bundledScript,
   )
   const result: BundledMcpInjectionResult = {
-    serverNames: MANAGED_SERVERS.map(server => server.name),
+    serverNames: managedServers.map(server => server.name),
     command: String(commandInfo.command),
     targets: [],
   }
@@ -361,7 +369,7 @@ export async function injectBundledMcpServer(): Promise<BundledMcpInjectionResul
   }
 
   for (const profile of listProfileNamesFromDisk()) {
-    result.targets.push(await injectIntoProfile(profile, bundledScript))
+    result.targets.push(await injectIntoProfile(profile, bundledScript, managedServers))
   }
 
   const changed = result.targets.filter(target => target.status === 'injected' || target.status === 'updated')

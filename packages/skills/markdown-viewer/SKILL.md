@@ -2,7 +2,7 @@
 name: markdown-viewer
 description: "Create rich diagrams, data visualizations, technical architecture views, and editorial content cards directly in Markdown using the Markdown Viewer Agent Skills pack. Use for Mermaid-like diagram requests, PlantUML architecture diagrams, Vega charts, JSON Canvas maps, infographics, UML, cloud/network/security/data/IoT diagrams, and polished Markdown documentation visuals."
 version: 1.0.0
-author: Ekko
+author: AgentHub
 license: MIT
 platforms: [linux, macos, windows]
 metadata:

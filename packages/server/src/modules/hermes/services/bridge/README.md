@@ -153,7 +153,7 @@ disabled.
 Hermes Web UI creates ordinary single-chat agents with this value set to
 `true`, enabling background task delivery by default. Group-chat agents and
 Hermes workflow-node agents set it to `false` at their own call sites and remain
-intentionally disabled. Coding Agent and Ekko Agent calls do not receive this
+intentionally disabled. Coding Agent and Hub Agent calls do not receive this
 Hermes Bridge field.
 
 The bridge instantiates `AIAgent` with `platform="cli"` by default so behavior

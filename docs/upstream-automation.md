@@ -102,7 +102,7 @@ python3 scripts/agenthub_upstream.py verify --worktree <path>
 - Note: `--skip-build-test` and `AGENTHUB_TEST_FAST` bypasses are permanently removed; all builds and tests must execute and log exit code 0 evidence.
 - Validates root and desktop package versions against `<tag>-agenthub.1` and `<tag>`.
 - Asserts that `.agenthub/upstream.json` marker is updated in the candidate (`mode: "pr_only"`, `approval_required_for: ["merge", "deploy"]`).
-- Asserts that required CLI bins (`bin/hermes-web-ui.mjs`, `bin/hermes-web-ui-mcp.mjs`, `bin/hermes-studio-mcp.mjs`, `bin/ekko-studio-mcp.mjs`) exist and are mapped in `package.json`.
+- Asserts that required CLI bins (`bin/hermes-web-ui.mjs`, `bin/hermes-web-ui-mcp.mjs`, `bin/hermes-studio-mcp.mjs`, `bin/agenthub-mcp.mjs`) exist and are mapped in `package.json`.
 - Asserts that `custom-build.ts` is present and preserves `-agenthub.` and `-tatin.` recognition.
 - Asserts that removed commercial/mobile/device paths (`packages/esp32-c3`, `app-relay`, `devices`, etc.) have not been restored.
 - Verifies desktop `appId` (`com.hermeswebui.studio`) and Bark notification modules.

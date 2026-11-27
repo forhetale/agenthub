@@ -4,8 +4,8 @@ Large-page navigation is a local Desktop browser capability. It works without a
 JEV key, with JEV disabled, and when the provider is unavailable. No model service
 is needed to find text, scope a region, page the accessibility tree or operate refs.
 
-Discover `ekko_studio_browser_toolset` with `action=list`, then describe the needed
-operation. `ekko_studio_browser_snapshot` supports:
+Discover `agenthub_browser_toolset` with `action=list`, then describe the needed
+operation. `agenthub_browser_snapshot` supports:
 
 - `selector`: a CSS selector for one region in the main document, such as the
   `#form-demo-layout` anchor from a form-demo URL. Only that element's DOM subtree
@@ -77,7 +77,7 @@ locally computed value matches. It still receives no raw input values, URLs or
 descriptions, and its independent switch and credential requirements remain in
 effect. A low-confidence judgment never retries an action.
 
-Ekko model requests summarize superseded browser snapshots into bounded facts,
+Hub Agent model requests summarize superseded browser snapshots into bounded facts,
 retaining all pages of the newest snapshot per tab and action/error metadata.
 Studio applies the same projection before context budgeting; current structured
 snapshots bypass generic character truncation so refs remain usable. Original
@@ -85,7 +85,7 @@ tool events and stored session history stay complete. This projection does not
 control history owned by external coding agents. Browser JSON remains compact
 through the tool-result sanitizer.
 
-Requests naming the built-in/Studio browser prefer `ekko_studio_browser_toolset`.
+Requests naming the built-in/Studio browser prefer `agenthub_browser_toolset`.
 The separate Agent browser has its own environment and login state.
 
 The tree is the current document's accessibility tree. CSS scope does not switch

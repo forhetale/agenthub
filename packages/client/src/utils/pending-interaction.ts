@@ -24,6 +24,7 @@ export function pendingInteractionDeadline(
 }
 
 export function pendingInteractionRemainingMs(deadline: number, now = pendingInteractionMonotonicNow()): number {
+  if (deadline === Infinity) return Infinity
   if (!Number.isFinite(deadline)) return 0
   return Math.max(0, deadline - now)
 }
@@ -40,6 +41,7 @@ export function formatPendingInteractionTime(remainingMs: number): string {
 
 export function isPendingInteractionExpiredError(error: unknown): boolean {
   const message = String(error instanceof Error ? error.message : error || '').toLowerCase()
+  if (message.includes('unknown clarify request')) return true
   const interaction = message.includes('approval') || message.includes('clarification')
   return interaction && (message.includes('timed out')
     || message.includes('expired')

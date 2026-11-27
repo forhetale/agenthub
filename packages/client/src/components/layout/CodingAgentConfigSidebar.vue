@@ -1,5 +1,7 @@
 <script setup lang="ts">
+import { agentMetadata } from "@/utils/agent-catalog"
 import PageSidebar from "./PageSidebar.vue"
+import SidebarResizeHandle from "./SidebarResizeHandle.vue"
 import { usePageSidebarState } from "@/composables/usePageSidebar"
 import { computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
@@ -19,9 +21,9 @@ const activeSection = computed(() => String(route.params.section || 'settings'))
 
 const items = computed(() => [
     ...(agentId.value === 'dsh' ? [{ section: 'plugins', label: t('sidebar.plugins'), icon: 'plugins' }, { section: 'presets', label: t('dshPresets.title'), icon: 'presets' }] : []),
-    { section: 'skills', label: t('sidebar.skills'), icon: 'skills' },
-    { section: 'mcp', label: t('sidebar.mcp'), icon: 'mcp' },
-    { section: 'settings', label: t('sidebar.settings'), icon: 'settings' },
+    ...(agentMetadata(agentId.value)?.config.skillsTarget ? [{ section: 'skills', label: t('sidebar.skills'), icon: 'skills' }] : []),
+    ...(agentMetadata(agentId.value)?.config.mcp ? [{ section: 'mcp', label: t('sidebar.mcp'), icon: 'mcp' }] : []),
+    ...(agentMetadata(agentId.value)?.config.settings || agentMetadata(agentId.value)?.config.memory ? [{ section: 'settings', label: t('sidebar.settings'), icon: 'settings' }] : []),
   ])
 
 function setExpanded(value: boolean) {
@@ -40,6 +42,7 @@ function handleNavClick(event: MouseEvent) {
 <template>
   <PageSidebar>
   <aside class="coding-agent-config-sidebar" :class="{ open: expanded, collapsed: !isMobile && appStore.sidebarCollapsed }">
+    <SidebarResizeHandle />
     <nav class="coding-agent-config-nav" @click="handleNavClick">
       <RouteLinkItem
         v-for="item in items"
@@ -74,7 +77,7 @@ function handleNavClick(event: MouseEvent) {
           <path d="m15 18-6-6 6-6" />
           <path d="M9 12h11" />
         </svg>
-        <span>{{ t('ekkoConfig.back') }}</span>
+        <span>{{ t('hubAgentConfig.back') }}</span>
       </RouteLinkItem>
       <button class="coding-agent-config-collapse" type="button" :title="appStore.sidebarCollapsed ? t('sidebar.expand') : t('sidebar.collapse')" @click="appStore.toggleSidebarCollapsed()">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

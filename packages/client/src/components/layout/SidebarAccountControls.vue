@@ -11,7 +11,7 @@ import { changelog } from '@/data/changelog'
 import { getStoredUserId } from '@/api/client'
 import { clearThemeBackgroundCache } from '@/api/studio/theme'
 
-const emit = defineEmits<{ 'open-modal': [] }>()
+const emit = defineEmits<{ 'open-modal': []; 'open-navigation-settings': [] }>()
 const { t } = useI18n()
 const message = useMessage()
 const appStore = useAppStore()
@@ -22,7 +22,7 @@ const languageThemeOverrides: GlobalThemeOverrides['Select'] = {
   peers: {
     InternalSelection: {
       heightSmall: 'var(--account-selector-height)',
-      fontSizeSmall: '13px',
+      fontSizeSmall: 'calc(var(--font-size-base, 14px) * 13 / 14)',
       borderRadius: 'var(--account-selector-radius)',
       paddingSingle: '0 9px',
       arrowSize: '12px',
@@ -89,6 +89,10 @@ function handleUpdateClick() {
     </div>
 
     <div class="sidebar-footer">
+      <button class="nav-item" type="button" @click="emit('open-navigation-settings')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M9 4v16M5.5 8h1M5.5 12h1" /></svg>
+        <span>{{ t('navigation.title') }}</span>
+      </button>
       <div class="logout-row">
         <button class="nav-item logout-item" @click="handleLogout">
           <svg
@@ -126,7 +130,7 @@ function handleUpdateClick() {
         <div class="version-links">
           <a
             class="sidebar-footer-link"
-            href="https://github.com/EKKOLearnAI/ekko-studio"
+            href="https://github.com/forhetale/agenthub"
             target="_blank"
             rel="noopener noreferrer"
             title="GitHub"
@@ -145,7 +149,7 @@ function handleUpdateClick() {
           @keydown.enter="openChangelog"
           @keydown.space.prevent="openChangelog"
         >
-          Studio v{{ appStore.serverVersion || "—" }}
+          AgentHub v{{ appStore.serverVersion || "—" }}
         </button>
         <ThemeSwitch />
       </div>
@@ -243,7 +247,7 @@ function handleUpdateClick() {
 .language-row {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: calc(6px * var(--spacing-scale, 1));
   margin-bottom: 8px;
 }
 
@@ -251,7 +255,7 @@ function handleUpdateClick() {
   display: flex;
   align-items: center;
   min-height: 20px;
-  font-size: 11px;
+  font-size: calc(var(--font-size-base, 14px) * 11 / 14);
   font-weight: 600;
   color: $text-muted;
   text-transform: uppercase;
@@ -264,14 +268,14 @@ function handleUpdateClick() {
 .nav-item {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 12px;
+  gap: calc(10px * var(--spacing-scale, 1));
+  padding: calc(12px * var(--spacing-scale, 1));
   border: none;
   background: none;
   appearance: none;
   text-decoration: none;
   color: $text-secondary;
-  font-size: 14px;
+  font-size: calc(var(--font-size-base, 14px) * 14 / 14);
   border-radius: $radius-sm;
   cursor: pointer;
   transition: all $transition-fast;
@@ -289,18 +293,18 @@ function handleUpdateClick() {
   }
 
   .beta-tag {
-    font-size: 10px;
+    font-size: calc(var(--font-size-base, 14px) * 10 / 14);
     color: $text-muted;
     margin-inline-start: 2px;
   }
 }
 
 .sidebar-footer {
-  padding-top: 10px;
-  border-top: 1px solid $border-color;
+  padding-top: calc(10px * var(--spacing-scale, 1));
+  border-top: var(--border-width, 1px) solid $border-color;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: calc(4px * var(--spacing-scale, 1));
 }
 
 .logout-item {
@@ -326,17 +330,17 @@ function handleUpdateClick() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  padding-inline-end: 12px;
+  gap: calc(8px * var(--spacing-scale, 1));
+  padding-inline-end: calc(12px * var(--spacing-scale, 1));
 }
 
 .status-indicator {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: calc(8px * var(--spacing-scale, 1));
   min-width: 0;
   margin-inline-start: auto;
-  font-size: 12px;
+  font-size: calc(var(--font-size-base, 14px) * 12 / 14);
   color: $text-secondary;
 
   &.connected .status-dot {
@@ -364,13 +368,13 @@ function handleUpdateClick() {
 }
 
 .version-info {
-  padding: 8px 12px;
-  font-size: 11px;
+  padding: calc(8px * var(--spacing-scale, 1)) calc(12px * var(--spacing-scale, 1));
+  font-size: calc(var(--font-size-base, 14px) * 11 / 14);
   color: $text-muted;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 6px;
+  gap: calc(6px * var(--spacing-scale, 1));
   overflow: hidden;
 }
 
@@ -378,7 +382,7 @@ function handleUpdateClick() {
   display: flex;
   align-items: center;
   flex-shrink: 0;
-  gap: 6px;
+  gap: calc(6px * var(--spacing-scale, 1));
 }
 
 .sidebar-footer-link {
@@ -434,19 +438,19 @@ function handleUpdateClick() {
 .changelog-version-header {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: calc(10px * var(--spacing-scale, 1));
   margin-bottom: 8px;
 }
 
 .changelog-version-tag {
   font-weight: 600;
-  font-size: 14px;
+  font-size: calc(var(--font-size-base, 14px) * 14 / 14);
   color: $text-primary;
-  font-family: $font-code;
+  font-family: var(--font-code, $font-code);
 }
 
 .changelog-date {
-  font-size: 12px;
+  font-size: calc(var(--font-size-base, 14px) * 12 / 14);
   color: $text-muted;
 }
 
@@ -456,9 +460,9 @@ function handleUpdateClick() {
   margin: 0;
 
   li {
-    font-size: 13px;
+    font-size: calc(var(--font-size-base, 14px) * 13 / 14);
     color: $text-secondary;
-    padding: 4px 0 4px 16px;
+    padding: calc(4px * var(--spacing-scale, 1)) 0 calc(4px * var(--spacing-scale, 1)) calc(16px * var(--spacing-scale, 1));
     position: relative;
 
     &::before {
@@ -477,29 +481,29 @@ function handleUpdateClick() {
 .docker-update-modal {
   p {
     margin: 12px 0;
-    font-size: 14px;
-    line-height: 1.6;
+    font-size: calc(var(--font-size-base, 14px) * 14 / 14);
+    line-height: var(--line-height, 1.6);
     color: $text-secondary;
   }
 
   .docker-update-commands {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: calc(8px * var(--spacing-scale, 1));
     margin: 16px 0;
   }
 
   .docker-command {
     display: block;
-    padding: 10px 14px;
+    padding: calc(10px * var(--spacing-scale, 1)) calc(14px * var(--spacing-scale, 1));
     background: $code-bg;
     border-radius: $radius-sm;
-    font-family: $font-code;
-    font-size: 13px;
+    font-family: var(--font-code, $font-code);
+    font-size: calc(var(--font-size-base, 14px) * 13 / 14);
     color: $text-primary;
     user-select: all;
     cursor: text;
-    border: 1px solid $border-color;
+    border: var(--border-width, 1px) solid $border-color;
   }
 
   .docker-update-note {

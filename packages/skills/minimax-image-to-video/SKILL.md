@@ -2,7 +2,7 @@
 name: minimax-image-to-video
 description: "Animate an image through Hermes Web UI using the MiniMax image-to-video API."
 version: 1.0.0
-author: Ekko
+author: AgentHub
 license: MIT
 platforms: [linux, macos, windows]
 metadata:

@@ -4,7 +4,7 @@ type RunState = { isWorking: boolean; isAborting?: boolean; activeRunMarker?: st
 type Binding = { sessionId: string; profile: string; resolve: () => RunState | undefined; runId?: string }
 type Reason = 'response' | 'dismissed' | 'timeout' | 'cancelled'
 type Result = { clarify_id: string; response: string; reason: Reason }
-type Pending = { contextId: string; sessionId: string; finish: (reason: Reason, response?: string) => void }
+type Pending = { contextId: string; sessionId: string; finish: (reason: Reason, response?: string) => boolean }
 export const CLARIFICATION_TIMEOUT_MS = 300_000
 
 export class ClarificationError extends Error {
@@ -56,15 +56,16 @@ export class ClarificationRuns {
     const clarifyId = randomUUID()
     return new Promise((resolve, reject) => {
       const finish = (reason: Reason, response = '') => {
-        if (!this.pending.delete(clarifyId)) return
+        if (!this.pending.delete(clarifyId)) return false
         clearTimeout(timer)
         signal?.removeEventListener('abort', onAbort)
         try {
           this.publish(binding.sessionId, 'clarify.resolved', {
             event: 'clarify.resolved', run_id: runId, clarify_id: clarifyId, resolved: true, reason,
           })
-        } catch (error) { reject(error); return }
+        } catch (error) { reject(error); return false }
         resolve({ clarify_id: clarifyId, response, reason })
+        return true
       }
       const onAbort = () => finish('cancelled')
       const timer = setTimeout(() => finish('timeout'), CLARIFICATION_TIMEOUT_MS)
@@ -96,8 +97,7 @@ export class ClarificationRuns {
       pending.finish('cancelled')
       return { handled: true, resolved: false }
     }
-    pending.finish(response ? 'response' : 'dismissed', response)
-    return { handled: true, resolved: true }
+    return { handled: true, resolved: pending.finish(response ? 'response' : 'dismissed', response) }
   }
 
   finishSession(sessionId: string, contextId?: string): void {
@@ -111,5 +111,5 @@ export class ClarificationRuns {
 }
 
 export function clarificationTurnInstruction(contextId: string): string {
-  return `<studio_interaction_context>\nWhen a missing user decision materially affects the task, call ekko_studio_clarify from the same ekko-studio-interaction MCP server used for task cards, with a concise question and optional choices. This tool displays the existing Studio question UI and waits for the user's response. Use it instead of terminal input or native interactive tools unavailable in headless mode. If tools are deferred, search for ekko-studio-interaction / clarify and use the discovered tool name. A timeout, dismissal, or cancellation is not user approval. Never use it from delegated subagents or background tasks.\nCurrent turn context_id="${contextId}". Use only this interaction context, never an id from earlier messages.\n</studio_interaction_context>`
+  return `<studio_interaction_context>\nWhen a missing user decision materially affects the task, call agenthub_clarify from the same agenthub-interaction MCP server used for task cards, with a concise question and optional choices. This tool displays the existing Studio question UI and waits for the user's response. Use it instead of terminal input or native interactive tools unavailable in headless mode. If tools are deferred, search for agenthub-interaction / clarify and use the discovered tool name. A timeout, dismissal, or cancellation is not user approval. Never use it from delegated subagents or background tasks.\nCurrent turn context_id="${contextId}". Use only this interaction context, never an id from earlier messages.\n</studio_interaction_context>`
 }

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { ref } from 'vue'
 import { mount } from '@vue/test-utils'
 
 vi.mock('@xterm/xterm', () => ({
@@ -18,6 +19,12 @@ vi.mock('@xterm/xterm/css/xterm.css', () => ({}))
 vi.mock('@/api/client', () => ({
   getApiKey: () => 'token',
   getBaseUrlValue: () => '',
+}))
+vi.mock('@/composables/useTheme', () => ({
+  useTheme: () => ({
+    customization: ref({ fontSize: 14 }),
+    isDark: ref(false),
+  }),
 }))
 vi.mock('vue-i18n', () => ({
   useI18n: () => ({ t: (key: string) => key }),

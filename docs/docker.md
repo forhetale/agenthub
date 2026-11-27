@@ -4,8 +4,7 @@ This repository ships an environment-variable driven Docker Compose setup.
 
 ## Quick Start
 
-Build the image from this repository's source. Pre-built upstream images are the
-upstream product without this fork's changes.
+### Pull or build image
 
 ```bash
 docker compose up -d --build
@@ -14,11 +13,14 @@ docker compose logs -f hermes-webui
 
 Open: `http://localhost:6060`
 
+To connect the AgentHub desktop app to this deployment instead of a
+browser, see [Remote server mode](../packages/desktop/README.md#remote-server-mode).
+
 ## Services
 
 This compose file runs a single service:
 
-- `hermes-webui` — Web UI dashboard with integrated Hermes Agent runtime (built from source)
+- `hermes-webui` — Web UI dashboard with integrated Hermes Agent runtime (built from source or custom `WEBUI_IMAGE`)
 
 The Web UI container is built on the `nousresearch/hermes-agent` base image and uses the Hermes CLI / agent bridge runtime for chat execution. By default it performs startup gateway checks/autostart for profiles, but no Hermes gateway ports are exposed by this compose setup.
 
@@ -33,8 +35,11 @@ All key runtime settings are configured from compose variables.
 | `CORS_ORIGINS` | same host only | Comma- or space-separated cross-origin allowlist for HTTP, Socket.IO, and WebSocket requests. Set `*` only when you intentionally need legacy wildcard CORS. |
 | `HERMES_BIN` | `/opt/hermes/.venv/bin/hermes` | Path to Hermes CLI binary |
 | `HERMES_AGENT_IMAGE` | `nousresearch/hermes-agent:latest` | Hermes Agent base image (used only during build) |
-| `WEBUI_IMAGE` | `hermes-web-ui-local:latest` | Tag for the locally built Web UI image |
+| `WEBUI_IMAGE` | `hermes-web-ui-local:latest` | Web UI image tag for `docker compose` |
 | `HERMES_DATA_DIR` | `./hermes_data` | Hermes runtime data directory |
+| `AGENTHUB_DSH_ACP_TIMEOUT_MS` | `60000` (server) | DSH ACP control-request budget; legacy aliases `EKKO_STUDIO_DSH_ACP_TIMEOUT_MS`, `HERMES_DSH_ACP_TIMEOUT_MS` |
+| `AGENTHUB_ACP_TIMEOUT_MS` | `60000` (server) | Other native ACP control-request budget; legacy aliases `EKKO_STUDIO_ACP_TIMEOUT_MS`, `HERMES_ACP_TIMEOUT_MS` |
+| `AGENTHUB_AGENT_MODEL_DISCOVERY_TIMEOUT_MS` | `20000` (server) | Total budget per native model-discovery subprocess; legacy aliases `EKKO_STUDIO_AGENT_MODEL_DISCOVERY_TIMEOUT_MS`, `HERMES_AGENT_MODEL_DISCOVERY_TIMEOUT_MS` |
 
 Override variables directly from shell:
 
@@ -45,8 +50,25 @@ PORT=16060 docker compose up -d
 Or create a `.env` file in the project root:
 
 ```
+WEBUI_IMAGE=hermes-web-ui-local:latest
 PORT=6060
 ```
+
+The supplied Compose file explicitly forwards the timeout names from the
+shell or the project-root Compose `.env`. Studio selects the first valid positive
+integer in `1..2147483647`: the `AGENTHUB_*` name, then legacy `EKKO_STUDIO_*` / `HERMES_*` aliases,
+then the server default. Compose leaves unset values empty so a legacy override
+still works. Recreate the container after changing values:
+
+```bash
+AGENTHUB_DSH_ACP_TIMEOUT_MS=240000 AGENTHUB_AGENT_MODEL_DISCOVERY_TIMEOUT_MS=240000 docker compose up -d --force-recreate
+```
+
+For a local source build, include `--build`. With `docker run`, pass the variables
+using `-e`; setting them only on the host or in a Hermes profile's `.env` is not
+enough. These are Studio server timers. Prompt generation remains unbounded and
+DSH session close keeps its 10-second budget; the existing
+`HERMES_DSH_READY_TIMEOUT_MS` setting is unchanged.
 
 ## Data Persistence
 

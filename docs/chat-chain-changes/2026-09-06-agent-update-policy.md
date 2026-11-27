@@ -8,7 +8,7 @@ impact: Admin-only shared settings control checks-only by default and opt-in idl
 Current implementation initializes after the first admin policy request, checks
 at six-hour intervals and waits conservatively for all managed sessions of the
 Agent to close. It does not monitor external terminal processes or reconcile
-native self-updaters, and does not independently update Hermes Runtime/Ekko.
+native self-updaters, and does not independently update Hermes Runtime / Hub Agent.
 Keep this PR draft until those boundaries and initial lifecycle are completed.
 
 2026-09-06 revision: retained inactive conversations no longer block update.

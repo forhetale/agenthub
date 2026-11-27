@@ -13,8 +13,8 @@ import {
   type VersionDownloadSource,
 } from '../services/runtime/version-manager'
 import { configurePreferredHermesRuntime } from '../services/runtime/selection'
-import { scheduleWebUiRestart } from '../../studio/public/web-ui-restart'
 import { rejectOnCustomBuild } from '../../studio/public/custom-build'
+import { scheduleWebUiRestart } from '../../studio/public/web-ui-restart'
 
 function parseDownloadSource(value: unknown): VersionDownloadSource {
   return value === 'github' ? 'github' : 'cf'
@@ -78,7 +78,9 @@ export function restartWebUi(ctx: Context) {
 }
 
 export async function activateWebUi(ctx: Context) {
-  if (rejectOnCustomBuild(ctx, 'AgentHub: switching to a downloaded upstream Web UI would replace this custom build. Rebuild from the maintained custom source instead.')) return
+  if (rejectOnCustomBuild(ctx, 'Custom AgentHub build protects the active Web UI; update from your custom build source instead.')) {
+    return
+  }
   const body = ctx.request.body as { version?: unknown }
   const version = typeof body?.version === 'string' ? body.version : ''
   try {
@@ -116,7 +118,9 @@ export async function downloadRuntime(ctx: Context) {
 }
 
 export async function downloadWebUi(ctx: Context) {
-  if (rejectOnCustomBuild(ctx, 'AgentHub: downloading upstream Web UI packages is disabled for this custom build. Rebuild from the maintained custom source instead.')) return
+  if (rejectOnCustomBuild(ctx, 'Custom AgentHub build blocks Web UI archive downloads; update from your custom build source instead.')) {
+    return
+  }
   const body = ctx.request.body as { version?: unknown; source?: unknown }
   const version = typeof body?.version === 'string' ? body.version : ''
   const source = parseDownloadSource(body?.source)

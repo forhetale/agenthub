@@ -102,14 +102,15 @@ class TestAgentHubUpstream(unittest.TestCase):
                     "hermes-web-ui": "./bin/hermes-web-ui.mjs",
                     "hermes-web-ui-mcp": "./bin/hermes-web-ui-mcp.mjs",
                     "hermes-studio-mcp": "./bin/hermes-studio-mcp.mjs",
-                    "ekko-studio-mcp": "./bin/ekko-studio-mcp.mjs",
+                    "agenthub": "./bin/hermes-web-ui.mjs",
+                    "agenthub-mcp": "./bin/agenthub-mcp.mjs",
                 },
             }, f, indent=2)
 
         # Bin files
         bin_dir = wt / "bin"
         bin_dir.mkdir(parents=True, exist_ok=True)
-        for b in ("hermes-web-ui.mjs", "hermes-web-ui-mcp.mjs", "hermes-studio-mcp.mjs", "ekko-studio-mcp.mjs"):
+        for b in ("hermes-web-ui.mjs", "hermes-web-ui-mcp.mjs", "hermes-studio-mcp.mjs", "agenthub-mcp.mjs"):
             (bin_dir / b).write_text("// bin stub\n", encoding="utf-8")
 
         # Desktop package.json

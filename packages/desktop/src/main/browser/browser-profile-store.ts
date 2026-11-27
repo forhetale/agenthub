@@ -27,7 +27,7 @@ function safeName(input: string): string {
 }
 
 function safeProxyMode(input: unknown): BrowserProxyMode {
-  return input === 'system' || input === 'fixed_servers' ? input : 'direct'
+  return input === 'direct' || input === 'system' || input === 'fixed_servers' ? input : 'system'
 }
 
 function safeProxyRules(input: unknown, mode: BrowserProxyMode): string {
@@ -125,6 +125,15 @@ export class BrowserProfileStore {
     await this.persist()
   }
 
+  async rememberDownloadDirectory(profileId: string, directory: string): Promise<void> {
+    if (!isAbsolute(directory)) return
+    const profile = this.requireProfile(profileId)
+    const normalized = resolve(directory)
+    if (profile.lastDownloadDirectory === normalized) return
+    profile.lastDownloadDirectory = normalized
+    await this.persist()
+  }
+
   async update(profileId: string, input: BrowserProfileUpdateInput): Promise<DesktopBrowserProfile> {
     const profile = this.requireProfile(profileId)
     const proxyMode = input.proxyMode === undefined ? profile.proxyMode : safeProxyMode(input.proxyMode)
@@ -163,28 +172,47 @@ export class BrowserProfileStore {
   }
 
   private async readDocument(): Promise<BrowserProfilesDocument> {
+    let raw: string
     try {
-      const parsed = JSON.parse(await readFile(this.profilesFile, 'utf8')) as BrowserProfilesDocument
-      if (parsed?.schema === 1 && Array.isArray(parsed.profiles) && parsed.profiles.length > 0) {
-        parsed.profiles = parsed.profiles.map((profile) => {
-          const rootPath = resolve(String(profile.rootPath || dirname(profile.sessionPath)))
-          const proxyMode = safeProxyMode(profile.proxyMode)
-          return {
-            ...profile,
-            rootPath,
-            sessionPath: join(rootPath, 'data'),
-            downloadPath: join(rootPath, 'download'),
-            proxyMode,
-            proxyRules: safeProxyRules(profile.proxyRules, proxyMode),
-            tabs: Array.isArray(profile.tabs) ? profile.tabs : ['about:blank'],
-          }
-        })
-        if (!parsed.profiles.some(profile => profile.id === parsed.activeProfileId)) parsed.activeProfileId = parsed.profiles[0].id
-        return parsed
-      }
-    } catch {
-      // Create the first managed profile below.
+      raw = await readFile(this.profilesFile, 'utf8')
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return this.firstDocument()
+      throw error
     }
+    const parsed = JSON.parse(raw) as BrowserProfilesDocument
+    if (parsed?.schema !== 1 || !Array.isArray(parsed.profiles)) {
+      throw new Error('Unsupported browser profile index: ' + this.profilesFile)
+    }
+    const profiles: DesktopBrowserProfile[] = []
+    for (const profile of parsed.profiles) {
+      try {
+        if (!profile?.id || !profile.name) throw new Error('Missing profile identity')
+        const rootPath = resolve(String(profile.rootPath || dirname(profile.sessionPath)))
+        const proxyMode = safeProxyMode(profile.proxyMode)
+        profiles.push({
+          ...profile,
+          rootPath,
+          sessionPath: join(rootPath, 'data'),
+          downloadPath: join(rootPath, 'download'),
+          lastDownloadDirectory: typeof profile.lastDownloadDirectory === 'string' && isAbsolute(profile.lastDownloadDirectory)
+            ? resolve(profile.lastDownloadDirectory) : undefined,
+          proxyMode,
+          proxyRules: safeProxyRules(profile.proxyRules, proxyMode),
+          tabs: Array.isArray(profile.tabs) ? profile.tabs : ['about:blank'],
+        })
+      } catch {
+        // Keep the other profiles accessible. Preserve the original before persisting repairs.
+      }
+    }
+    if (profiles.length === 0) throw new Error('No readable browser profiles in ' + this.profilesFile)
+    if (profiles.length !== parsed.profiles.length) {
+      await writeFile(this.profilesFile + '.' + randomUUID() + '.bak', raw, { flag: 'wx', mode: 0o600 })
+    }
+    const activeProfileId = profiles.some(profile => profile.id === parsed.activeProfileId) ? parsed.activeProfileId : profiles[0].id
+    return { schema: 1, profiles, activeProfileId }
+  }
+
+  private firstDocument(): BrowserProfilesDocument {
     const id = randomUUID()
     const createdAt = now()
     return {
@@ -196,7 +224,7 @@ export class BrowserProfileStore {
         rootPath: join(this.root, 'profiles', id),
         sessionPath: join(this.root, 'profiles', id, 'data'),
         downloadPath: join(this.root, 'profiles', id, 'download'),
-        proxyMode: 'direct',
+        proxyMode: 'system',
         proxyRules: '',
         askBeforeDownload: true,
         downloadConflictPolicy: 'uniquify',
@@ -209,7 +237,7 @@ export class BrowserProfileStore {
 
   private async persist(): Promise<void> {
     const write = this.persistQueue.catch(() => undefined).then(async () => {
-      const tempPath = `${this.profilesFile}.${process.pid}.tmp`
+      const tempPath = `${this.profilesFile}.${process.pid}.${randomUUID()}.tmp`
       await mkdir(this.root, { recursive: true, mode: 0o700 })
       await writeFile(tempPath, `${JSON.stringify(this.requireDocument(), null, 2)}\n`, { mode: 0o600 })
       await rename(tempPath, this.profilesFile)

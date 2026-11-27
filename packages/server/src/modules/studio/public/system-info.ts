@@ -3,9 +3,19 @@ import { createHash, generateKeyPairSync, sign, verify } from 'crypto'
 import { existsSync, readFileSync } from 'fs'
 import { mkdir, readFile, writeFile } from 'fs/promises'
 import { dirname, resolve } from 'path'
-import type { PublicSystemInfo } from '../contracts/devices'
-
-export type { PublicSystemInfo } from '../contracts/devices'
+export interface PublicSystemInfo {
+  device_id: string
+  device_public_key: string
+  computer_name: string
+  os: {
+    type: string
+    platform: string
+    release: string
+    arch: string
+  }
+  hermes_agent_version: string
+  hermes_web_ui_version: string
+}
 
 export interface SystemInfoDependencies {
   getAppHome: () => string

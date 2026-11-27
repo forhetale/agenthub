@@ -38,8 +38,8 @@ export function readPrimaryAgentLogs(
   return configured().readPrimaryAgentLogs(name, lines, level, session, since)
 }
 
-export function getEkkoLogSource(profile: string): StructuredAgentLogSource | null {
-  return configured().getEkkoLogSource(profile)
+export function getHubAgentLogSource(profile: string): StructuredAgentLogSource | null {
+  return configured().getHubAgentLogSource(profile)
 }
 
 export function queryAgentLogs(source: StructuredAgentLogSource, query: AgentLogQuery) {

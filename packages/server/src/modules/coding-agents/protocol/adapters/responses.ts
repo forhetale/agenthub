@@ -1,11 +1,17 @@
+import type { ReasoningCodec } from '../../../studio/public/model-reasoning-codec'
 // Shared Responses payload translation for Coding Agent provider proxies.
+import { createHash } from 'node:crypto'
 import { imageUrlToAnthropicSource, openAiImageUrl } from './multimodal'
 import { shouldPreserveReasoningContent } from './anthropic'
 
 export interface ResponsesAdapterTarget {
+  reasoningCodec?: ReasoningCodec
   model: string
+  mcpToolRoutes?: McpToolRoutes
   provider?: string
   baseUrl?: string
+  /** Default for providers such as Anthropic Messages that require max_tokens. */
+  outputLimit?: number
 }
 
 const TOOL_SEARCH_NAME = 'tool_search'
@@ -18,10 +24,10 @@ const HERMES_STUDIO_SPLIT_MCP_TOOLS = new Map<string, Array<{
   description: string
   inputSchema: Record<string, unknown>
 }>>([
-  ['mcp__ekko_studio_api', [
+  ['mcp__agenthub_api', [
     {
-      name: 'ekko_studio_api_openapi_get',
-      description: 'Return the compact Ekko Studio API module index or filtered endpoint documentation. Call without filters first, then filter by tag, path, or method.',
+      name: 'agenthub_api_openapi_get',
+      description: 'Return the compact AgentHub API module index or filtered endpoint documentation. Call without filters first, then filter by tag, path, or method.',
       inputSchema: inputSchema({
         path: { type: 'string', description: 'Optional exact endpoint path filter.' },
         method: { type: 'string', enum: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD'] },
@@ -30,8 +36,8 @@ const HERMES_STUDIO_SPLIT_MCP_TOOLS = new Map<string, Array<{
       }),
     },
     {
-      name: 'ekko_studio_api_request',
-      description: 'Call a documented Ekko Studio API endpoint using its relative path and structured JSON fields.',
+      name: 'agenthub_api_request',
+      description: 'Call a documented AgentHub API endpoint using its relative path and structured JSON fields.',
       inputSchema: inputSchema({
         method: { type: 'string', enum: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD'] },
         path: { type: 'string', description: 'Relative /api/... or /health path. Full URLs are rejected.' },
@@ -44,22 +50,24 @@ const HERMES_STUDIO_SPLIT_MCP_TOOLS = new Map<string, Array<{
       }, ['path']),
     },
   ]],
-  ['mcp__ekko_studio_browser', [categoryToolset(
-    'ekko_studio_browser_toolset',
-    'Discover and invoke Ekko Studio Desktop browser operations. Covers tabs and leases, navigation, accessibility snapshots, interaction, screenshots, and console logs.',
+  ['mcp__agenthub_browser', [categoryToolset(
+    'agenthub_browser_toolset',
+    'Discover and invoke AgentHub Desktop browser operations. Covers tabs and leases, navigation, accessibility snapshots, interaction, screenshots, and console logs.',
   )]],
-  ['mcp__ekko_studio_use', [categoryToolset(
-    'ekko_studio_use_toolset',
-    'Discover and invoke high-level Ekko Studio operations for explicit user-requested runs, sessions, usage, profiles, models, providers, workers, and workflows.',
+  ['mcp__agenthub_use', [categoryToolset(
+    'agenthub_use_toolset',
+    'Discover and invoke high-level AgentHub operations for explicit user-requested runs, sessions, usage, profiles, models, providers, workers, and workflows.',
   )]],
 ])
 
 // Historical conversations may still refer to the previous MCP namespaces.
 for (const [namespace, tools] of [...HERMES_STUDIO_SPLIT_MCP_TOOLS]) {
-  if (!namespace.startsWith('mcp__ekko_studio_')) continue
-  HERMES_STUDIO_SPLIT_MCP_TOOLS.set(namespace.replace('mcp__ekko_', 'mcp__hermes_'), tools.map(tool => ({
-    ...tool, name: tool.name.replace(/^ekko_studio_/, 'hermes_studio_'),
-  })))
+  if (!namespace.startsWith('mcp__agenthub_')) continue
+  for (const legacyPrefix of ['ekko_studio', 'hermes_studio']) {
+    HERMES_STUDIO_SPLIT_MCP_TOOLS.set(namespace.replace('mcp__agenthub_', `mcp__${legacyPrefix}_`), tools.map(tool => ({
+      ...tool, name: tool.name.replace(/^agenthub_/, `${legacyPrefix}_`),
+    })))
+  }
 }
 
 const HERMES_STUDIO_MCP_TOOL_NAMESPACES = new Map<string, string>()
@@ -70,8 +78,9 @@ for (const [namespace, tools] of HERMES_STUDIO_SPLIT_MCP_TOOLS) {
 // These tools are exposed by the dedicated, context-scoped interaction server.
 // Restore only the return-call namespace; do not synthesize tools or expand
 // permissions when the MCP server has intentionally omitted them.
-for (const prefix of ['ekko', 'hermes']) {
-  for (const suffix of ['update_plan', 'clarify']) {
+for (const suffix of ['update_plan', 'clarify']) {
+  HERMES_STUDIO_MCP_TOOL_NAMESPACES.set(`agenthub_${suffix}`, 'mcp__agenthub_interaction')
+  for (const prefix of ['ekko', 'hermes']) {
     HERMES_STUDIO_MCP_TOOL_NAMESPACES.set(`${prefix}_studio_${suffix}`, `mcp__${prefix}_studio_interaction`)
   }
 }
@@ -125,14 +134,38 @@ function normalizedNamespaceName(value: unknown): string {
   return String(value || '').trim().replace(/-/g, '_')
 }
 
+export type McpToolRoutes = Record<string, { name: string; namespace: string }>
+
+// Stable provider-safe aliases retain namespace identity without a global registry.
+// The original name remains in the description for model-side tool selection.
+function mcpToolAlias(namespace: string, name: string): string {
+  return `mcp_${createHash('sha256').update(JSON.stringify([namespace, name])).digest('hex').slice(0, 40)}`
+}
+
+export function responseMcpToolRoutes(body: any): McpToolRoutes {
+  const routes: McpToolRoutes = Object.create(null)
+  for (const tool of expandedResponseTools(responsesAvailableTools(body))) {
+    if (tool.namespace?.startsWith('mcp__')) {
+      routes[mcpToolAlias(tool.namespace, tool.name)] = { name: tool.name, namespace: tool.namespace }
+    }
+  }
+  return routes
+}
+
+function providerToolName(tool: any): string {
+  return tool.namespace?.startsWith('mcp__') && tool.name !== tool.namespace
+    ? mcpToolAlias(tool.namespace, tool.name) : String(tool.name || 'tool')
+}
+
 function expandedResponseTools(tools: unknown): any[] {
   if (!Array.isArray(tools)) return []
   const mapped: any[] = []
   const seen = new Set<string>()
   const addFunctionTool = (tool: any) => {
     const name = String(tool?.name || '').trim()
-    if (!name || seen.has(name)) return
-    seen.add(name)
+    const key = JSON.stringify([tool?.namespace || '', name])
+    if (!name || seen.has(key)) return
+    seen.add(key)
     mapped.push({
       type: 'function',
       name,
@@ -336,7 +369,9 @@ export function truncateResponsesToolOutputs(body: any): any {
 
   let changed = false
   const nextInput = input.map((item: any) => {
-    if (!item || typeof item !== 'object' || item.type !== 'function_call_output' || typeof item.output !== 'string') {
+    if (!item || typeof item !== 'object'
+      || (item.type !== 'function_call_output' && item.type !== 'custom_tool_call_output')
+      || typeof item.output !== 'string') {
       return item
     }
     const nextOutput = truncateResponsesToolOutputText(item.output)
@@ -384,7 +419,7 @@ function toolSearchArguments(value: unknown): Record<string, unknown> {
   return safeJsonParse(String(value || '{}'))
 }
 
-function responseToolCall(name: unknown, argumentsValue: unknown, id: unknown, index: number): any {
+function responseToolCall(name: unknown, argumentsValue: unknown, id: unknown, index: number, routes?: McpToolRoutes): any {
   const rawName = String(name || 'tool')
   const callId = String(id || `call_${index}`)
   if (rawName === TOOL_SEARCH_NAME) {
@@ -403,7 +438,7 @@ function responseToolCall(name: unknown, argumentsValue: unknown, id: unknown, i
     type: 'function_call',
     id: String(id || `fc_${index}`),
     call_id: callId,
-    ...normalizeResponseFunctionCall(rawName, rawArguments),
+    ...normalizeResponseFunctionCall(rawName, rawArguments, routes),
   }
 }
 
@@ -411,11 +446,13 @@ export function responseToolNamespaceForName(name: unknown): string | undefined 
   return HERMES_STUDIO_MCP_TOOL_NAMESPACES.get(String(name || ''))
 }
 
-export function normalizeResponseFunctionCall(name: unknown, argumentsValue: unknown): { name: string; arguments: string; namespace?: string } {
+export function normalizeResponseFunctionCall(name: unknown, argumentsValue: unknown, routes?: McpToolRoutes): { name: string; arguments: string; namespace?: string } {
   const rawName = String(name || 'tool')
   // An empty string starts streamed arguments; adding {} would corrupt the
   // JSON when the client appends subsequent argument deltas.
   const rawArguments = String(argumentsValue ?? '{}')
+  const route = routes?.[rawName]
+  if (route && route.name !== route.namespace) return { ...route, arguments: rawArguments }
   const namespace = normalizedNamespaceName(rawName)
   if (namespace.startsWith('mcp__')) {
     const parsed = safeJsonParse(rawArguments)
@@ -475,7 +512,7 @@ function responseContentToOpenAiChat(content: unknown): string | any[] {
   if (typeof content === 'string') return content
   if (!Array.isArray(content)) return stringifyContent(content)
   const parts: any[] = []
-  let hasImage = false
+  let hasMedia = false
   for (const part of content) {
     if (typeof part === 'string') {
       parts.push({ type: 'text', text: part })
@@ -488,7 +525,7 @@ function responseContentToOpenAiChat(content: unknown): string | any[] {
     if (part?.type === 'input_image') {
       const url = openAiImageUrl(part)
       if (url) {
-        hasImage = true
+        hasMedia = true
         const detail = typeof part.detail === 'string' ? part.detail : ''
         parts.push({
           type: 'image_url',
@@ -500,10 +537,16 @@ function responseContentToOpenAiChat(content: unknown): string | any[] {
       }
       continue
     }
+    if (part?.type === 'input_file') {
+      hasMedia = true
+      parts.push({ type: 'file', file: { ...(part.filename ? { filename: part.filename } : {}),
+        ...(part.file_data ? { file_data: part.file_data } : {}), ...(part.file_id ? { file_id: part.file_id } : {}) } })
+      continue
+    }
     const text = stringifyContent(part)
     if (text) parts.push({ type: 'text', text })
   }
-  if (hasImage) return parts
+  if (hasMedia) return parts
   return parts.map(part => String(part.text || '')).filter(Boolean).join('\n')
 }
 
@@ -547,7 +590,12 @@ function inlineReasoningText(item: any): string {
   return ''
 }
 
-function responsesReasoningText(item: any): string {
+function responsesReasoningText(item: any, target: ResponsesAdapterTarget): string {
+  if (item?.encrypted_content && target.reasoningCodec) {
+    // Responses clients retain opaque reasoning for replay; summaries may be
+    // omitted or shortened. A foreign target's envelope must not be replayed.
+    return target.reasoningCodec.decode(item.encrypted_content)?.text || ''
+  }
   const inline = inlineReasoningText(item)
   if (inline) return inline
 
@@ -592,10 +640,10 @@ function responsesInputToChatMessages(body: any, target: ResponsesAdapterTarget)
       messages.push({
         role: 'assistant',
         content: null,
-        // Synthetic/replayed tool calls may have no reasoning item. Keep the
-        // required field present, matching Ekko's Chat Completions adapter.
+        // Older/replayed tool calls may have no reasoning item. DeepSeek
+        // rejects an empty string, so retain its non-empty history fallback.
         ...(preserveReasoningContent
-          ? { reasoning_content: pendingReasoning }
+          ? { reasoning_content: pendingReasoning || ' ' }
           : {}),
         tool_calls: pendingToolCalls,
       })
@@ -629,7 +677,7 @@ function responsesInputToChatMessages(body: any, target: ResponsesAdapterTarget)
     if (!item || typeof item !== 'object') continue
     if (item.type === 'reasoning') {
       flushCompletedToolCalls()
-      const reasoning = responsesReasoningText(item)
+      const reasoning = responsesReasoningText(item, target)
       if (reasoning.startsWith(pendingReasoning)) pendingReasoning = reasoning
       else if (reasoning && !pendingReasoning.endsWith(reasoning)) pendingReasoning += reasoning
       continue
@@ -640,7 +688,7 @@ function responsesInputToChatMessages(body: any, target: ResponsesAdapterTarget)
         id: callId,
         type: 'function',
         function: {
-          name: item.type === 'tool_search_call' ? TOOL_SEARCH_NAME : String(item.name || 'tool'),
+          name: item.type === 'tool_search_call' ? TOOL_SEARCH_NAME : providerToolName(item),
           arguments: item.type === 'tool_search_call'
             ? JSON.stringify(toolSearchArguments(item.arguments))
             : String(item.arguments || '{}'),
@@ -667,10 +715,13 @@ function responsesInputToChatMessages(body: any, target: ResponsesAdapterTarget)
         role,
         content: responseContentToOpenAiChat(item.content),
         ...(role === 'assistant' && preserveReasoningContent
-          ? { reasoning_content: inlineReasoningText(item) || pendingReasoning }
+          ? { reasoning_content: inlineReasoningText(item) || pendingReasoning || ' ' }
           : {}),
       })
-      pendingReasoning = ''
+      // Hermes may put an empty assistant message between the reasoning item
+      // and its function calls. Keep the same turn's reasoning until the tool
+      // group or a non-assistant message closes it.
+      pendingReasoning = role === 'assistant' ? inlineReasoningText(item) || pendingReasoning : ''
     }
   }
   flushCompletedToolCalls()
@@ -715,8 +766,10 @@ function responsesToolsToChatTools(tools: unknown): any[] | undefined {
     return {
       type: 'function',
       function: {
-        name: String(tool.name || ''),
-        description: String(tool.description || ''),
+        name: providerToolName(tool),
+        description: tool.namespace?.startsWith('mcp__')
+          ? `${String(tool.description || '')} MCP tool: ${tool.namespace}.${tool.name}.`
+          : String(tool.description || ''),
         parameters: tool.parameters || { type: 'object', properties: {} },
       },
     }
@@ -724,17 +777,30 @@ function responsesToolsToChatTools(tools: unknown): any[] | undefined {
   return mapped.length ? mapped : undefined
 }
 
+/** Function-only Responses Providers use the same namespace mapping as Chat. */
+export function responseFunctionTools(body: any): any[] {
+  return (responsesToolsToChatTools(responsesAvailableTools(body)) || []).map(tool => ({ type: 'function', ...tool.function }))
+}
+
 export function responsesToOpenAiChat(body: any, target: ResponsesAdapterTarget, stream = false): any {
   const tools = responsesToolsToChatTools(responsesAvailableTools(body))
   const reasoningEffort = targetReasoningEffort(target)
+    || targetReasoningEffort({ reasoningEffort: body?.reasoning?.effort })
   return {
     model: target.model,
     messages: responsesInputToChatMessages(body, target),
+    ...(typeof body?.prompt_cache_key === 'string' ? { prompt_cache_key: body.prompt_cache_key } : {}),
+    ...(typeof body?.prompt_cache_retention === 'string' ? { prompt_cache_retention: body.prompt_cache_retention } : {}),
     ...(typeof body?.max_output_tokens === 'number' ? { max_tokens: body.max_output_tokens } : {}),
     ...(typeof body?.temperature === 'number' ? { temperature: body.temperature } : {}),
     ...(typeof body?.top_p === 'number' ? { top_p: body.top_p } : {}),
     ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
     ...(tools?.length ? { tools } : {}),
+    // OpenAI-compatible streaming providers (notably vLLM) omit token usage
+    // from the final SSE chunk unless the client explicitly requests it.
+    // Without this the Responses→Chat Completions conversion never receives a
+    // usage frame, so the turn lands with zero/missing token accounting.
+    ...(stream ? { stream_options: { include_usage: true } } : {}),
     stream,
   }
 }
@@ -755,6 +821,13 @@ function responsesContentToAnthropicContent(content: unknown, role: 'user' | 'as
       const source = url ? imageUrlToAnthropicSource(url) : null
       return source ? { type: 'image', source } : null
     }
+    if (part?.type === 'input_file') {
+      const match = typeof part.file_data === 'string' && part.file_data.match(/^data:([^;,]+);base64,([\s\S]+)$/)
+      if (!match || !['application/pdf', 'text/plain'].includes(match[1])) throw Object.assign(new Error('Anthropic file input requires an inline PDF or text file'), { status: 400 })
+      return { type: 'document', ...(part.filename ? { title: part.filename } : {}), source: match[1] === 'text/plain'
+        ? { type: 'text', media_type: 'text/plain', data: Buffer.from(match[2], 'base64').toString('utf8') }
+        : { type: 'base64', media_type: match[1], data: match[2] } }
+    }
     return null
   }).filter(Boolean)
   return mapped.length ? mapped : [{ type: 'text', text: '' }]
@@ -763,24 +836,29 @@ function responsesContentToAnthropicContent(content: unknown, role: 'user' | 'as
 function responsesToolOutputToAnthropicContent(output: unknown): string | any[] {
   if (typeof output === 'string') return output
   const parts = responsesContentToAnthropicContent(output, 'user')
-  if (parts.some(part => part?.type === 'image')) return parts
+  if (parts.some(part => part?.type === 'image' || part?.type === 'document')) return parts
   return parts.map(part => String(part.text || '')).filter(Boolean).join('\n')
 }
 
-function responsesInputToAnthropicMessages(body: any): any[] {
+function responsesInputToAnthropicMessages(body: any, target: ResponsesAdapterTarget): any[] {
   const messages: any[] = []
   const input = body?.input
   if (typeof input === 'string') return [{ role: 'user', content: [{ type: 'text', text: input }] }]
 
   for (const item of Array.isArray(input) ? input : []) {
     if (!item || typeof item !== 'object') continue
+    if (item.type === 'reasoning' && item.encrypted_content) {
+      const reasoning = target.reasoningCodec?.decode(item.encrypted_content)
+      if (reasoning?.native?.format === 'anthropic-thinking-blocks' && Array.isArray(reasoning.native.data)) messages.push({ role: 'assistant', content: reasoning.native.data })
+      continue
+    }
     if (item.type === 'function_call' || item.type === 'tool_search_call') {
       messages.push({
         role: 'assistant',
         content: [{
           type: 'tool_use',
           id: String(item.call_id || item.id || `toolu_${messages.length}`),
-          name: item.type === 'tool_search_call' ? TOOL_SEARCH_NAME : String(item.name || 'tool'),
+          name: item.type === 'tool_search_call' ? TOOL_SEARCH_NAME : providerToolName(item),
           input: item.type === 'tool_search_call'
             ? toolSearchArguments(item.arguments)
             : safeJsonParse(String(item.arguments || '{}')),
@@ -810,15 +888,23 @@ function responsesInputToAnthropicMessages(body: any): any[] {
     }
   }
 
-  return messages.length ? messages : [{ role: 'user', content: [{ type: 'text', text: '' }] }]
+  if (!messages.length) return [{ role: 'user', content: [{ type: 'text', text: '' }] }]
+  return messages.reduce((merged: any[], message) => {
+    const previous = merged.at(-1)
+    if (previous?.role === message.role) previous.content.push(...message.content)
+    else merged.push({ ...message, content: [...message.content] })
+    return merged
+  }, [])
 }
 
 function responsesToolsToAnthropicTools(tools: unknown): any[] | undefined {
   const mapped = expandedResponseTools(tools).map((tool: any) => {
     if (tool?.type !== 'function') return null
     return {
-      name: String(tool.name || ''),
-      description: String(tool.description || ''),
+      name: providerToolName(tool),
+      description: tool.namespace?.startsWith('mcp__')
+          ? `${String(tool.description || '')} MCP tool: ${tool.namespace}.${tool.name}.`
+          : String(tool.description || ''),
       input_schema: tool.parameters || { type: 'object', properties: {} },
     }
   }).filter((tool: any) => tool?.name)
@@ -828,15 +914,23 @@ function responsesToolsToAnthropicTools(tools: unknown): any[] | undefined {
 export function responsesToAnthropicMessages(body: any, target: ResponsesAdapterTarget, stream = false): any {
   const tools = responsesToolsToAnthropicTools(responsesAvailableTools(body))
   const reasoningEffort = targetReasoningEffort(target)
+  const system = [body?.instructions, ...(Array.isArray(body?.input) ? body.input.filter((item: any) => ['system', 'developer'].includes(item?.role)).map((item: any) => stringifyContent(item.content)) : [])].filter(Boolean).join('\n\n')
+  const input = Array.isArray(body?.input) ? body.input.filter((item: any) => !['system', 'developer'].includes(item?.role)) : body?.input
+  const choice = body?.tool_choice
+  const toolChoice = typeof choice === 'string' ? { type: ({ auto: 'auto', none: 'none', required: 'any' } as Record<string, string>)[choice] || 'auto' }
+    : choice?.name ? { type: 'tool', name: choice.name } : { type: 'auto' }
   return {
     model: target.model,
-    messages: responsesInputToAnthropicMessages(body),
-    ...(body?.instructions ? { system: stringifyContent(body.instructions) } : {}),
-    ...(typeof body?.max_output_tokens === 'number' ? { max_tokens: body.max_output_tokens } : { max_tokens: 4096 }),
+    messages: responsesInputToAnthropicMessages({ ...body, input }, target),
+    ...(body?.cache_control !== undefined ? { cache_control: body.cache_control } : {}),
+    ...(system ? { system } : {}),
+    max_tokens: typeof body?.max_output_tokens === 'number'
+      ? body.max_output_tokens
+      : target.outputLimit && target.outputLimit > 0 ? Math.floor(target.outputLimit) : 4096,
     ...(typeof body?.temperature === 'number' ? { temperature: body.temperature } : {}),
     ...(typeof body?.top_p === 'number' ? { top_p: body.top_p } : {}),
     ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
-    ...(tools?.length ? { tools } : {}),
+    ...(tools?.length ? { tools, tool_choice: { ...toolChoice, ...(body?.parallel_tool_calls === false ? { disable_parallel_tool_use: true } : {}) } } : {}),
     stream,
   }
 }
@@ -890,6 +984,7 @@ export function openAiChatToResponses(data: any, target: ResponsesAdapterTarget)
       type: 'reasoning',
       id: `rs_${responseId(data)}`,
       summary: [{ type: 'summary_text', text: reasoningText }],
+      ...(target.reasoningCodec ? { encrypted_content: target.reasoningCodec.encode({ text: reasoningText }) } : {}),
     })
   }
 
@@ -909,6 +1004,7 @@ export function openAiChatToResponses(data: any, target: ResponsesAdapterTarget)
       call.function?.arguments || '{}',
       call.id,
       output.length,
+      target.mcpToolRoutes,
     ))
   }
 
@@ -927,6 +1023,7 @@ export function anthropicMessageToResponses(data: any, target: ResponsesAdapterT
   const output: any[] = []
   const textParts: string[] = []
   const reasoningParts: string[] = []
+  const nativeReasoning = (data?.content || []).filter((block: any) => block?.type === 'thinking' || block?.type === 'redacted_thinking')
   for (const block of Array.isArray(data?.content) ? data.content : []) {
     if (block?.type === 'text' && block.text) textParts.push(String(block.text))
     if (block?.type === 'thinking' && block.thinking) reasoningParts.push(String(block.thinking))
@@ -937,6 +1034,7 @@ export function anthropicMessageToResponses(data: any, target: ResponsesAdapterT
         block.input || {},
         block.id,
         output.length,
+        target.mcpToolRoutes,
       ))
     }
   }
@@ -954,6 +1052,7 @@ export function anthropicMessageToResponses(data: any, target: ResponsesAdapterT
       type: 'reasoning',
       id: `rs_${responseId(data)}`,
       summary: [{ type: 'summary_text', text: reasoningParts.join('\n') }],
+      ...(target.reasoningCodec ? { encrypted_content: target.reasoningCodec.encode({ text: reasoningParts.join('\n'), native: { format: 'anthropic-thinking-blocks', data: nativeReasoning } }) } : {}),
     })
   }
 

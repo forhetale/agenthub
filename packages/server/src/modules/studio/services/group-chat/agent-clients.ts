@@ -1,3 +1,5 @@
+import { isPluginAgentId, pluginAgentIsGlobalOnly } from '../agents/registry'
+import { isNativeCodingAgent, isGlobalOnlyCodingAgent } from '../../contracts/agents/native-coding-agents'
 import { hermesStudioMcpCapabilities } from '../chat-run/studio-mcp'
 import { studioMcpUsageGuidelines } from '../../public/runs/prompt'
 import { withTaskPlanTurnContext } from '../task-plan-runs'
@@ -7,14 +9,16 @@ import { groupRunUsageMessage } from './run-usage'
 import { completeRunUsage } from '../../repositories/run-usage-store'
 import { recordBridgeModelUsage } from '../usage/bridge-model-usage'
 import { groupRunUser } from './run-user'
+import { runMcpCredentials } from '../auth/run-mcp-credentials'
 import type { AuthenticatedUser } from '../../public/auth'
+import { withProviderAccount, withoutProviderAccount } from '../../public/provider-account'
 import { io, Socket } from 'socket.io-client'
 import { createHash, randomBytes, randomUUID } from 'crypto'
 import { getToken } from '../../public/auth'
 import { logger } from '../../public/logging'
 import { countTokens } from '../context-compressor'
 import {
-    cancelGroupEkkoClarification,
+    cancelGroupHubAgentClarification,
     createGroupPrimaryAgentBridge,
     type GroupPrimaryAgentBridge,
     type GroupPrimaryAgentBridgeContextEstimate,
@@ -45,7 +49,7 @@ export const GROUP_CHAT_AGENT_SOCKET_SECRET = randomBytes(32).toString('hex')
 
 export interface AgentConfig {
     agentId?: string
-    agent?: 'hermes' | 'ekko' | 'codex' | 'claude' | 'pi' | 'grok' | 'opencode' | 'dsh' | 'cursor' | 'antigravity'
+    agent?: `plugin:${string}/${string}` | 'hermes' | 'hub' | 'codex' | 'claude' | 'pi' | 'grok' | 'opencode' | 'dsh' | 'cursor' | 'antigravity' | 'qwen' | 'kimi' | 'codebuddy' | 'qoder' | 'copilot' | 'zcode'
     agentMode?: 'scoped' | 'global'
     profile: string
     provider?: string
@@ -113,7 +117,7 @@ export function mentionMessageToStoredContextMessage(roomId: string, msg: Mentio
 type GroupEstimateMessage = { role: 'user' | 'assistant'; content: string }
 export type GroupModelContext = { model: string; provider: string }
 export type GroupAgentSessionConfig = {
-    agent?: 'hermes' | 'ekko' | 'codex' | 'claude' | 'pi' | 'grok' | 'opencode' | 'dsh' | 'cursor' | 'antigravity'
+    agent?: `plugin:${string}/${string}` | 'hermes' | 'hub' | 'codex' | 'claude' | 'pi' | 'grok' | 'opencode' | 'dsh' | 'cursor' | 'antigravity' | 'qwen' | 'kimi' | 'codebuddy' | 'qoder' | 'copilot' | 'zcode'
     agentMode?: 'scoped' | 'global'
     provider?: string
     model?: string
@@ -242,7 +246,7 @@ export interface GroupAgentEventSink {
 
 export interface GroupAgentExecutor {
     readonly agentId: string
-    readonly agent: 'hermes' | 'ekko' | 'codex' | 'claude' | 'pi' | 'grok' | 'opencode' | 'dsh' | 'cursor' | 'antigravity'
+    readonly agent: `plugin:${string}/${string}` | 'hermes' | 'hub' | 'codex' | 'claude' | 'pi' | 'grok' | 'opencode' | 'dsh' | 'cursor' | 'antigravity' | 'qwen' | 'kimi' | 'codebuddy' | 'qoder' | 'copilot' | 'zcode'
     readonly agentMode: 'scoped' | 'global'
     readonly profile: string
     readonly provider: string
@@ -349,7 +353,7 @@ export interface GroupChatRunService {
 
 export class AgentClient implements GroupAgentExecutor {
     readonly agentId: string
-    readonly agent: 'hermes' | 'ekko' | 'codex' | 'claude' | 'pi' | 'grok' | 'opencode' | 'dsh' | 'cursor' | 'antigravity'
+    readonly agent: `plugin:${string}/${string}` | 'hermes' | 'hub' | 'codex' | 'claude' | 'pi' | 'grok' | 'opencode' | 'dsh' | 'cursor' | 'antigravity' | 'qwen' | 'kimi' | 'codebuddy' | 'qoder' | 'copilot' | 'zcode'
     readonly agentMode: 'scoped' | 'global'
     readonly profile: string
     readonly provider: string
@@ -385,9 +389,9 @@ export class AgentClient implements GroupAgentExecutor {
     constructor(config: AgentConfig, handlers: AgentEventHandler = {}, eventSink: GroupAgentEventSink | null = null) {
         this.agentId = config.agentId || Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
         this.agent = config.agent || 'hermes'
-        this.agentMode = this.agent === 'cursor'
+        this.agentMode = isGlobalOnlyCodingAgent(this.agent) || pluginAgentIsGlobalOnly(this.agent)
             ? 'global'
-            : config.agentMode === 'global' && (this.agent === 'claude' || this.agent === 'codex' || this.agent === 'pi' || this.agent === 'grok' || this.agent === 'antigravity' || (this.agent === 'opencode' || this.agent === 'dsh'))
+            : config.agentMode === 'global' && (isPluginAgentId(this.agent) || this.agent === 'claude' || this.agent === 'codex' || this.agent === 'pi' || this.agent === 'grok' || (this.agent === 'antigravity' || isNativeCodingAgent(this.agent)) || (this.agent === 'opencode' || this.agent === 'dsh'))
             ? 'global'
             : 'scoped'
         this.profile = config.profile
@@ -521,8 +525,8 @@ export class AgentClient implements GroupAgentExecutor {
     }
 
     async cancelClarify(clarifyId: string, sessionId: string, runId: string): Promise<boolean> {
-        if (this.agent !== 'ekko') return false
-        return cancelGroupEkkoClarification(sessionId, clarifyId, runId).resolved
+        if (this.agent !== 'hub' && (this.agent as string) !== 'ekko') return false
+        return cancelGroupHubAgentClarification(sessionId, clarifyId, runId).resolved
     }
 
     async joinRoom(roomId: string): Promise<JoinResult> {
@@ -1156,6 +1160,7 @@ export class AgentClient implements GroupAgentExecutor {
         roomId: string,
         msg: MentionMessage,
         runtimeContext: GroupRuntimeContext,
+        executionUser: AuthenticatedUser | undefined,
         onStatus?: (status: 'compressing' | 'replying' | 'ready', extra?: Record<string, unknown>) => void,
     ): Promise<void> {
         if (!this.chatRunService) throw new Error('Chat run service is not ready')
@@ -1202,29 +1207,26 @@ export class AgentClient implements GroupAgentExecutor {
                     workspace,
                 })
             }
-            const codingAgentId = this.agent === 'ekko'
-                ? 'ekko-agent'
+            const codingAgentId = isPluginAgentId(this.agent) ? this.agent : (this.agent === 'hub' || (this.agent as string) === 'ekko')
+                ? 'hub-agent'
                 : this.agent === 'claude'
                     ? 'claude-code'
                     : this.agent === 'pi'
                         ? 'pi'
                         : this.agent === 'grok'
                             ? 'grok'
-                            : (this.agent === 'cursor' || this.agent === 'antigravity')
+                            : (this.agent === 'cursor' || this.agent === 'antigravity' || isNativeCodingAgent(this.agent))
                                 ? this.agent
                             : this.agent === 'dsh' ? 'dsh' : this.agent === 'opencode'
                                 ? 'opencode'
                                 : 'codex'
-            const usesGlobalCodingAgent = this.agentMode === 'global' && codingAgentId !== 'ekko-agent'
+            const usesGlobalCodingAgent = this.agentMode === 'global' && codingAgentId !== 'hub-agent'
             const groupSystemPrompt = this.groupSystemPrompt(roomId, msg)
-            const executionUser = groupRunUser(this.storage, roomId, this.profile, msg)
             const result = await this.chatRunService.runAndWait({
                 input: this.groupRuntimeInput(msg, runtimeContext),
                 session_id: sessionId,
-                ...(usesGlobalCodingAgent ? {} : {
-                    model: this.model || undefined,
-                    provider: this.provider || undefined,
-                }),
+                ...(this.model ? { model: this.model } : {}),
+                ...(usesGlobalCodingAgent ? {} : { provider: this.provider || undefined }),
                 ...(!usesGlobalCodingAgent && this.apiMode ? { apiMode: this.apiMode } : {}),
                 instructions: groupSystemPrompt,
                 group_system_prompt: groupSystemPrompt,
@@ -1237,17 +1239,17 @@ export class AgentClient implements GroupAgentExecutor {
                 mode: usesGlobalCodingAgent ? 'global' : 'scoped',
                 profile: this.profile,
                 ...(this.agentPreset ? { agent_preset: this.agentPreset } : {}),
-                ...(!usesGlobalCodingAgent && this.reasoningEffort
+                ...(this.reasoningEffort
                     ? { reasoning_effort: this.reasoningEffort }
                     : {}),
                 background_delegation_enabled: false,
                 context_compression_enabled: false,
-                ...(codingAgentId === 'ekko-agent'
+                ...(codingAgentId === 'hub-agent'
                     ? {
                         memory_messages: this.groupMemoryMessages(roomId, msg, runtimeContext),
                         memory_write_policy: 'automatic' as const,
                         memory_origin: {
-                            host: 'hermes-studio',
+                            host: 'agenthub',
                             namespace: 'group-chat',
                             contextId: roomId,
                         },
@@ -1403,10 +1405,22 @@ export class AgentClient implements GroupAgentExecutor {
         onStatus?: (status: 'compressing' | 'replying' | 'ready', extra?: Record<string, unknown>) => void,
     ): Promise<void> {
         logger.debug(`[AgentClients] ${this.name} mentioned by ${msg.senderName}: "${msg.content.slice(0, 50)}"`)
-        if (this.agent !== 'hermes') {
-            await this.replyToMentionWithChatRun(roomId, msg, runtimeContext, onStatus)
-            return
-        }
+        const executionUser = groupRunUser(this.storage, roomId, this.profile, msg)
+        const reply = () => this.agent === 'hermes'
+            ? this.replyToMentionWithHermes(roomId, msg, runtimeContext, onStatus)
+            : this.replyToMentionWithChatRun(roomId, msg, runtimeContext, executionUser, onStatus)
+        // A queue can drain messages from several senders in the same async scope.
+        return executionUser
+            ? withProviderAccount(executionUser.id, reply, this.profile)
+            : withoutProviderAccount(reply)
+    }
+
+    private async replyToMentionWithHermes(
+        roomId: string,
+        msg: MentionMessage,
+        runtimeContext: GroupRuntimeContext,
+        onStatus?: (status: 'compressing' | 'replying' | 'ready', extra?: Record<string, unknown>) => void,
+    ): Promise<void> {
         const runMessageId = groupMessageId(roomId, this.profile, this.name)
         let partIndex = 0
         let streamMessageId = groupMessagePartId(runMessageId, partIndex)
@@ -1421,6 +1435,7 @@ export class AgentClient implements GroupAgentExecutor {
         let activeSessionId = ''
         let activeReplyInterruptVersion = 0
         let groupPlan: ReturnType<NonNullable<GroupChatRunService['beginGroupTaskPlanRun']>> | undefined
+        let mcpContextId: string | undefined
         let planWrites = Promise.resolve()
         let planFailed = false
         let staleStartedRunStopped = false
@@ -1502,6 +1517,13 @@ export class AgentClient implements GroupAgentExecutor {
             groupPlan = mcpCapabilities.interaction ? this.chatRunService?.beginGroupTaskPlanRun?.(sessionId, this.profile, runMessageId,
                 () => this.replySessionIsCurrent(roomId, sessionId, replyInterruptVersion),
                 snapshot => { planWrites = planWrites.then(() => this.recordTaskPlan(roomId, sessionId, runMessageId, snapshot)).catch(error => { logger.warn(error, '[GroupChat] task plan delivery failed') }) }) : undefined
+            if (groupPlan) {
+                mcpContextId = groupPlan.contextId
+                await runMcpCredentials.issue({
+                    sessionId, contextId: mcpContextId, profile: this.profile, roomId, agentId: this.agentId,
+                    isActive: () => this.replySessionIsCurrent(roomId, sessionId, replyInterruptVersion),
+                }, { contextLookup: true })
+            }
             const planInput = withTaskPlanTurnContext(input, groupPlan?.contextId)
             const bridgeInput: GroupPrimaryAgentBridgeMessage = isContentBlockArray(planInput)
                 ? await convertContentBlocksForAgent(planInput)
@@ -1685,6 +1707,7 @@ export class AgentClient implements GroupAgentExecutor {
                 onStatus?.('ready', { runId: runMessageId })
             }
         } finally {
+            if (activeSessionId && mcpContextId) runMcpCredentials.revoke(activeSessionId, mcpContextId)
             if (bridgeRunId && activeSessionId && this.roomSessionIsCurrent(roomId, activeSessionId)) {
                 try {
                     const usage = completeRunUsage(activeSessionId, bridgeRunId, streamMessageId, (Date.now() - runStartedAt) / 1000)
@@ -2375,6 +2398,12 @@ export class AgentClients {
      */
     getAgent(roomId: string, agentId: string): GroupAgentExecutor | undefined {
         return this.rooms.get(roomId)?.get(agentId)
+    }
+
+    hasRoomWork(roomId: string): boolean {
+        return this.activeSessionIds(roomId).length > 0
+            || [...this._processingMentionQueues].some(key => this.mentionQueueRoomId(key) === roomId)
+            || [...this._mentionQueues].some(([key, queue]) => this.mentionQueueRoomId(key) === roomId && queue.length > 0)
     }
 
     activeSessionIds(roomId: string): string[] {

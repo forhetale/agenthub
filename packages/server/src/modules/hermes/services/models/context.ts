@@ -1,5 +1,6 @@
+import { getProfileDir as studioProviderDir } from '../../../studio/public/provider-config'
 import { join } from 'path'
-import { readFileSync, existsSync, statSync } from 'fs'
+import { readFileSync, existsSync } from 'fs'
 import yaml from 'js-yaml'
 import { getCompatibleCustomProviders } from '../../../studio/contracts/provider-compat'
 import { readModelContextRecord } from '../../../studio/public/provider-context'
@@ -8,25 +9,7 @@ import { resolveConfiguredModelEndpoint } from './endpoint'
 import { detectHermesHome } from '../runtime/path'
 
 const HERMES_BASE = detectHermesHome()
-const HERMES_MODELS_DEV_CACHE = join(HERMES_BASE, 'models_dev_cache.json')
 const DEFAULT_CONTEXT_LENGTH = 256_000
-
-type ModelsDevCatalog = NonNullable<ReturnType<typeof loadModelsDevCache>>
-let hermesCatalog: { mtimeMs: number; data: ModelsDevCatalog } | null = null
-
-// Offline installs, or Studio installs that disabled the models.dev download, still
-// have the catalog Hermes Agent caches itself; use it until Studio has its own copy.
-function loadHermesModelsDevCache(): ModelsDevCatalog | null {
-  try {
-    const stat = statSync(HERMES_MODELS_DEV_CACHE)
-    if (hermesCatalog?.mtimeMs !== stat.mtimeMs) {
-      hermesCatalog = { mtimeMs: stat.mtimeMs, data: JSON.parse(readFileSync(HERMES_MODELS_DEV_CACHE, 'utf-8')) as ModelsDevCatalog }
-    }
-    return hermesCatalog.data
-  } catch {
-    return hermesCatalog?.data || null
-  }
-}
 
 function fallbackContextLength(options: ModelContextLengthOptions): number {
   return options.fallbackContextLength && options.fallbackContextLength > 0
@@ -62,6 +45,7 @@ interface ModelEntry {
 }
 
 interface CustomProviderEntry {
+  catalog_provider?: string
   name?: string
   base_url?: string
   model?: string
@@ -91,11 +75,7 @@ function loadConfig(profileDir: string): any | null {
 
 // --- Profile helpers ---
 
-function getProfileDir(profile?: string): string {
-  if (!profile || profile === 'default') return HERMES_BASE
-  const dir = join(HERMES_BASE, 'profiles', profile)
-  return existsSync(dir) ? dir : HERMES_BASE
-}
+function getProfileDir(profile?: string): string { return studioProviderDir(profile || 'default') }
 
 function getDefaultModel(config: any): string | null {
   const model = config?.model
@@ -199,6 +179,8 @@ function resolveCustomProviderEntry(config: any, modelName: string, provider: st
   if (!provider || !provider.startsWith('custom')) return null
 
   const providers = getCustomProviders(config)
+  const accountProvider = providers.find(cp => cp.catalog_provider === provider)
+  if (accountProvider) return accountProvider
   if (provider !== 'custom') {
     const suffix = normalizeCustomProviderName(provider.slice('custom:'.length))
     return providers.find((cp) => normalizeCustomProviderName(String(cp?.name || '')) === suffix) || null
@@ -330,6 +312,8 @@ export function getModelContextLength(input?: string | ModelContextLengthOptions
 export function getModelRuntimeCapabilities(input: ModelContextLengthOptions): {
   contextWindow: number
   outputLimit: number
+  /** False when outputLimit is the generic fallback, not model metadata. */
+  outputLimitKnown: boolean
   reasoning: boolean
   reasoningEfforts?: string[]
   input: Array<'text' | 'image'>
@@ -345,7 +329,8 @@ export function getModelRuntimeCapabilities(input: ModelContextLengthOptions): {
   }
   const entry = model ? lookupModelFromCache(config, model, provider, input) : undefined
   const reasoningEfforts = catalogReasoningEfforts(entry)
-  const outputLimit = getPositiveNumber(entry?.limit?.output) || Math.min(32_000, contextWindow)
+  const knownOutputLimit = getPositiveNumber(entry?.limit?.output)
+  const outputLimit = knownOutputLimit || Math.min(32_000, contextWindow)
   // Unknown custom models must remain usable. A missing models.dev entry is
   // absence of metadata, not evidence that reasoning or image input is
   // unsupported. Keep the runtime permissive and let the upstream provider
@@ -354,6 +339,7 @@ export function getModelRuntimeCapabilities(input: ModelContextLengthOptions): {
   return {
     contextWindow,
     outputLimit: Math.min(outputLimit, contextWindow),
+    outputLimitKnown: Boolean(knownOutputLimit),
     reasoning: entry ? entry.reasoning === true : true,
     ...(reasoningEfforts !== undefined ? { reasoningEfforts } : {}),
     input: imageInput ? ['text', 'image'] : ['text'],

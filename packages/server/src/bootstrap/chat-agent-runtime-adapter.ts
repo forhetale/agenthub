@@ -1,3 +1,4 @@
+import { resolveAgentGatewayRuntime, resolveAgentGatewayModelConfigs } from './provider-gateway-client'
 import { getCodingAgentManagedMcpServerConfigs, type CodingAgentId } from '../modules/coding-agents/services'
 import './agent-profile-adapter'
 import { AgentBridgeClient } from '../modules/hermes/services/bridge/client'
@@ -10,17 +11,16 @@ import {
   parseCodingAgentSessionCommand,
 } from '../modules/coding-agents/services/session-command'
 import {
-  abortGlobalEkkoBackgroundTasks,
-  getGlobalEkkoAgent,
-  hasGlobalEkkoBackgroundTasks,
-} from '../modules/ekko/services/manager'
-import { respondToEkkoToolApproval, waitForEkkoToolApproval } from '../modules/ekko/services/approvals'
-import { respondToEkkoClarification, waitForEkkoClarification } from '../modules/ekko/services/clarifications'
-import { resolveEkkoMcpServers } from '../modules/ekko/services/mcp'
+  abortGlobalHubAgentBackgroundTasks,
+  getGlobalHubAgent,
+  hasGlobalHubAgentBackgroundTasks,
+} from '../modules/hub-agent/services/manager'
+import { pendingHubAgentToolApprovalEvents, respondToHubAgentToolApproval, waitForHubAgentToolApproval } from '../modules/hub-agent/services/approvals'
+import { pendingHubAgentClarificationEvents, respondToHubAgentClarification, waitForHubAgentClarification } from '../modules/hub-agent/services/clarifications'
+import { resolveHubAgentMcpServers } from '../modules/hub-agent/services/mcp'
 import {
-  createEkkoAuthorizedProviderFetch,
-  resolveEkkoProviderRuntimeConfig,
-} from '../modules/ekko/services/provider-runtime'
+  createHubAgentAuthorizedProviderFetch,
+} from '../modules/hub-agent/services/provider-runtime'
 import { configureChatAgentRuntime } from '../modules/studio/public/chat-agent-runtime'
 import {
   agentReasoningText,
@@ -28,9 +28,8 @@ import {
   DEFAULT_MODEL_REQUEST_TIMEOUT_MS,
   normalizeAgentReasoning,
   projectBrowserHistory,
-  resolveModelProviderConfigs,
   serializeAgentReasoningDetails,
-} from '../../../ekko-agent/src'
+} from '../../../hub-agent/src'
 
 configureChatAgentRuntime({
   projectBrowserHistory,
@@ -42,21 +41,22 @@ configureChatAgentRuntime({
   startCodingAgentRun,
   handleCodingAgentSessionCommand,
   parseCodingAgentSessionCommand,
-  getEkkoAgent: getGlobalEkkoAgent,
-  abortEkkoBackgroundTasks: abortGlobalEkkoBackgroundTasks,
-  hasEkkoBackgroundTasks: hasGlobalEkkoBackgroundTasks,
-  createEkkoModelClient: createModelClient,
-  resolveEkkoModelProviderConfigs: resolveModelProviderConfigs,
-  ekkoModelRequestTimeoutMs: DEFAULT_MODEL_REQUEST_TIMEOUT_MS,
-  ekkoAgentReasoningText: agentReasoningText,
-  normalizeEkkoAgentReasoning: normalizeAgentReasoning,
-  serializeEkkoAgentReasoningDetails: serializeAgentReasoningDetails,
-  waitForEkkoToolApproval,
-  waitForEkkoClarification,
+  getHubAgent: getGlobalHubAgent,
+  abortHubAgentBackgroundTasks: abortGlobalHubAgentBackgroundTasks,
+  hasHubAgentBackgroundTasks: hasGlobalHubAgentBackgroundTasks,
+  createHubAgentModelClient: createModelClient,
+  resolveHubAgentModelProviderConfigs: resolveAgentGatewayModelConfigs,
+  hubAgentModelRequestTimeoutMs: DEFAULT_MODEL_REQUEST_TIMEOUT_MS,
+  hubAgentReasoningText: agentReasoningText,
+  normalizeHubAgentReasoning: normalizeAgentReasoning,
+  serializeHubAgentReasoningDetails: serializeAgentReasoningDetails,
+  pendingHubAgentInteractions: sessionId => [...pendingHubAgentToolApprovalEvents(sessionId), ...pendingHubAgentClarificationEvents(sessionId)],
+  waitForHubAgentToolApproval,
+  waitForHubAgentClarification,
   getCodingAgentMcpServers: (id, profile) => getCodingAgentManagedMcpServerConfigs(id as CodingAgentId, profile),
-  resolveEkkoMcpServers,
-  resolveEkkoProviderRuntimeConfig,
-  createEkkoAuthorizedProviderFetch,
-  respondToEkkoToolApproval,
-  respondToEkkoClarification,
+  resolveHubAgentMcpServers,
+  resolveHubAgentProviderRuntimeConfig: resolveAgentGatewayRuntime,
+  createHubAgentAuthorizedProviderFetch,
+  respondToHubAgentToolApproval,
+  respondToHubAgentClarification,
 })

@@ -1,0 +1,17 @@
+{
+  "id": "tool-demo",
+  "name": "工具注入演示",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "description": "在 MCP 工具列表中查看和调用一个简单的问候工具。",
+  "server": "server.mjs",
+  "permissions": [
+    "tools"
+  ],
+  "author": {
+    "name": "AgentHub",
+    "url": "https://github.com/forhetale"
+  },
+  "repository": "https://github.com/forhetale/agenthub",
+  "documentation": "https://github.com/forhetale/agenthub/blob/main/docs/plugins.md"
+}

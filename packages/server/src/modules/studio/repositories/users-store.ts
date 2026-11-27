@@ -1,6 +1,7 @@
+import { userAccessChanged } from './user-access-updates'
 import { randomBytes, scryptSync, timingSafeEqual } from 'crypto'
 import { getDb } from '../infrastructure/database'
-import { USER_PROFILES_TABLE, USER_THEMES_TABLE, USERS_TABLE } from '../infrastructure/database/schemas'
+import { USER_PROFILES_TABLE, USER_THEMES_TABLE, USER_THEME_PRESETS_TABLE, USER_NAVIGATION_TABLE, USERS_TABLE } from '../infrastructure/database/schemas'
 
 export type UserRole = 'super_admin' | 'admin'
 export type UserStatus = 'active' | 'disabled'
@@ -254,6 +255,7 @@ export function updateUser(input: {
   ).run(nextUsername, nextPasswordHash, nextRole, nextStatus, now, id)
 
   if (input.profiles) replaceUserProfiles(id, input.profiles, input.defaultProfile)
+  else if (nextRole !== current.role || nextStatus !== current.status) userAccessChanged(id)
   return findUserById(id)
 }
 
@@ -265,9 +267,12 @@ export function deleteUser(userId: UserId): boolean {
   db.exec('BEGIN')
   try {
     db.prepare(`DELETE FROM ${USER_PROFILES_TABLE} WHERE user_id = ?`).run(id)
+    db.prepare(`DELETE FROM ${USER_THEME_PRESETS_TABLE} WHERE user_id = ?`).run(id)
     db.prepare(`DELETE FROM ${USER_THEMES_TABLE} WHERE user_id = ?`).run(id)
+    db.prepare(`DELETE FROM ${USER_NAVIGATION_TABLE} WHERE user_id = ?`).run(id)
     const result = db.prepare(`DELETE FROM ${USERS_TABLE} WHERE id = ?`).run(id)
     db.exec('COMMIT')
+    if (result.changes > 0) userAccessChanged(id)
     return result.changes > 0
   } catch (err) {
     db.exec('ROLLBACK')
@@ -299,6 +304,7 @@ export function replaceUserProfiles(userId: UserId, profiles: string[], defaultP
     db.exec('ROLLBACK')
     throw err
   }
+  userAccessChanged(id)
 }
 
 export function createDefaultSuperAdmin(): UserRecord | null {

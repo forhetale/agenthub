@@ -2,7 +2,7 @@
 
 Date: 2026-07-19
 Updated: 2026-07-20
-Issue: https://github.com/EKKOLearnAI/ekko-studio/issues/2138
+Upstream Issue: https://github.com/EKKOLearnAI/ekko-studio/issues/2138
 
 Status: Implemented on 2026-07-20. The legacy index fields remain available
 for compatibility and are upgraded only by a successful compression cycle.
@@ -137,18 +137,18 @@ middle section to be loaded again.
 ### Compression Execution
 
 Summary generation is not an in-process string transformation. Each actual
-full or incremental summary first creates a fresh Ekko Agent runtime. That
+full or incremental summary first creates a fresh Hub Agent runtime. That
 runtime has tools, MCP, skills, and memory disabled, allows one model step, and
 does not retry a failed model request. It receives only the summary prompt and
 the fixed instruction to generate the checkpoint.
 
-For Hermes Agent conversations, an Ekko failure or unusable summary falls back
+For Hermes Agent conversations, a Hub Agent failure or unusable summary falls back
 to the previous Hermes `chat` run through Agent Bridge. The fallback uses a
 temporary `compress_*` session ID, receives the same summary prompt as
 conversation history, uses the dedicated
 `<profile>:compression:<source-session-id>` worker key, waits for the result,
-and destroys the temporary compression session afterward. Ekko Agent
-conversations disable that fallback: an Ekko summarization failure stays in the
+and destroys the temporary compression session afterward. Hub Agent
+conversations disable that fallback: a Hub Agent summarization failure stays in the
 shared compressor's normal failure path and never starts Hermes Agent.
 
 The first compression therefore sends the complete selected historical range

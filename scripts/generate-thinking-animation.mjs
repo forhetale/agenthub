@@ -20,7 +20,7 @@ function option(name) {
 const appRoot = option('--app-root')
 const preview = option('--preview')
 if (preview === source) throw new Error('Preview must not overwrite the source video')
-const temp = await mkdtemp(join(tmpdir(), 'ekko-thinking-video-'))
+const temp = await mkdtemp(join(tmpdir(), 'agenthub-thinking-video-'))
 function convert(size, output) {
   execFileSync('ffmpeg', [
     '-hide_banner', '-loglevel', 'error', '-y', '-i', source,

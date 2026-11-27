@@ -32,6 +32,7 @@ function createProxyConfig(): ProxyOptions {
 
 export default defineConfig({
   root: 'packages/client',
+  base: process.env.STUDIO_BASE_PATH || '/',
   // Concurrent test/dev servers must not replace each other's optimized Vue runtime.
   cacheDir: resolve(__dirname, process.env.HERMES_WEB_UI_VITE_CACHE_DIR || 'node_modules/.vite/client'),
   plugins: [vue()],
@@ -56,6 +57,10 @@ export default defineConfig({
     // CSS code splitting for better caching
     cssCodeSplit: true,
     rollupOptions: {
+      input: {
+        app: resolve(__dirname, 'packages/client/index.html'),
+        plugin: resolve(__dirname, 'packages/client/plugin-frame.html'),
+      },
       output: {
         // Optimize chunk file names for better caching
         chunkFileNames: 'assets/js/[name]-[hash].js',
@@ -73,6 +78,8 @@ export default defineConfig({
       'vue-router',
       'pinia',
       'naive-ui',
+      // Worker-only imports must be ready before opening a workbook, without a page reload.
+      'read-excel-file/web-worker',
     ],
   },
   server: {

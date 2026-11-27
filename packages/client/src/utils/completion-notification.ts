@@ -1,8 +1,10 @@
+import { deploymentUrl } from './deployment-url'
 interface CompletionNotificationPayload {
   title: string
   body?: string
   icon?: string
   tag?: string
+  clickUrl?: string
 }
 
 export interface SystemNotificationPayload extends CompletionNotificationPayload {
@@ -55,7 +57,7 @@ function isBrowserNotificationSecureContext(): boolean {
 }
 
 function safeHermesClickUrl(value?: string): string | undefined {
-  if (!value || !value.startsWith('/hermes/') || value.includes('..') || value.includes('\\')) return undefined
+  if (!value || (value !== '/person' && !value.startsWith('/person?') && !value.startsWith('/hermes/')) || value.includes('..') || value.includes('\\')) return undefined
   return value
 }
 
@@ -63,7 +65,7 @@ function browserNotificationOptions(payload: SystemNotificationPayload): Notific
   const clickUrl = safeHermesClickUrl(payload.clickUrl)
   return {
     body: payload.body,
-    icon: payload.icon ? new URL(payload.icon, window.location.origin).href : undefined,
+    icon: payload.icon ? new URL(deploymentUrl(payload.icon), window.location.origin).href : undefined,
     tag: payload.tag,
     data: clickUrl ? { clickUrl } : undefined,
   }
@@ -74,7 +76,7 @@ async function showServiceWorkerNotification(payload: SystemNotificationPayload)
 
   try {
     const registration = await withTimeout(
-      navigator.serviceWorker.register('/notification-sw.js'),
+      navigator.serviceWorker.register(deploymentUrl('/notification-sw.js')),
       3000,
       null,
     )

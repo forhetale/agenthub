@@ -10,6 +10,11 @@ export const MODEL_CATALOG_PATH = join(config.appHome, 'models', 'models.dev.jso
 const MAX_BYTES = 20 * 1024 * 1024
 const RETRY_MS = 5 * 60_000
 
+function modelCatalogDownloadDisabled(): boolean {
+  const raw = (process.env.HERMES_WEB_UI_DISABLE_MODEL_CATALOG_DOWNLOAD || '').trim().toLowerCase()
+  return raw === 'true' || raw === '1' || raw === 'on' || raw === 'yes'
+}
+
 export interface CatalogModel {
   id?: string
   name?: string
@@ -26,12 +31,6 @@ export interface ModelCatalogSnapshot {
   data: ModelCatalog
   fetchedAt: number
   version: string
-}
-
-/** Offline or privacy-sensitive installs can keep Studio from contacting models.dev. */
-export function modelCatalogDownloadDisabled(env: NodeJS.ProcessEnv = process.env): boolean {
-  const raw = (env.HERMES_WEB_UI_DISABLE_MODEL_CATALOG_DOWNLOAD || '').trim().toLowerCase()
-  return raw === 'true' || raw === '1' || raw === 'on' || raw === 'yes'
 }
 
 function record(value: unknown): value is Record<string, any> {

@@ -31,6 +31,7 @@ class WorkerProcess:
         self.hermes_home = hermes_home
         self.process: subprocess.Popen[str] | None = None
         self.last_used_at = time.time()
+        self.active_requests = 0
         self._lock = threading.RLock()
 
     @property
@@ -166,11 +167,32 @@ class WorkerProcess:
                 except OSError:
                     pass
 
-    def request(self, req: dict[str, Any], timeout: float | None = None) -> dict[str, Any]:
-        self.start()
-        self.last_used_at = time.time()
-        request_timeout = timeout if timeout is not None and timeout > 0 else self.REQUEST_TIMEOUT_SECONDS
-        return _send_bridge_request(self.endpoint, req, request_timeout)
+    def request(self, req: dict[str, Any], timeout: float | None = None, *, start_if_needed: bool = True) -> dict[str, Any]:
+        passive = req.get("action") in {"status", "status_if_loaded", "background_poll", "list", "get_result", "get_output", "mcp_plugins_changed"}
+        with self._lock:
+            if not start_if_needed and not self.running:
+                return {"ok": True, "skipped": True}
+            self.active_requests += 1
+        try:
+            if start_if_needed:
+                self.start()
+            if not passive:
+                self.last_used_at = time.time()
+            request_timeout = timeout if timeout is not None and timeout > 0 else self.REQUEST_TIMEOUT_SECONDS
+            response = _send_bridge_request(self.endpoint, req, request_timeout)
+            sessions = response.get("sessions") or []
+            active = (
+                response.get("running") is True or response.get("status") == "running"
+                or bool(response.get("running_count"))
+                or bool(response.get("pending_count")) or bool(response.get("notifications"))
+                or any(isinstance(s, dict) and (s.get("running") or s.get("running_count")) for s in sessions)
+            )
+            if active:
+                self.last_used_at = time.time()
+            return response
+        finally:
+            with self._lock:
+                self.active_requests -= 1
 
 
 # Unix-domain socket paths are limited by sun_path (macOS/BSD: 104 bytes,

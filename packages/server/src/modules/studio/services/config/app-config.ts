@@ -35,12 +35,10 @@ function normalizeProfileList(values: unknown): string[] {
 }
 
 export function normalizeGatewayAutoStartConfig(value: unknown): GatewayAutoStartConfig {
-  // TATin keeps the pre-0.7.26 default: an unset switch still auto-starts gateways.
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return { enabled: false }
   const raw = value as Record<string, unknown>
-  const normalized: GatewayAutoStartConfig = {}
+  const normalized: GatewayAutoStartConfig = { enabled: raw.enabled === true }
 
-  if (typeof raw.enabled === 'boolean') normalized.enabled = raw.enabled
   if (Array.isArray(raw.include)) normalized.include = normalizeProfileList(raw.include)
   if (Array.isArray(raw.exclude)) normalized.exclude = normalizeProfileList(raw.exclude)
 

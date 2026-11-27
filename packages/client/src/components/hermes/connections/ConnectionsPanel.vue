@@ -1,9 +1,44 @@
 <script setup lang="ts">
 import PageHeader from '@/components/layout/PageHeader.vue'
+import { ref, watch } from 'vue'
+import { NTabPane, NTabs } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
-import BarkPushPanel from './BarkPushPanel.vue'
+import { useRoute, useRouter } from 'vue-router'
+import BarkPushPanel from '@/components/hermes/connections/BarkPushPanel.vue'
+import RemoteDevicesPanel from '@/components/hermes/connections/RemoteDevicesPanel.vue'
+import { desktopBridge } from '@/utils/desktop-bridge'
 
+type ConnectionTab = 'bark' | 'remote'
+
+const route = useRoute()
+const router = useRouter()
 const { t } = useI18n()
+const hasRemoteDevices = desktopBridge()?.isDesktop === true && !!desktopBridge()?.remoteDevices
+
+function normalizeTab(value: unknown): ConnectionTab {
+  if (value === 'remote' && hasRemoteDevices) return value
+  return 'bark'
+}
+
+const activeTab = ref<ConnectionTab>(normalizeTab(route.query.tab))
+
+watch(
+  () => route.query.tab,
+  value => {
+    activeTab.value = normalizeTab(value)
+  },
+)
+
+function updateTab(value: string | number) {
+  const tab = normalizeTab(value)
+  activeTab.value = tab
+  void router.replace({
+    query: {
+      ...route.query,
+      tab: tab === 'bark' ? undefined : tab,
+    },
+  })
+}
 </script>
 
 <template>
@@ -16,7 +51,27 @@ const { t } = useI18n()
     </header>
     </PageHeader>
 
-    <div class="bark-scroll"><BarkPushPanel /></div>
+    <NTabs
+      v-if="hasRemoteDevices"
+      :value="activeTab"
+      class="connections-tabs"
+      type="line"
+      animated
+      pane-class="connections-tab-pane"
+      @update:value="updateTab"
+    >
+      <NTabPane name="bark" :tab="t('bark.title')" display-directive="if">
+        <div class="bark-scroll">
+          <BarkPushPanel />
+        </div>
+      </NTabPane>
+      <NTabPane name="remote" :tab="t('remoteDevices.title')" display-directive="if">
+        <RemoteDevicesPanel />
+      </NTabPane>
+    </NTabs>
+    <div v-else class="bark-scroll">
+      <BarkPushPanel />
+    </div>
   </div>
 </template>
 
@@ -28,15 +83,48 @@ const { t } = useI18n()
   min-height: 0;
   display: flex;
   flex-direction: column;
-  background: $bg-main-surface;
+  background: var(--theme-content-bg, $bg-main-surface);
 }
-
-.bark-scroll { flex: 1; min-height: 0; overflow-y: auto; }
 
 .connections-header-left {
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: calc(8px * var(--spacing-scale, 1));
+}
+
+.bark-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.connections-tabs {
+  flex: 1 1 auto;
+  min-height: 0;
+
+  :deep(.n-tabs-nav) {
+    flex: 0 0 auto;
+    padding: 0 calc(20px * var(--spacing-scale, 1));
+    border-bottom: var(--border-width, 1px) solid var(--n-tab-border-color);
+    background: var(--theme-content-bg, $bg-main-surface);
+  }
+
+  :deep(.n-tabs-nav-scroll-content) {
+    width: 100%;
+    border-bottom: 0 !important;
+  }
+
+  :deep(.n-tabs-pane-wrapper),
+  :deep(.n-tab-pane) {
+    height: 100%;
+    min-height: 0;
+  }
+}
+
+@media (max-width: $breakpoint-mobile) {
+  .connections-tabs :deep(.n-tabs-nav) {
+    padding: 0 calc(12px * var(--spacing-scale, 1));
+  }
 }
 </style>

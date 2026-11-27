@@ -43,7 +43,7 @@ const formData = ref({
   api_key: '',
   model: '',
   context_length: null as number | null,
-  api_mode: 'chat_completions' as ProviderApiMode,
+  api_mode: 'chat_completions' as ProviderApiMode | 'auto',
 })
 
 const providerNameInputProps = {
@@ -75,13 +75,14 @@ const providerModelInputProps = {
 }
 
 const modelOptions = ref<Array<{ label: string; value: string }>>([])
-const apiModeOptions: Array<{ label: string; value: ProviderApiMode }> = [
+const apiModeOptions = computed(() => [
   { label: 'chat_completions (/chat/completions)', value: 'chat_completions' },
   { label: 'codex_responses (/responses)', value: 'codex_responses' },
   { label: 'anthropic_messages (/messages)', value: 'anthropic_messages' },
   { label: 'bedrock_converse (Converse API)', value: 'bedrock_converse' },
   { label: 'codex_app_server (App Server)', value: 'codex_app_server' },
-]
+  { label: t('models.apiModeAuto'), value: 'auto' },
+])
 
 const CODEX_KEY = 'openai-codex'
 const NOUS_KEY = 'nous'
@@ -103,7 +104,6 @@ const isCliproxyApi = computed(() => selectedPreset.value === CLIPROXYAPI_KEY)
 const isXaiOAuth = computed(() => selectedPreset.value === XAI_OAUTH_KEY)
 const isClaudeOAuth = computed(() => selectedPreset.value === CLAUDE_OAUTH_KEY)
 const isMiniMaxOAuth = computed(() => selectedPreset.value === MINIMAX_OAUTH_KEY)
-const isOpenCodeFree = computed(() => selectedPreset.value === 'opencode-free')
 const isAlibabaCoding = computed(() => selectedPreset.value === ALIBABA_CODING_KEY)
 const alibabaCodingRegion = ref<'intl' | 'cn'>('intl')
 
@@ -140,9 +140,11 @@ function customProviderKey(name: string): string {
   return `custom:${name.trim().toLowerCase().replace(/ /g, '-')}`
 }
 
+let presetCatalogRequest = 0
 watch(selectedPreset, (val) => {
+  const request = ++presetCatalogRequest
+  fetchingModels.value = false
   formData.value.model = ''
-  if (val === 'opencode-free') formData.value.api_key = ''
   alibabaCodingRegion.value = 'intl'
   if (val) {
     const group = selectedPresetProvider.value
@@ -154,6 +156,7 @@ watch(selectedPreset, (val) => {
       if (group.models.length > 0) {
         formData.value.model = group.models[0]
       }
+      void loadPresetCatalog(val, request)
     }
     if (val === COPILOT_KEY) {
       // 判断是否已能解析到 token：有 → 弹简单确认；无 → 走 in-app device flow
@@ -167,6 +170,20 @@ watch(selectedPreset, (val) => {
     }
   }
 })
+
+async function loadPresetCatalog(provider: string, request: number) {
+  fetchingModels.value = true
+  try {
+    const catalog = await modelsStore.fetchProviderCatalog(provider)
+    if (request !== presetCatalogRequest || selectedPreset.value !== provider || providerType.value !== 'preset') return
+    modelOptions.value = catalog.models.map(model => ({ label: model, value: model }))
+    if (!formData.value.model) formData.value.model = catalog.models[0] || ''
+  } catch (error: any) {
+    if (request === presetCatalogRequest) message.error(error?.message || t('models.providerEditorLoadFailed'))
+  } finally {
+    if (request === presetCatalogRequest) fetchingModels.value = false
+  }
+}
 
 watch(alibabaCodingRegion, (region) => {
   if (isAlibabaCoding.value) {
@@ -211,7 +228,7 @@ async function fetchModels() {
       : formData.value.name.trim() || provider
     const data = await fetchProviderModels({
       base_url: base_url.trim(),
-      api_key: isOpenCodeFree.value ? '' : formData.value.api_key.trim(),
+      api_key: formData.value.api_key.trim(),
       provider,
       label,
       update_cache: !!provider,
@@ -271,7 +288,7 @@ async function handleSave() {
     message.warning(t('models.baseUrlRequired'))
     return
   }
-  if (!formData.value.api_key.trim() && !isCliproxyApi.value && !isXaiOAuth.value && !isClaudeOAuth.value && !isMiniMaxOAuth.value && !isOpenCodeFree.value) {
+  if (!formData.value.api_key.trim() && !isCliproxyApi.value && !isXaiOAuth.value && !isClaudeOAuth.value && !isMiniMaxOAuth.value) {
     message.warning(t('models.apiKeyRequired'))
     return
   }
@@ -284,14 +301,18 @@ async function handleSave() {
   try {
     const contextLength = formData.value.context_length ?? undefined
     const providerKey = providerType.value === 'preset' ? selectedPreset.value : null
+    const baseUrl = formData.value.base_url.trim()
+    const providerName = providerType.value === 'preset'
+      ? selectedPresetProvider.value?.label || formData.value.name.trim()
+      : formData.value.name.trim()
 
     await modelsStore.addProvider({
-      name: formData.value.name.trim(),
-      base_url: formData.value.base_url.trim(),
-      api_key: isOpenCodeFree.value ? '' : formData.value.api_key.trim(),
+      name: providerName,
+      base_url: baseUrl,
+      api_key: formData.value.api_key.trim(),
       model: formData.value.model,
       context_length: contextLength,
-      api_mode: formData.value.api_mode,
+      api_mode: formData.value.api_mode === 'auto' ? null : formData.value.api_mode,
       providerKey,
     })
     message.success(t('models.providerAdded'))
@@ -478,11 +499,7 @@ function handleClose() {
         />
       </NFormItem>
 
-      <template v-if="isOpenCodeFree">
-        <p>{{ t('models.opencodeFreeHint') }}</p>
-        <p v-if="selectedPresetProvider?.catalog_status === 'unsupported'">{{ t('models.opencodeFreeUpgrade') }}</p>
-      </template>
-      <NFormItem v-if="!isCodex && !isNous && !isClaudeOAuth && !isMiniMaxOAuth && !isOpenCodeFree" :label="t('models.apiKey')" :required="!isCliproxyApi && !isXaiOAuth">
+      <NFormItem v-if="!isCodex && !isNous && !isClaudeOAuth && !isMiniMaxOAuth" :label="t('models.apiKey')" :required="!isCliproxyApi && !isXaiOAuth">
         <NInput
           v-model:value="formData.api_key"
           type="password"
@@ -534,7 +551,7 @@ function handleClose() {
     <template #footer>
       <div class="modal-footer">
         <NButton @click="handleClose">{{ t('common.cancel') }}</NButton>
-        <NButton type="primary" :loading="loading" :disabled="isOpenCodeFree && selectedPresetProvider?.catalog_status === 'unsupported'" @click="handleSave">
+        <NButton type="primary" :loading="loading" @click="handleSave">
           {{ t('common.add') }}
         </NButton>
       </div>
@@ -583,6 +600,6 @@ function handleClose() {
 .modal-footer {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
+  gap: calc(8px * var(--spacing-scale, 1));
 }
 </style>
